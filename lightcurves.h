@@ -26,6 +26,9 @@ struct lc_star {
   float medflux[NFLUX];
   float sigflux[NFLUX];
 
+  /* Which aperture did we use? */
+  float apradius;
+
   /* RMS and chisq */
   float rms;
   float chisq;

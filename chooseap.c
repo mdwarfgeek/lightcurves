@@ -115,6 +115,9 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	if(ptbuf[pt].flux > 0.0 && ptbuf[pt].fluxerr > 0.0)
 	  ptbuf[pt].flux -= avapcor[useaper];
 
+      /* Update aperture size */
+      mefinfo->stars[star].apradius *= flux_apers[useaper];
+
       /* Write out into aperture 0 */
       if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
 	goto error;
