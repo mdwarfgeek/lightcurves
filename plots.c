@@ -21,8 +21,8 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   long star, pt;
   int mef;
 
-  float *medbuf1 = (float *) NULL, *medbuf2, *medbuf3, *medbuf4, *medbuf5;
-  float gain, rcore, sigma, readnois, avzp;
+  float *medbuf1 = (float *) NULL, *medbuf2, *medbuf3, *medbuf4;
+  float gain, rcore, sigma, avzp;
 
   float *theox = (float *) NULL, *theoy, *theoys;
   long t, ntheo;
@@ -38,7 +38,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   cpgscr(1, 0.0, 0.0, 0.0);
 
   /* Allocate workspace for median parameters */
-  medbuf1 = (float *) malloc(5 * nmefs * sizeof(float));
+  medbuf1 = (float *) malloc(4 * nmefs * sizeof(float));
   if(!medbuf1) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -47,7 +47,6 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   medbuf2 = medbuf1 + nmefs;
   medbuf3 = medbuf1 + 2 * nmefs;
   medbuf4 = medbuf1 + 3 * nmefs;
-  medbuf5 = medbuf1 + 4 * nmefs;
 
   /* RMS plot */
   magmin = medsat;
@@ -72,15 +71,13 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     medbuf1[mef] = meflist[mef].refgain;
     medbuf2[mef] = meflist[mef].refrcore;
     medbuf3[mef] = meflist[mef].avsigma;
-    medbuf4[mef] = meflist[mef].refreadnois;
-    medbuf5[mef] = meflist[mef].zp;
+    medbuf4[mef] = meflist[mef].zp;
   }
 
   medsig(medbuf1, nmefs, &gain, (float *) NULL);
   medsig(medbuf2, nmefs, &rcore, (float *) NULL);
   medsig(medbuf3, nmefs, &sigma, (float *) NULL);
-  medsig(medbuf4, nmefs, &readnois, (float *) NULL);
-  medsig(medbuf5, nmefs, &avzp, (float *) NULL);
+  medsig(medbuf4, nmefs, &avzp, (float *) NULL);
 
   free((void *) medbuf1);
   medbuf1 = (float *) NULL;
@@ -105,8 +102,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 
     photons = powf(10.0, 0.4 * (avzp - mag)) * gain;
     tmp = 2.5 * loge * sqrtf(photons +
-			     area * (gain * gain * sigma * sigma) +
-			     readnois * readnois) / photons;
+			     area * (gain * gain * sigma * sigma)) / photons;
 
     theox[t] = mag;
     theoy[t] = 3.0 + log10f(tmp);

@@ -61,7 +61,6 @@ struct lc_mef {
 
   float refgain;  /* for theoretical curve */
   float refrcore;
-  float refreadnois;
 
   float apcor[NFLUX];
   float percorr;

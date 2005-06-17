@@ -532,7 +532,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *clsbuf, *a7buf;
 
   float tpa, tpd, a, b, c, d, e, f, projp1, projp3, secd, tand;
-  float skylev, skynoise, satlev, exptime, rcore, gain, readnois, magzpt, percorr;
+  float skylev, skynoise, satlev, exptime, rcore, gain, magzpt, percorr;
   float skyvar, tpi;
   float apcor[NFLUX];
 
@@ -680,16 +680,6 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
     goto error;
   }
 
-  ffgkye(fits, "READNOIS", &readnois, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    readnois = 0.0;  /* ignore */
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkye: READNOIS");
-    goto error;
-  }
-
   ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkye: MAGZPT");
@@ -806,12 +796,6 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
       stars[rout].cls = NINT(clsbuf[r]);
       stars[rout].bflag = (a7buf[r] < 0.0 ? 1 : 0);
 
-      /* BODGE */
-      //      if(xbuf[r] > 1024 && ybuf[r] > 1024)
-      //	;
-      //      else
-      //	stars[rout].bflag = 1;
-
       if(pkhtbuf[r] > satlev && (satflux == 0.0 || stars[rout].ref[0].flux < satflux))
 	satflux = stars[rout].ref[0].flux;
     }
@@ -837,7 +821,6 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
 
   mefinfo->refgain = gain;
   mefinfo->refrcore = rcore;
-  mefinfo->refreadnois = readnois;
 
   memcpy(&(mefinfo->apcor), apcor, sizeof(apcor));
   mefinfo->percorr = percorr;
@@ -865,9 +848,11 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *skyrmsbuf;
 
-  float skylev, skynoise, satlev, exptime, rcore, gain;
+  float skylev, skynoise, satlev, exptime, rcore, gain, percorr;
   float skyvar, tpi, tmp, expfac;
   double mjd;
+
+  float apcor[NFLUX];
 
   long nrows, rblksz, roff, remain, rout, rread, r;
   float flux, fluxerr;
@@ -977,6 +962,34 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   skyvar = M_PI * rcore * rcore * skynoise * skynoise;
   tpi = 2.0 * M_PI;
 
+  for(col = 0; col < NFLUX; col++) {
+    ffgkye(fits, apcor_keys[col], &(apcor[col]), (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      apcor[col] = mefinfo->apcor[col];  /* as a backup */
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: %s", apcor_keys[col]);
+      goto error;
+    }
+    else {
+      apcor[col] = powf(10.0, 0.4 * apcor[col]);
+    }
+  }
+
+  ffgkye(fits, "PERCORR", &percorr, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    percorr = mefinfo->percorr;  /* as a backup */
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: PERCORR");
+    goto error;
+  }
+  else {
+    percorr = powf(10.0, 0.4 * percorr);
+  }
+
   ffgkyd(fits, "MJD-OBS", &mjd, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
@@ -1047,11 +1060,11 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       for(r = 0; r < rread; r++) {
 	rout = roff + r;
 
-	flux = fluxbuf[r] * mefinfo->apcor[col] * mefinfo->percorr;
-	fluxerr = fabsf(fluxbuf[r]) * mefinfo->apcor[col] / gain +
-	          (skyvar + skyrmsbuf[r]*skyrmsbuf[r]) * flux_apers[col] * flux_apers[col];
-
 	if(diffmode) {
+	  flux = fluxbuf[r] * mefinfo->apcor[col] * mefinfo->percorr;
+	  fluxerr = fabsf(fluxbuf[r]) * mefinfo->apcor[col] / gain +
+	    (skyvar + skyrmsbuf[r]*skyrmsbuf[r]) * flux_apers[col] * flux_apers[col];
+
 	  if(flux == 0.0 || mefinfo->stars[rout].ref[col].flux == 0.0)
 	    flux = 0.0;
 	  else
@@ -1062,6 +1075,10 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  points[r].satur = mefinfo->stars[rout].ref[col].satur;
 	}
 	else {
+	  flux = fluxbuf[r] * apcor[col] * percorr;
+	  fluxerr = fabsf(fluxbuf[r]) * apcor[col] / gain +
+	    (skyvar + skyrmsbuf[r]*skyrmsbuf[r]) * flux_apers[col] * flux_apers[col];
+
 	  if(pkhtbuf[r] > satlev || mefinfo->stars[rout].ref[col].satur)
 	    points[r].satur = 1;
 	  else
