@@ -2,7 +2,7 @@
 #define __LIGHTCURVES_H__
 
 /* Number of flux measures */
-#define NFLUX  1
+#define NFLUX  3
 
 struct lc_point {
   float flux;

@@ -6,129 +6,102 @@
 #include "floatmath.h"
 #include "util.h"
 
-/* Parameters: k-sigma for clipping and max number of iterations */
-#define SIGCLIP   5
-#define NITERMAX  5
-
 int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      struct lc_point *ptbuf, float *medbuf, char *errstr) {
-  int aper, iter;
-  long star, opt, m, nmed;
+  long pt, star;
+  struct lc_point *refbuf = (struct lc_point *) NULL;
+  float *corbuf = (float *) NULL, medcor;
+  long ncor;
 
-  float *tmpbuf = (float *) NULL;
+  float avapcor[NFLUX];
+  long nav[NFLUX];
 
-  float medflux, sigflux, cliplow, cliphigh;
-  float loge, area, skycont, readcont, photons, theor, off;
-  float medoff, sigoff;
-
-  float medofflist[NFLUX], fluxbound[NFLUX];
-  float flux, area1, area2;
-
-  int useaper;
-
-  /* Precalculate parameters */
-  loge = log10f(expf(1.0));
-  readcont = mefinfo->refreadnois * mefinfo->refreadnois;
+  int aper, useaper;
+  float rms, rmsmin;
 
   /* Allocate buffers */
-  tmpbuf = (float *) malloc(mefinfo->nf * sizeof(float));
-  if(!tmpbuf) {
+  refbuf = (struct lc_point *) malloc(mefinfo->nstars * sizeof(struct lc_point));
+  corbuf = (float *) malloc(mefinfo->nstars * sizeof(float));
+  if(!refbuf || !corbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
 
+  /* Initialise means */
   for(aper = 0; aper < NFLUX; aper++) {
-    /* Calculate quadrature contribution to RMS from aperture loss */
-    area = M_PI * mefinfo->refrcore * mefinfo->refrcore *
-                  flux_apers[aper] * flux_apers[aper];
+    avapcor[aper] = 0.0;
+    nav[aper] = 0;
+  }
 
-    skycont = area * (mefinfo->refgain * mefinfo->refgain *
-		      mefinfo->avsigma * mefinfo->avsigma);
+  if(verbose)
+    printf(" Computing aperture corrections\n");
 
-    cliphigh = mefinfo->satclip[aper];
-    cliplow = cliphigh - 2.0;
+  /* Compute empirical aperture corrections */
+  for(pt = 0; pt < mefinfo->nf; pt++) {
+    /* Read in reference aperture */
+    if(buffer_fetch_frame(buf, refbuf, 0, mefinfo->nstars, pt, 0, errstr))
+      goto error;
 
-    opt = 0;
-    for(star = 0; star < mefinfo->nstars; star++) {
-      medflux = mefinfo->stars[star].medflux[aper];
-      sigflux = mefinfo->stars[star].sigflux[aper];
+    /* Loop through comparison apertures */
+    for(aper = 1; aper < NFLUX; aper++) {
+      if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, aper, errstr))
+	goto error;
 
-      if(medflux > cliplow && medflux < cliphigh &&
-	 mefinfo->stars[star].cls == -1) {
-	photons = powf(10.0, 0.4 * medflux) * mefinfo->refgain;
-	theor = 2.5 * loge * sqrtf(photons + skycont + readcont) / photons;
-
-	off = sigflux*sigflux - theor*theor;
-
-	medbuf[opt] = off;
-	opt++;
-      }
-    }
-
-    nmed = opt;
-    memcpy(tmpbuf, medbuf, nmed * sizeof(float));
-    medsig(tmpbuf, nmed, &medoff, &sigoff);
-
-    for(iter = 0; iter < NITERMAX; iter++) {
-      opt = 0;
-      for(m = 0; m < nmed; m++)
-	if(fabsf(medbuf[m] - medoff) < SIGCLIP * sigoff) {
-	  medbuf[opt] = medbuf[m];
-	  opt++;
+      /* Compute median aperture correction */
+      ncor = 0;
+      for(star = 0; star < mefinfo->nstars; star++)
+	if(refbuf[star].flux > 0.0 && ptbuf[star].flux > 0.0 &&
+	   refbuf[star].fluxerr > 0.0 && ptbuf[star].fluxerr > 0.0 &&
+	   !refbuf[star].satur && !ptbuf[star].satur &&
+	   mefinfo->stars[star].sigflux[aper] > 0 &&
+	   !mefinfo->stars[star].bflag &&
+	   mefinfo->stars[star].cls == -1) {
+	  corbuf[ncor] = ptbuf[star].flux - refbuf[star].flux;
+	  ncor++;
 	}
 
-      nmed = opt;
-      memcpy(tmpbuf, medbuf, nmed * sizeof(float));
-      medsig(tmpbuf, nmed, &medoff, &sigoff);
-    }
+      if(ncor > 1) {
+	medsig(corbuf, ncor, &medcor, (float *) NULL);
 
-    if(verbose)
-      printf("Aperture %d offset %.4f +/- %.4f\n", aper+1, sqrtf(medoff), sqrtf(sigoff));
-
-    medofflist[aper] = medoff;
-  }
-
-  /* Calculate cross-over points.  Assumes the apertures are ordered by
-   * increasing size.
-   */
-  fluxbound[0] = 0.0;
-
-  for(aper = 1; aper < NFLUX; aper++) {
-    if(medofflist[aper-1] > medofflist[aper]) {
-      area1 = M_PI * mefinfo->refrcore * mefinfo->refrcore *
-	             flux_apers[aper-1] * flux_apers[aper-1];
-      area2 = M_PI * mefinfo->refrcore * mefinfo->refrcore *
-                     flux_apers[aper] * flux_apers[aper];
-
-      flux = 2.5 * loge * mefinfo->avsigma * sqrtf((area2 - area1) /
-						   (medofflist[aper-1] -
-						    medofflist[aper]));
-      fluxbound[aper] = 2.5 * log10f(flux);
-    }
-    else {
-      /* Don't bother, then */
-      fluxbound[aper] = 0.0;
-    }
-
-    if(verbose)
-      printf("%d -> %d: %.2f\n", aper-1, aper, mefinfo->zp - fluxbound[aper]);
-  }
-
-  free((void *) tmpbuf);
-  tmpbuf = (float *) NULL;
-
-  /* Choose the relevant aperture for each object */
-  for(star = 0; star < mefinfo->nstars; star++) {
-    medflux = mefinfo->stars[star].medflux[0];
-
-    useaper = 0;  /* default to the smallest */
-    if(medflux > 0.0) {
-      for(aper = 0; aper < NFLUX; aper++) {
-	if(medflux > fluxbound[aper])
-	  useaper = aper;
-	else
-	  break;
+	/* Accumulate mean */
+	avapcor[aper] += medcor;
+	nav[aper]++;
       }
+    }
+  }
+
+  free((void *) refbuf);
+  refbuf = (struct lc_point *) NULL;
+  free((void *) corbuf);
+  corbuf = (float *) NULL;
+
+  /* Compute mean aperture corrections */
+  for(aper = 1; aper < NFLUX; aper++) {
+    avapcor[aper] /= nav[aper];
+
+    if(verbose)
+      printf("  Aperture correction %d->1 = %.4f using %ld frames\n",
+	     aper+1, avapcor[aper], nav[aper]);
+  }
+
+  /* Loop through all stars */
+  for(star = 0; star < mefinfo->nstars; star++) {
+    /* Choose the aperture with the lowest RMS scatter */
+    useaper = -1;
+    rmsmin = 0.0;
+    for(aper = 0; aper < NFLUX; aper++) {
+      rms = mefinfo->stars[star].sigflux[aper];
+
+      if(useaper < 0 || rms < rmsmin) {
+	useaper = aper;
+	rmsmin = rms;
+      }
+    }
+
+    /* Sanity check */
+    if(useaper < 0) {
+      report_err(errstr, "could not find an aperture for star %ld", star+1);
+      goto error;
     }
 
     /* Reshuffle */
@@ -136,6 +109,11 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
       /* Read in measurements for this star in 'useaper' */
       if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, useaper, errstr))
 	goto error;
+
+      /* Apply aperture correction */
+      for(pt = 0; pt < mefinfo->nf; pt++)
+	if(ptbuf[pt].flux > 0.0 && ptbuf[pt].fluxerr > 0.0)
+	  ptbuf[pt].flux -= avapcor[useaper];
 
       /* Write out into aperture 0 */
       if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
@@ -146,8 +124,10 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
   return(0);
 
  error:
-  if(tmpbuf)
-    free((void *) tmpbuf);
+  if(refbuf)
+    free((void *) refbuf);
+  if(corbuf)
+    free((void *) corbuf);
 
   return(1);
 }

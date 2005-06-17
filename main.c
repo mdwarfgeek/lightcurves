@@ -29,21 +29,15 @@ static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 static char *sstrip (char *str);
 
 /* Flux keywords and aperture sizes in terms of rcore */
-#ifdef WASPKLUDGE
-static char *flux_keys[NFLUX] = { "Core2_flux" };
-float flux_apers[NFLUX] = { M_SQRT2 };
-static char *apcor_keys[NFLUX] = { "APCOR2" };
-#else
-static char *flux_keys[NFLUX] = { "Core_flux"/*,
+static char *flux_keys[NFLUX] = { "Core_flux",
 				  "Core2_flux",
-				  "Core3_flux"*/ };
-float flux_apers[NFLUX] = { 1.0/*,
+				  "Core3_flux" };
+float flux_apers[NFLUX] = { 1.0,
 			    M_SQRT2,
-			    2.0*/ };
-static char *apcor_keys[NFLUX] = { "APCOR"/*,
+			    2.0 };
+static char *apcor_keys[NFLUX] = { "APCOR",
 				   "APCOR2",
-				   "APCOR3"*/ };
-#endif
+				   "APCOR3" };
 
 /* Getopt stuff */
 extern char *optarg;

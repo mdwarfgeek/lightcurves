@@ -18,7 +18,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   struct systematic_fit *sysbuf = (struct systematic_fit *) NULL;
 
-  long star, meas, pt, opt;
+  long star, meas, nfluxuse, pt, opt;
 
   float medflux, sigflux, rmsflux, frameoff, framerms;
   float tmp, chisq;
@@ -42,7 +42,9 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   }
 
   /* Loop through the various flux measures */
-  for(meas = 0; meas < NFLUX; meas++) {
+  nfluxuse = (noapsel ? 1 : NFLUX);
+
+  for(meas = 0; meas < nfluxuse; meas++) {
     /* Apply polynomial correction if requested */
     if(mefinfo->degree >= 0) {
       if(verbose)
