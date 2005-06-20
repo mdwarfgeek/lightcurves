@@ -89,7 +89,7 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, int nflux, char 
 
 #ifdef HAVE_MMAP
   /* Map the buffer */
-  b->buf = mmap((void *) NULL, totsize, PROT_READ | PROT_WRITE, MAP_PRIVATE, b->fd, 0);
+  b->buf = mmap((void *) NULL, totsize, PROT_READ | PROT_WRITE, MAP_SHARED, b->fd, 0);
   if(b->buf == ((unsigned char *) MAP_FAILED)) {
     report_syserr(errstr, "mmap");
     goto error;
