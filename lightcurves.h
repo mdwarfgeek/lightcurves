@@ -101,6 +101,13 @@ struct systematic_fit {
   double coeff[50];
 };
 
+/* Intrapixel sensitivity map */
+struct intra {
+  float *map;
+  long nbin;
+  float binsize;
+};
+
 /* Globals */
 extern float flux_apers[NFLUX];
 extern int verbose;
@@ -127,6 +134,12 @@ int buffer_put_object (struct buffer_info *b, struct lc_point *buf,
 /* Aperture combination: chooseap.c */
 int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      struct lc_point *ptbuf, float *medbuf, char *errstr);
+
+/* Intrapixel sensitivity correction: intra.c */
+int read_intra (char *filename, struct intra *intralist, int nmefs,
+		char *errstr);
+
+float calc_intra (float x, float y, struct intra *corr);
 
 /* Main routine: lightcurves.c */
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,

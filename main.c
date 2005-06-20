@@ -19,7 +19,8 @@
 
 static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr);
 static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
-		     struct buffer_info *buf, char *errstr);
+		     struct buffer_info *buf,
+		     int dointra, struct intra *icorr, char *errstr);
 
 static int write_lc (fitsfile *reff, fitsfile *fits,
 		     struct buffer_info *buf, struct lc_mef *mefinfo, char *errstr);
@@ -58,6 +59,7 @@ static void usage (char *av) {
 	  "         -b bfac   Add 'bfac' mmag in quadrature with errors.\n"
 	  "         -d        Enables difference imaging mode.\n"
 	  "         -f degree Apply polynomial of 'degree' for systematics removal.\n"
+	  "         -i file   Apply intrapixel correction from 'file'.\n"
 	  "         -t        Apply Tamuz PCA-like algorithm for systematics removal.\n\n"
 	  "Output:\n"
 	  "         -g file   Writes good frames list to 'file'.\n"
@@ -76,6 +78,7 @@ int main (int argc, char *argv[]) {
 
   char *refname, **fnlist = (char **) NULL, **fnp;
   struct lc_mef *meflist = (struct lc_mef *) NULL;
+  struct intra *intralist = (struct intra *) NULL;
   struct buffer_info buf;
 
   long a, f, nf, op;
@@ -91,6 +94,9 @@ int main (int argc, char *argv[]) {
 
   char goodfile[FLEN_FILENAME];
   int dogood = 0;
+
+  char intrafile[FLEN_FILENAME];
+  int dointra = 0;
 
   int noapsel = 0;
   int polydeg = -1;
@@ -112,7 +118,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "ab:df:g:o:pqtv")) != -1)
+  while((c = getopt(argc, argv, "ab:df:g:i:o:pqtv")) != -1)
     switch(c) {
     case 'a':
       noapsel++;
@@ -137,6 +143,11 @@ int main (int argc, char *argv[]) {
       strncpy(goodfile, optarg, sizeof(goodfile)-1);
       outfile[sizeof(goodfile)-1] = '\0';
       dogood = 1;
+      break;
+    case 'i':
+      strncpy(intrafile, optarg, sizeof(intrafile)-1);
+      intrafile[sizeof(intrafile)-1] = '\0';
+      dointra = 1;
       break;
     case 'o':
       strncpy(outfile, optarg, sizeof(outfile)-1);
@@ -302,11 +313,22 @@ int main (int argc, char *argv[]) {
 
   /* Allocate arrays */
   meflist = (struct lc_mef *) malloc(nmefs * sizeof(struct lc_mef));
+  intralist = (struct intra *) malloc(nmefs * sizeof(struct intra));
   medbuf1 = (float *) malloc(2 * nmefs * sizeof(float));
-  if(!meflist || !medbuf1)
+  if(!meflist || !intralist || !medbuf1)
     error(1, "malloc");
 
   medbuf2 = medbuf1 + nmefs;
+
+  /* Initialise intrapixel list */
+  for(mef = 0; mef < nmefs; mef++)
+    intralist[mef].map = (float *) NULL;
+
+  /* Load intrapixel list if requested */
+  if(dointra) {
+    if(read_intra(intrafile, intralist, nmefs, errstr))
+      fatal(1, "read_intra: %s", errstr);
+  }
 
   /* Create disk buffer */
   if(buffer_init(&buf, errstr))
@@ -367,7 +389,8 @@ int main (int argc, char *argv[]) {
       if(verbose)
 	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
-      if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf, errstr))
+      if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
+		  dointra, &(intralist[mef]), errstr))
 	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
     }
 
@@ -471,10 +494,14 @@ int main (int argc, char *argv[]) {
       free((void *) meflist[mef].stars);
     if(meflist[mef].frames)
       free((void *) meflist[mef].frames);
+    if(intralist[mef].map)
+      free((void *) intralist[mef].map);
   }
 
   free((void *) meflist);
   meflist = (struct lc_mef *) NULL;
+  free((void *) intralist);
+  intralist = (struct intra *) NULL;
 
   /* Free file list */
   free((void *) fnlist);
@@ -837,7 +864,8 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
 }
 
 static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
-		     struct buffer_info *buf, char *errstr) {
+		     struct buffer_info *buf,
+		     int dointra, struct intra *icorr, char *errstr) {
   fitsfile *fits;
   int status = 0;
 
@@ -1096,6 +1124,10 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	}
 	else
 	  points[r].fluxerr = 0.0;
+
+	/* Apply intrapixel correction if requested */
+	if(dointra)
+	  points[r].flux -= calc_intra(xbuf[r], ybuf[r], icorr);
       }
 
       /* Write out those */
