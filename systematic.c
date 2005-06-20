@@ -112,6 +112,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
        data[star].fluxerr > 0.0 &&       /* And a reliable error */
        !data[star].satur &&              /* Not saturated */
        !mefinfo->stars[star].bflag &&    /* Not blended */
+       !mefinfo->stars[star].cflag &&    /* No bad pixels */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
       if(mfirst || data[star].flux > fmax) {
 	fmax = data[star].flux;
@@ -152,7 +153,8 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
        mefinfo->stars[star].sigflux[meas] > 0 &&
        data[star].flux > fmin &&
        data[star].flux < fmax &&         /* Not saturated */
-       !mefinfo->stars[star].bflag &&    /* Not blended */
+       !mefinfo->stars[star].bflag &&    /* Not blended *
+       !mefinfo->stars[star].cflag &&    /* No bad pixels */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
       medbuf[opt] = mefinfo->stars[star].sigflux[meas];
       opt++;
@@ -181,6 +183,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
        data[star].flux > fmin &&
        data[star].flux < fmax &&         /* Not saturated */
        !mefinfo->stars[star].bflag &&    /* Not blended */
+       !mefinfo->stars[star].cflag &&    /* No bad pixels */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
       val = data[star].flux - mefinfo->stars[star].medflux[meas];
 
@@ -242,6 +245,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	 data[star].flux > fmin &&
 	 data[star].flux < fmax &&         /* Not saturated */
 	 !mefinfo->stars[star].bflag &&    /* Not blended */
+	 !mefinfo->stars[star].cflag &&    /* No bad pixels */
 	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
@@ -283,6 +287,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	 data[star].flux > fmin &&
 	 data[star].flux < fmax &&         /* Not saturated */
 	 !mefinfo->stars[star].bflag &&    /* Not blended */
+	 !mefinfo->stars[star].cflag &&    /* No bad pixels */
 	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
@@ -346,6 +351,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	 data[star].flux > fmin &&
 	 data[star].flux < fmax &&         /* Not saturated */
 	 !mefinfo->stars[star].bflag &&    /* Not blended */
+	 !mefinfo->stars[star].cflag &&    /* No bad pixels */
 	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;

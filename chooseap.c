@@ -55,6 +55,7 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	   !refbuf[star].satur && !ptbuf[star].satur &&
 	   mefinfo->stars[star].sigflux[aper] > 0 &&
 	   !mefinfo->stars[star].bflag &&
+	   !mefinfo->stars[star].cflag &&
 	   mefinfo->stars[star].cls == -1) {
 	  corbuf[ncor] = ptbuf[star].flux - refbuf[star].flux;
 	  ncor++;

@@ -211,6 +211,7 @@ int pcasys (struct buffer_info *buf, struct lc_point *ptbuf, struct lc_mef *mefi
     for(star = 0; star < mefinfo->nstars; star++) {
       if(sigflux[star] > 0.0 &&
 	 !mefinfo->stars[star].bflag &&
+	 !mefinfo->stars[star].cflag &&
 	 mefinfo->stars[star].cls == -1) {
 	tmpx[0] = mefinfo->stars[star].x;
 	tmpy[0] = mefinfo->stars[star].y;
@@ -254,6 +255,7 @@ int pcasys (struct buffer_info *buf, struct lc_point *ptbuf, struct lc_mef *mefi
       /* Plot */
       if(sigflux[star] > 0.0 &&
 	 !mefinfo->stars[star].bflag &&
+	 !mefinfo->stars[star].cflag &&
 	 mefinfo->stars[star].cls == -1) {
 	tmpx[0] = mefinfo->stars[star].x;
 	tmpy[0] = mefinfo->stars[star].y;

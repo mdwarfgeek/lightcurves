@@ -19,6 +19,7 @@ struct lc_star {
   float dec;
   int cls;
   int bflag;
+  long cflag;
 
   struct lc_point ref[NFLUX];
 

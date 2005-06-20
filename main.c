@@ -822,6 +822,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
 
       stars[rout].cls = NINT(clsbuf[r]);
       stars[rout].bflag = (a7buf[r] < 0.0 ? 1 : 0);
+      stars[rout].cflag = 0;
 
       if(pkhtbuf[r] > satlev && (satflux == 0.0 || stars[rout].ref[0].flux < satflux))
 	satflux = stars[rout].ref[0].flux;
@@ -870,11 +871,12 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   int status = 0;
 
   char *colnames[4] = { "X_coordinate", "Y_coordinate", "Peak_height", "Skyrms" };
-  int gcols[4+NFLUX], col, collim;
+  char *optcolnames[1] = { "Bad_pixels" };
+  int gcols[5+NFLUX], col, collim, optcollim;
 
   struct lc_point *points = (struct lc_point *) NULL;
 
-  float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *skyrmsbuf;
+  float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *skyrmsbuf, *badpixbuf;
 
   float skylev, skynoise, satlev, exptime, rcore, gain, percorr;
   float skyvar, tpi, tmp, expfac;
@@ -914,6 +916,21 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       status = 0;  /* ignore */
     else if(status) {
       fitsio_err(errstr, status, "ffgcno: %s", colnames[col]);
+      goto error;
+    }
+  }
+
+  optcollim = sizeof(optcolnames) / sizeof(optcolnames[0]);
+  for(col = 0; col < collim; col++) {
+    ffgcno(fits, CASEINSEN, optcolnames[col], &(gcols[collim+col]), &status);
+    if(status == COL_NOT_UNIQUE)
+      status = 0;  /* ignore */
+    else if(status == COL_NOT_FOUND) {
+      status = 0;
+      gcols[collim+col] = 0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgcno: %s", optcolnames[col]);
       goto error;
     }
   }
@@ -1050,7 +1067,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
   
   /* Allocate column buffers */
-  xbuf = (float *) malloc(5 * rblksz * sizeof(float));
+  xbuf = (float *) malloc(6 * rblksz * sizeof(float));
   if(!xbuf) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -1060,6 +1077,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   fluxbuf = xbuf + 2 * rblksz;
   pkhtbuf = xbuf + 3 * rblksz;
   skyrmsbuf = xbuf + 4 * rblksz;
+  badpixbuf = xbuf + 5 * rblksz;
 
   /* Allocate memory for lightcurve points */
   points = (struct lc_point *) malloc(rblksz * sizeof(struct lc_point));
@@ -1081,8 +1099,11 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     ffgcve(fits, gcols[2], roff + 1L, 1L, rread, 0.0, pkhtbuf, (int *) NULL, &status);
     ffgcve(fits, gcols[3], roff + 1L, 1L, rread, 0.0, skyrmsbuf, (int *) NULL, &status);
 
+    if(gcols[4])
+      ffgcve(fits, gcols[4], roff + 1L, 1L, rread, 0.0, badpixbuf, (int *) NULL, &status);
+
     for(col = 0; col < NFLUX; col++) {
-      ffgcve(fits, gcols[4+col], roff + 1L, 1L, rread, 0.0, fluxbuf,
+      ffgcve(fits, gcols[5+col], roff + 1L, 1L, rread, 0.0, fluxbuf,
 	     (int *) NULL, &status);
 
       for(r = 0; r < rread; r++) {
@@ -1128,6 +1149,10 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	/* Apply intrapixel correction if requested */
 	if(dointra)
 	  points[r].flux -= calc_intra(xbuf[r], ybuf[r], icorr);
+
+	/* Accumulate counts of frames with bad pixels */
+	if(gcols[4] && badpixbuf[r] > 0.0)
+	  mefinfo->stars[rout].cflag++;
       }
 
       /* Write out those */
@@ -1189,19 +1214,19 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   int status = 0, col, ncols;
 
   char *ttype[] = { "x", "y", "medflux", "rms", "chisq", "nchisq",
-		    "class", "bflag", "pointer",
+		    "class", "bflag", "cflag", "pointer",
 		    "apradius",
 		    "hjd", "flux", "fluxerr", "ra", "dec" };
   char *tform[] = { "1E", "1E", "1E", "1E", "1E", "1J",
-		    "1I", "1I", "1J",
+		    "1I", "1I", "1J", "1J",
 		    "1E",
 		    "", "", "", "1E", "1E" };
   char *tunit[] = { "pixels", "pixels", "mag", "mag", "", "",
-		    "", "", "",
+		    "", "", "", "",
 		    "pixels",
 		    "days", "mag", "mag", "radians", "radians" };
   char *tdisp[] = { "F8.2", "F8.2", "F7.4", "F7.4", "F10.1", "I4",
-		    "I2", "I2", "I8",
+		    "I2", "I2", "I4", "I8",
 		    "F4.2",
 		    "F14.6", "F7.4", "F7.4", "F9.6", "F9.6" };
   char kbuf[FLEN_KEYWORD], tfbuf[FLEN_VALUE], tdbuf[FLEN_VALUE], cbuf[FLEN_COMMENT];
@@ -1213,7 +1238,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   double *epos = (double *) NULL;
 
   float *xbuf = (float *) NULL, *ybuf, *medbuf, *rmsbuf, *chibuf, *apbuf, *rabuf, *decbuf;
-  long *nchibuf = (long *) NULL, *ptrbuf;
+  long *nchibuf = (long *) NULL, *ptrbuf, *cfbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
   float *fluxbuf = (float *) NULL, *fluxerrbuf;
   double *hjdbuf = (double *) NULL;
@@ -1226,9 +1251,9 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   snprintf(tdbuf, sizeof(tdbuf), "%ldD", mefinfo->nf);
   snprintf(tfbuf, sizeof(tfbuf), "%ldE", mefinfo->nf);
 
-  tform[10] = tdbuf;
-  tform[11] = tfbuf;
+  tform[11] = tdbuf;
   tform[12] = tfbuf;
+  tform[13] = tfbuf;
 
   /* Create table */
   ncols = sizeof(ttype) / sizeof(ttype[0]);
@@ -1355,7 +1380,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   /* Allocate output buffers */
   xbuf = (float *) malloc(8 * rblksz * sizeof(float));
-  nchibuf = (long *) malloc(2 * rblksz * sizeof(long));
+  nchibuf = (long *) malloc(3 * rblksz * sizeof(long));
   clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
   fluxbuf = (float *) malloc(2 * rblksz * mefinfo->nf * sizeof(float));
   hjdbuf = (double *) malloc(rblksz * mefinfo->nf * sizeof(double));
@@ -1375,6 +1400,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   bfbuf = clsbuf + rblksz;
 
   ptrbuf = nchibuf + rblksz;
+  cfbuf = nchibuf + 2 * rblksz;
 
   fluxerrbuf = fluxbuf + rblksz * mefinfo->nf;
 
@@ -1395,6 +1421,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     nchibuf[r] = mefinfo->stars[star].nchisq;
     clsbuf[r] = mefinfo->stars[star].cls;
     bfbuf[r] = mefinfo->stars[star].bflag;
+    cfbuf[r] = mefinfo->stars[star].cflag;
     ptrbuf[r] = mefinfo->stars[star].ptr;
     apbuf[r] = mefinfo->stars[star].apradius;
     rabuf[r] = mefinfo->stars[star].ra;
@@ -1438,13 +1465,14 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       ffpclj(fits, 6, frow, 1, r, nchibuf, &status);
       ffpcli(fits, 7, frow, 1, r, clsbuf, &status);
       ffpcli(fits, 8, frow, 1, r, bfbuf, &status);
-      ffpclj(fits, 9, frow, 1, r, ptrbuf, &status);
-      ffpcle(fits, 10, frow, 1, r, apbuf, &status);
-      ffpcnd(fits, 11, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
-      ffpcne(fits, 12, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
-      ffpcne(fits, 13, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
-      ffpcle(fits, 14, frow, 1, r, rabuf, &status);
-      ffpcle(fits, 15, frow, 1, r, decbuf, &status);
+      ffpclj(fits, 9, frow, 1, r, cfbuf, &status);
+      ffpclj(fits, 10, frow, 1, r, ptrbuf, &status);
+      ffpcle(fits, 11, frow, 1, r, apbuf, &status);
+      ffpcnd(fits, 12, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
+      ffpcne(fits, 13, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
+      ffpcne(fits, 14, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
+      ffpcle(fits, 15, frow, 1, r, rabuf, &status);
+      ffpcle(fits, 16, frow, 1, r, decbuf, &status);
       if(status) {
 	fitsio_err(errstr, status, "ffpcl");
 	goto error;
@@ -1466,13 +1494,14 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     ffpclj(fits, 6, frow, 1, r, nchibuf, &status);
     ffpcli(fits, 7, frow, 1, r, clsbuf, &status);
     ffpcli(fits, 8, frow, 1, r, bfbuf, &status);
-    ffpclj(fits, 9, frow, 1, r, ptrbuf, &status);
-    ffpcle(fits, 10, frow, 1, r, apbuf, &status);
-    ffpcnd(fits, 11, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
-    ffpcne(fits, 12, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
-    ffpcne(fits, 13, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
-    ffpcle(fits, 14, frow, 1, r, rabuf, &status);
-    ffpcle(fits, 15, frow, 1, r, decbuf, &status);
+    ffpclj(fits, 9, frow, 1, r, cfbuf, &status);
+    ffpclj(fits, 10, frow, 1, r, ptrbuf, &status);
+    ffpcle(fits, 11, frow, 1, r, apbuf, &status);
+    ffpcnd(fits, 12, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
+    ffpcne(fits, 13, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
+    ffpcne(fits, 14, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
+    ffpcle(fits, 15, frow, 1, r, rabuf, &status);
+    ffpcle(fits, 16, frow, 1, r, decbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpcl");
       goto error;
