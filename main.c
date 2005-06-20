@@ -921,7 +921,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   optcollim = sizeof(optcolnames) / sizeof(optcolnames[0]);
-  for(col = 0; col < collim; col++) {
+  for(col = 0; col < optcollim; col++) {
     ffgcno(fits, CASEINSEN, optcolnames[col], &(gcols[collim+col]), &status);
     if(status == COL_NOT_UNIQUE)
       status = 0;  /* ignore */
@@ -934,6 +934,8 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       goto error;
     }
   }
+
+  collim += optcollim;
 
   for(col = 0; col < NFLUX; col++) {
     ffgcno(fits, CASEINSEN, flux_keys[col], &(gcols[collim+col]), &status);
