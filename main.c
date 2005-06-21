@@ -1150,7 +1150,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
 	/* Apply intrapixel correction if requested */
 	if(dointra)
-	  points[r].flux -= calc_intra(xbuf[r], ybuf[r], icorr);
+	  points[r].flux += calc_intra(xbuf[r], ybuf[r], icorr);
 
 	/* Accumulate counts of frames with bad pixels */
 	if(gcols[4] && badpixbuf[r] > 0.0)
