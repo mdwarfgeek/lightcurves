@@ -153,7 +153,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
        mefinfo->stars[star].sigflux[meas] > 0 &&
        data[star].flux > fmin &&
        data[star].flux < fmax &&         /* Not saturated */
-       !mefinfo->stars[star].bflag &&    /* Not blended *
+       !mefinfo->stars[star].bflag &&    /* Not blended */
        !mefinfo->stars[star].cflag &&    /* No bad pixels */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
       medbuf[opt] = mefinfo->stars[star].sigflux[meas];
