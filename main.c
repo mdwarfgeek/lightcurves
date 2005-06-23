@@ -566,6 +566,29 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   long nrows, rblksz, roff, rout, remain, rread, r;
   float satflux;
 
+  char filter[FLEN_VALUE];
+  float airmass = 1.0, extinct = 0.0;
+  int l1, l2, i, ilim;
+
+  struct {
+    char *filt;
+    float extinct;
+  } default_extinct_tab[] = {
+    { "r ",          0.09 },
+    { "g ",          0.19 },
+    { "U ",          0.46 },
+    { "i ",          0.05 },
+    { "z ",          0.05 },
+    { "B ",          0.22 },
+    { "V ",          0.12 },
+    { "R ",          0.08 },
+    { "I ",          0.04 },
+    { "stromgren u", 0.51 },
+    { "stromgren v", 0.26 },
+    { "stromgren b", 0.15 },
+    { "stromgren y", 0.10 }
+  };
+
   /* Read number of rows */
   ffgnrw(fits, &nrows, &status);
   if(status) {
@@ -741,7 +764,61 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
     percorr = powf(10.0, 0.4 * percorr);
   }
 
-  mefinfo->zp = magzpt + 2.5 * log10f(exptime);
+  /* Get airmass */
+  ffgkye(fits, "AIRMASS", &airmass, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    airmass = 1.0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: AIRMASS");
+    goto error;
+  }
+
+  /* Get filter name in case we can't get extinction */
+  ffgkys(fits, "WFFBAND", filter, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgkye: FILTER");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: WFFBAND");
+    goto error;
+  }
+
+  /* Append a space */
+  l1 = strlen(filter);
+  if(l1+1 < sizeof(filter)) {
+    filter[l1] = ' ';
+    filter[l1+1] = '\0';
+    l1++;
+  }
+
+  /* Attempt to get extinction */
+  ffgkye(fits, "EXTINCT", &extinct, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    extinct = 0.0;
+
+    /* Attempt to find it in the table of defaults */
+    ilim = sizeof(default_extinct_tab) / sizeof(default_extinct_tab[0]);
+
+    for(i = 0; i < ilim; i++) {
+      l2 = strlen(default_extinct_tab[i].filt);
+
+      if(l1 >= l2 && !strncmp(filter, default_extinct_tab[i].filt, l2)) {
+	/* Found it */
+	extinct = default_extinct_tab[i].extinct;
+	break;
+      }
+    }
+  }
+
+  mefinfo->zp = magzpt + 2.5 * log10f(exptime) - (airmass - 1.0)*extinct;
   skyvar = M_PI * rcore * rcore * skynoise * skynoise;
   tpi = 2.0 * M_PI;
 
