@@ -172,6 +172,8 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
 void dsolve (double a[50][50], double b[50], int m);
 int hanning (float xbuf[], int npt, char *errstr);
 void medsig (float *a, long n, float *median_r, float *sigma_r);
+
 void sortfloat (float *ia, long n);
+void sortlong (long *ia, long n);
 
 #endif  /* __LIGHTCURVES_H__ */

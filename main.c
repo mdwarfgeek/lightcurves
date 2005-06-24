@@ -106,6 +106,9 @@ int main (int argc, char *argv[]) {
   float *medbuf1 = (float *) NULL, *medbuf2, medsat, medlim;
   long nmedsat, nmedlim, nstartot;
 
+  long cflagmed, star;
+  long *tmpmed = (long *) NULL;
+
   /* Set the program name for error reporting */
   if(argv[0])
     pn = basename(argv[0]);
@@ -400,6 +403,32 @@ int main (int argc, char *argv[]) {
     /* Sort out averages */
     meflist[mef].avsigma /= nf;
 
+    /* Fix the cflag column - sometimes in difference imaging there
+     * are frames with zero confidence all-over, so subtract off
+     * the median cflag value.
+     */
+    tmpmed = (long *) malloc(meflist[mef].nstars * sizeof(long));
+    if(!tmpmed)
+      error(1, "malloc");
+
+    for(star = 0; star < meflist[mef].nstars; star++)
+      tmpmed[star] = meflist[mef].stars[star].cflag;
+
+    sortlong(tmpmed, meflist[mef].nstars);
+    cflagmed = meflist[mef].nstars % 2 ?
+               tmpmed[meflist[mef].nstars/2] :
+               (tmpmed[meflist[mef].nstars/2-1] +  tmpmed[meflist[mef].nstars/2]) / 2;
+
+    free((void *) tmpmed);
+    tmpmed = (long *) NULL;
+
+    for(star = 0; star < meflist[mef].nstars; star++) {
+      meflist[mef].stars[star].cflag -= cflagmed;
+
+      if(meflist[mef].stars[star].cflag < 0)
+	meflist[mef].stars[star].cflag = 0;
+    }
+
     /* Change MJD to be relative to the first frame */
     meflist[mef].mjdref = floor(meflist[mef].frames[0].mjd);
 
@@ -414,7 +443,10 @@ int main (int argc, char *argv[]) {
       else
 	printf("  Saturation level:     undetermined\n");
 
-      printf("  5-sigma limit:        %.1f\n", meflist[mef].refflim);
+      printf("  5-sigma limit:        %.1f\n"
+	     "  Median cflag:         %ld\n",
+	     meflist[mef].refflim, cflagmed);
+
     }
 
     if(meflist[mef].satmag != -999.0) {

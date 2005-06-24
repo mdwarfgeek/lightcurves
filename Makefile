@@ -31,7 +31,7 @@ LIBS=-L$(CFITSIO_LIB) -lcfitsio -L$(PGPLOT_LIB) -lcpgplot -lpgplot -L$(SLA_LIB) 
 
 LIGHTCURVES_SRCS=main.c buffer.c chooseap.c intra.c lightcurves.c pcasys.c plots.c systematic.c \
 	hjd.c sla.c \
-	dsolve.c hanning.c medsig.c sortfloat.c cvtunit.c util.c
+	dsolve.c hanning.c medsig.c sortfloat.c sortlong.c cvtunit.c util.c
 LIGHTCURVES_OBJS=${LIGHTCURVES_SRCS:%.c=%.o}
 
 TESTBUF_SRCS=testbuf.c buffer.c cvtunit.c util.c
