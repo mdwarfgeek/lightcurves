@@ -800,7 +800,15 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   ffgkye(fits, "AIRMASS", &airmass, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    airmass = 1.0;
+    ffgkye(fits, "AMSTART", &airmass, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      airmass = 1.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: AMSTART");
+      goto error;
+    }
   }
   else if(status) {
     fitsio_err(errstr, status, "ffgkye: AIRMASS");
