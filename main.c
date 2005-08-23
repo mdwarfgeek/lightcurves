@@ -724,7 +724,15 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   if(status == KEY_NO_EXIST) {
     status = 0;
     ffgkye(fits, "EXPOSED", &exptime, (char *) NULL, &status);
-    if(status) {
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      ffgkye(fits, "EXP_TIME", &exptime, (char *) NULL, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffgkye: EXP_TIME");
+	goto error;
+      }
+    }
+    else if(status) {
       fitsio_err(errstr, status, "ffgkye: EXPOSED");
       goto error;
     }
@@ -1083,7 +1091,15 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   if(status == KEY_NO_EXIST) {
     status = 0;
     ffgkye(fits, "EXPOSED", &exptime, (char *) NULL, &status);
-    if(status) {
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      ffgkye(fits, "EXP_TIME", &exptime, (char *) NULL, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffgkye: EXP_TIME");
+	goto error;
+      }
+    }
+    else if(status) {
       fitsio_err(errstr, status, "ffgkye: EXPOSED");
       goto error;
     }
