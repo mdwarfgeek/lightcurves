@@ -17,14 +17,14 @@
 
 int do_plots (struct lc_mef *meflist, int nmefs,
 	      float medsat, float medlim, float sysbodge, char *errstr) {
-  float magmin, magmax, mag, rms, chi, photons, loge, area, tmp;
+  float magmin, magmax, mag, rms, chi, photons, loge, area, tmp, tmpp, tmps;
   long star, pt;
   int mef;
 
   float *medbuf1 = (float *) NULL, *medbuf2, *medbuf3, *medbuf4;
   float gain, rcore, sigma, avzp;
 
-  float *theox = (float *) NULL, *theoy, *theoys;
+  float *theox = (float *) NULL, *theop, *theos, *theoy, *theoys;
   long t, ntheo;
 
   float tmpx[2], tmpy[2];
@@ -85,14 +85,16 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   /* Generate theoretical curve */
   ntheo = ceil((magmax - magmin) / THEOSTEP);
 
-  theox = (float *) malloc(3 * ntheo * sizeof(float));
+  theox = (float *) malloc(5 * ntheo * sizeof(float));
   if(!theox) {
     report_syserr(errstr, "malloc");
     goto error;
   }
 
-  theoy = theox + ntheo;
-  theoys = theox + 2 * ntheo;
+  theop = theox + ntheo;
+  theos = theox + 2 * ntheo;
+  theoy = theox + 3 * ntheo;
+  theoys = theox + 4 * ntheo;
 
   loge = log10f(expf(1.0));
   area = M_PI * rcore * rcore;
@@ -104,19 +106,33 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     tmp = 2.5 * loge * sqrtf(photons +
 			     area * (gain * gain * sigma * sigma)) / photons;
 
+    tmpp = 2.5 * loge * sqrtf(photons) / photons;
+    tmps = 2.5 * loge * sqrtf(area * (gain * gain * sigma * sigma)) / photons;
+
     theox[t] = mag;
+    theop[t] = 3.0 + log10f(tmpp);
+    theos[t] = 3.0 + log10f(tmps);
     theoy[t] = 3.0 + log10f(tmp);
     theoys[t] = 3.0 + 0.5 * log10f(tmp*tmp + sysbodge*sysbodge);
   }
 
-  cpgsls(2);
   cpgsci(2);
+  cpgsls(1);
   cpgline(ntheo, theox, theoy);
+  cpgsls(2);
+  cpgline(ntheo, theox, theop);
+  cpgline(ntheo, theox, theos);
   cpgsci(1);
 
   if(sysbodge > 0.0) {
-    cpgsls(4);
     cpgsci(2);
+    cpgsls(2);
+    tmpx[0] = magmin;
+    tmpx[1] = magmax;
+    tmpy[0] = 3.0 + log10f(sysbodge);
+    tmpy[1] = tmpy[0];
+    cpgline(2, tmpx, tmpy);
+    cpgsls(4);
     cpgline(ntheo, theox, theoys);
     cpgsci(1);
   }
