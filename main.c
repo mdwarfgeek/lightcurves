@@ -31,15 +31,12 @@ static char *sstrip (char *str);
 
 /* Flux keywords and aperture sizes in terms of rcore */
 static char *flux_keys[NFLUX] = { "Core_flux",
-				  "Core1_flux",
 				  "Core2_flux",
 				  "Core3_flux" };
 float flux_apers[NFLUX] = { 1.0,
-			    0.5,
 			    M_SQRT2,
 			    2.0 };
 static char *apcor_keys[NFLUX] = { "APCOR",
-				   "APCOR1",
 				   "APCOR2",
 				   "APCOR3" };
 
