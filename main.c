@@ -471,7 +471,7 @@ int main (int argc, char *argv[]) {
 
     /* Calculate syslim for this frame */
     if(syslim < 0)
-      meflist[mef].syslim = 1.0;  /* calculate it later */
+      meflist[mef].syslim = -1.0;  /* calculate it later */
     else 
       meflist[mef].syslim = meflist[mef].zp - syslim;  /* user-supplied */
 
