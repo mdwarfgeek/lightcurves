@@ -31,12 +31,15 @@ static char *sstrip (char *str);
 
 /* Flux keywords and aperture sizes in terms of rcore */
 static char *flux_keys[NFLUX] = { "Core_flux",
+				  "Core1_flux",
 				  "Core2_flux",
 				  "Core3_flux" };
 float flux_apers[NFLUX] = { 1.0,
+			    0.5,
 			    M_SQRT2,
 			    2.0 };
 static char *apcor_keys[NFLUX] = { "APCOR",
+				   "APCOR1",
 				   "APCOR2",
 				   "APCOR3" };
 
@@ -60,7 +63,7 @@ static void usage (char *av) {
 	  "         -d        Enables difference imaging mode.\n"
 	  "         -f degree Apply polynomial of 'degree' for systematics removal.\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
-	  "         -t        Apply Tamuz PCA-like algorithm for systematics removal.\n\n"
+	  "         -u mag    Set upper mag limit for systematics correction.\n\n"
 	  "Output:\n"
 	  "         -g file   Writes good frames list to 'file'.\n"
 	  "         -o file   Writes lightcurves to 'file'.\n"
@@ -109,6 +112,8 @@ int main (int argc, char *argv[]) {
   long cflagmed, star;
   long *tmpmed = (long *) NULL;
 
+  float syslim = -1.0;
+
   /* Set the program name for error reporting */
   if(argv[0])
     pn = basename(argv[0]);
@@ -121,7 +126,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "ab:df:g:i:o:pqtv")) != -1)
+  while((c = getopt(argc, argv, "ab:df:g:i:o:pqtu:v")) != -1)
     switch(c) {
     case 'a':
       noapsel++;
@@ -165,6 +170,11 @@ int main (int argc, char *argv[]) {
       break;
     case 't':
       pcafit++;
+      break;
+    case 'u':
+      syslim = (float) strtod(optarg, &ep);
+      if(*ep != '\0' || syslim < 0)
+	fatal(1, "invalid syslim value: %s", optarg);
       break;
     case 'v':
       verbose++;
@@ -458,6 +468,12 @@ int main (int argc, char *argv[]) {
     nmedlim++;
 
     nstartot += meflist[mef].nstars;
+
+    /* Calculate syslim for this frame */
+    if(syslim < 0)
+      meflist[mef].syslim = 1.0;  /* calculate it later */
+    else 
+      meflist[mef].syslim = meflist[mef].zp - syslim;  /* user-supplied */
 
     /* Call into the main part of the program */
     if(lightcurves(&buf, &(meflist[mef]), noapsel, pcafit, errstr))

@@ -2,7 +2,7 @@
 #define __LIGHTCURVES_H__
 
 /* Number of flux measures */
-#define NFLUX  3
+#define NFLUX  4
 
 struct lc_point {
   float flux;
@@ -78,6 +78,9 @@ struct lc_mef {
   /* Individual frame info */
   struct lc_frame *frames;
   long nf;
+
+  /* Systematics fitting upper mag limit */
+  float syslim;
 };
 
 /* Structure holding disk buffer information */

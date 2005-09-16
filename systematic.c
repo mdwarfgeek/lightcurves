@@ -133,6 +133,10 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   /* Allow SATCLIP more mags */
   fmax -= SATCLIP;
 
+  if(mefinfo->syslim >= 0.0)
+    /* User override */
+    fmax = mefinfo->syslim;
+
   mefinfo->satclip[meas] = fmax;
 
   /* Allow all objects between fmax-USEMAG and fmax to counter
