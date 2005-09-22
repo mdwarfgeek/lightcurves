@@ -368,6 +368,7 @@ int main (int argc, char *argv[]) {
     meflist[mef].degree = polydeg;
 
     meflist[mef].avsigma = 0.0;
+    meflist[mef].avapcor = 0.0;
 
     meflist[mef].frames = (struct lc_frame *) NULL;
     meflist[mef].nf = nf;
@@ -409,6 +410,7 @@ int main (int argc, char *argv[]) {
 
     /* Sort out averages */
     meflist[mef].avsigma /= nf;
+    meflist[mef].avapcor /= nf;
 
     /* Fix the cflag column - sometimes in difference imaging there
      * are frames with zero confidence all-over, so subtract off
@@ -1331,6 +1333,8 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     mefinfo->avsigma += sqrtf(tmp * tmp + mefinfo->refsigma * mefinfo->refsigma);
   else
     mefinfo->avsigma += tmp;
+
+  mefinfo->avapcor += apcor[0];
 
   /* Store this frame MJD */
   mefinfo->frames[iframe].mjd = mjd;

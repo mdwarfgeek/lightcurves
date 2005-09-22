@@ -72,6 +72,9 @@ struct lc_mef {
   /* Average of sigma for theoretical curve */
   float avsigma;
 
+  /* Average of aperture correction for theoretical curve */
+  float avapcor;
+
   /* Reference MJD */
   double mjdref;
 
