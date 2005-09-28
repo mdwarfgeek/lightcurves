@@ -50,9 +50,11 @@ all: lightcurves testbuf
 
 lightcurves: $(LIGHTCURVES_OBJS)
 	$(CC) -o $@ $(LIGHTCURVES_OBJS) $(LIBS)
+#	f77 -o $@ $(LIGHTCURVES_OBJS) $(LIBS)
 
 testbuf: $(TESTBUF_OBJS)
 	$(CC) -o $@ $(TESTBUF_OBJS) $(LIBS)
+#	f77 -o $@ $(TESTBUF_OBJS) $(LIBS)
 
 clean:
 	rm -f $(LIGHTCURVES_OBJS) lightcurves
