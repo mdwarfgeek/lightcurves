@@ -780,13 +780,25 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   }
 
   ffgkye(fits, "GAIN", &gain, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    gain = 1.0;  /* !!! */
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: GAIN");
     goto error;
   }
 
   ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgkye: ZMAG");
+      goto error;
+    }
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: MAGZPT");
     goto error;
   }
