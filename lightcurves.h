@@ -5,6 +5,8 @@
 #define NFLUX  3
 
 struct lc_point {
+  float x;
+  float y;
   float flux;
   float fluxerr;
   unsigned char satur;
@@ -43,6 +45,9 @@ struct lc_frame {
   /* Frame offset and RMS after correction */
   float offset;
   float rms;
+
+  /* Delta(mag) from median - ie. zero order coefficient from fit */
+  float extinc;
 };
 
 struct lc_mef {
