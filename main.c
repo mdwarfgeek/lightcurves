@@ -617,6 +617,8 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   float airmass = 1.0, extinct = 0.0;
   int l1, l2, i, ilim;
 
+  int noexp = 0;
+
   struct {
     char *filt;
     float extinct;
@@ -797,6 +799,9 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
       fitsio_err(errstr, status, "ffgkye: ZMAG");
       goto error;
     }
+    else {
+      noexp = 1;  /* don't add in 2.5log10(exptime) */
+    }
   }
   else if(status) {
     fitsio_err(errstr, status, "ffgkye: MAGZPT");
@@ -893,7 +898,11 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
     }
   }
 
-  mefinfo->zp = magzpt + 2.5 * log10f(exptime) - (airmass - 1.0)*extinct;
+  if(noexp)
+    mefinfo->zp = magzpt - (airmass - 1.0)*extinct;
+  else
+    mefinfo->zp = magzpt + 2.5 * log10f(exptime) - (airmass - 1.0)*extinct;
+
   skyvar = M_PI * rcore * rcore * skynoise * skynoise;
   tpi = 2.0 * M_PI;
 
