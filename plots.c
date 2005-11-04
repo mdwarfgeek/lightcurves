@@ -36,6 +36,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   cpgopen("?");
   cpgscr(0, 1.0, 1.0, 1.0);
   cpgscr(1, 0.0, 0.0, 0.0);
+  cpgsch(1.4);
 
   /* Allocate workspace for median parameters */
   medbuf1 = (float *) malloc(5 * nmefs * sizeof(float));
@@ -125,25 +126,25 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   }
 
   cpgsci(2);
+  cpgslw(4);
   cpgsls(1);
-  cpgline(ntheo, theox, theoy);
+  cpgline(ntheo, theox, theoys);
   cpgsls(2);
   cpgline(ntheo, theox, theop);
+  cpgsls(3);
   cpgline(ntheo, theox, theos);
-  cpgsci(1);
 
   if(sysbodge > 0.0) {
     cpgsci(2);
-    cpgsls(2);
+    cpgsls(4);
     tmpx[0] = magmin;
     tmpx[1] = magmax;
     tmpy[0] = 3.0 + log10f(sysbodge);
     tmpy[1] = tmpy[0];
     cpgline(2, tmpx, tmpy);
-    cpgsls(4);
-    cpgline(ntheo, theox, theoys);
-    cpgsci(1);
   }
+  cpgslw(1);
+  cpgsci(1);
 
   free((void *) theox);
   theox = (float *) NULL;
