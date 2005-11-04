@@ -135,7 +135,6 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   cpgline(ntheo, theox, theos);
 
   if(sysbodge > 0.0) {
-    cpgsci(2);
     cpgsls(4);
     tmpx[0] = magmin;
     tmpx[1] = magmax;
