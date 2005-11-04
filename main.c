@@ -604,6 +604,8 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   struct lc_star *stars = (struct lc_star *) NULL;
 
   float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *clsbuf, *a7buf;
+  float *sattmp = (float *) NULL;
+  long nsattmp;
 
   float tpa, tpd, a, b, c, d, e, f, projp1, projp3, secd, tand;
   float skylev, skynoise, satlev, exptime, rcore, gain, magzpt, percorr;
@@ -928,7 +930,8 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   
   /* Allocate memory for catalogue stars */
   stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
-  if(!stars) {
+  sattmp = (float *) malloc(nrows * sizeof(float));
+  if(!stars || !sattmp) {
     report_syserr(errstr, "malloc");
     goto error;
   }
@@ -940,6 +943,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
 
   satflux = 0.0;
 
+  nsattmp = 0;
   while(remain > 0) {
     rread = (remain > rblksz ? rblksz : remain);
     
@@ -985,8 +989,10 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
       stars[rout].bflag = (a7buf[r] < 0.0 ? 1 : 0);
       stars[rout].cflag = 0;
 
-      if(pkhtbuf[r] > satlev && (satflux == 0.0 || stars[rout].ref[0].flux < satflux))
-	satflux = stars[rout].ref[0].flux;
+      if(pkhtbuf[r] > satlev) {
+	sattmp[nsattmp] = stars[rout].ref[0].flux;
+	nsattmp++;
+      }
     }
     
     roff += rread;
@@ -996,6 +1002,12 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   /* Free workspace */
   free((void *) xbuf);
   xbuf = (float *) NULL;
+
+  /* Determine saturation level robustly - 10%ile */
+  if(nsattmp > 0) {
+    sortfloat(sattmp, nsattmp);
+    satflux = sattmp[nsattmp/4];
+  }
 
   mefinfo->stars = stars;
   mefinfo->nstars = nrows;
@@ -1014,6 +1026,9 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   memcpy(&(mefinfo->apcor), apcor, sizeof(apcor));
   mefinfo->percorr = percorr;
 
+  free((void *) sattmp);
+  sattmp = (float *) NULL;
+
   return(0);
 
  error:
@@ -1021,6 +1036,8 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
     free((void *) stars);
   if(xbuf)
     free((void *) xbuf);
+  if(sattmp)
+    free((void *) sattmp);
 
   return(1);
 }
