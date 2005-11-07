@@ -901,7 +901,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   }
 
   if(noexp)
-    mefinfo->zp = magzpt - (airmass - 1.0)*extinct;
+    mefinfo->zp = magzpt;
   else
     mefinfo->zp = magzpt + 2.5 * log10f(exptime) - (airmass - 1.0)*extinct;
 
