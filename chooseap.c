@@ -65,8 +65,10 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	medsig(corbuf, ncor, &medcor, (float *) NULL);
 
 	/* Accumulate mean */
-	avapcor[aper] += medcor;
-	nav[aper]++;
+	if(fabsf(medcor) < 1) {  /* it can't ever be that big => junk */
+	  avapcor[aper] += medcor;
+	  nav[aper]++;
+	}
       }
     }
   }
@@ -78,7 +80,10 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   /* Compute mean aperture corrections */
   for(aper = 1; aper < NFLUX; aper++) {
-    avapcor[aper] /= nav[aper];
+    if(nav[aper] >= 1)
+      avapcor[aper] /= nav[aper];
+    else
+      avapcor[aper] = 0.0;
 
     if(verbose)
       printf("  Aperture correction %d->1 = %.4f using %ld frames\n",
