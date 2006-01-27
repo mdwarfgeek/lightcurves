@@ -428,6 +428,7 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
 		      float *medbuf, struct systematic_fit *sysbuf, char *errstr) {
   long star, f;
   float dx, dy, corr;
+  float corrmin, corrmax;
 
   /* Apply fit */
   for(star = 0; star < mefinfo->nstars; star++) {
@@ -451,12 +452,19 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
       dy = mefinfo->stars[star].y - sysbuf[frame].ybar;
 
       corr = polyeval(dx, dy, sysbuf[frame].coeff, mefinfo->degree);
+
+      if(star == 0 || corr < corrmin)
+	corrmin = corr;
+      if(star == 0 || corr > corrmax)
+	corrmax = corr;
 #endif
 
       //data[star].flux = 13 + corr;
       data[star].flux -= corr;
     }
   }
+
+  //printf("P-P %.4f Overall %.4f\n", corrmax - corrmin, sysbuf[frame].coeff[0]);
 
   return(0);
 
