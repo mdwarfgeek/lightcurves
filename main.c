@@ -594,6 +594,28 @@ int main (int argc, char *argv[]) {
   (dec) = delta;								\
 }
 
+#define XIXNZP(x1, y1, xi, xn) {						\
+  float x, y, xit, xnt, rv, rfac;							\
+										\
+  x = x1 - c;									\
+  y = y1 - f;									\
+										\
+  xit = a * x + b * y;								\
+  xnt = d * x + e * y;								\
+  rv = sqrtf(xit * xit + xnt * xnt);						\
+										\
+  rfac = projp1 + projp3 * rv * rv;   /* NB this is only a 1st order approx */	\
+  rv /= rfac;									\
+										\
+  rfac = projp1 + projp3 * rv * rv;   /* now 2nd order correction		\
+                                       * accurate to few 100ths of pixel */	\
+  xi /= rfac;									\
+  xn /= rfac;									\
+										\
+  (xi) = xit;									\
+  (xn) = xnt;									\
+}
+
 static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   int status = 0;
 
@@ -620,6 +642,9 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   int l1, l2, i, ilim;
 
   int noexp = 0;
+
+  char inst[FLEN_VALUE], tel[FLEN_VALUE];
+  float scatcoeff = 0.0, xi, xn;
 
   struct {
     char *filt;
@@ -786,7 +811,15 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   ffgkye(fits, "GAIN", &gain, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    gain = 1.0;  /* !!! */
+    ffgkye(fits, "HIERARCH ESO DET OUT1 GAIN", &gain, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      gain = 1.0;  /* !!! */
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: HIERARCH ESO DET OUT1 GAIN");
+      goto error;
+    }
   }
   else if(status) {
     fitsio_err(errstr, status, "ffgkye: GAIN");
@@ -862,7 +895,15 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   if(status == KEY_NO_EXIST) {
     status = 0;
     ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
-    if(status) {
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      ffgkys(fits, "HIERARCH ESO INS FILT1 NAME", filter, (char *) NULL, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffgkye: HIERARCH ESO INS FILT1 NAME");
+	goto error;
+      }
+    }
+    else if(status) {
       fitsio_err(errstr, status, "ffgkye: FILTER");
       goto error;
     }
@@ -907,6 +948,20 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
 
   skyvar = M_PI * rcore * rcore * skynoise * skynoise;
   tpi = 2.0 * M_PI;
+
+  /* ESO WFI needs a scattered light correction too */
+  ffgkys(fits, "INSTRUME", inst, (char *) NULL, &status);
+  ffgkys(fits, "TELESCOP", tel, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST)
+    status = 0;
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkys: INSTRUME/TELESCOP");
+    goto error;
+  }
+  else {
+    if(!strcasecmp(inst, "WFI") && !strcasecmp(tel, "MPI-2.2"))
+      scatcoeff = -1.5;
+  }
 
   /* Get block size for row I/O */
   ffgrsz(fits, &rblksz, &status);
@@ -959,6 +1014,12 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
 
       for(r = 0; r < rread; r++) {
 	rout = roff + r;
+
+	/* Apply scattered light correction */
+	if(scatcoeff != 0.0) {
+	  XIXNZP(xbuf[r], ybuf[r], xi, xn);
+	  fluxbuf[r] *= powf(10.0, -0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
+	}
 
 	stars[rout].ref[col].flux = fluxbuf[r] * apcor[col] * percorr;
 	stars[rout].ref[col].fluxerr = fabsf(fluxbuf[r]) * apcor[col] / gain;
@@ -1056,6 +1117,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *skyrmsbuf, *badpixbuf;
 
+  float tpa, tpd, a, b, c, d, e, f, projp1, projp3, secd, tand;
   float skylev, skynoise, satlev, exptime, rcore, gain, percorr;
   float skyvar, tpi, tmp, expfac;
   double mjd;
@@ -1064,6 +1126,9 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   long nrows, rblksz, roff, remain, rout, rread, r;
   float flux, fluxerr;
+
+  char inst[FLEN_VALUE], tel[FLEN_VALUE];
+  float scatcoeff = 0.0, xi, xn;
 
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
@@ -1124,6 +1189,61 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       goto error;
     }
   }
+
+  /* Read WCS info */
+  ffgkye(fits, "CRVAL1", &tpa, (char *) NULL, &status);
+  ffgkye(fits, "CRVAL2", &tpd, (char *) NULL, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgkye: CRVAL[12]");
+    goto error;
+  }
+
+  ffgkye(fits, "CRPIX1", &c, (char *) NULL, &status);
+  ffgkye(fits, "CRPIX2", &f, (char *) NULL, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgkye: CRPIX[12]");
+    goto error;
+  }
+
+  ffgkye(fits, "CD1_1", &a, (char *) NULL, &status);
+  ffgkye(fits, "CD1_2", &b, (char *) NULL, &status);
+  ffgkye(fits, "CD2_1", &d, (char *) NULL, &status);
+  ffgkye(fits, "CD2_2", &e, (char *) NULL, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgkye: CD[12]_[12]");
+    goto error;
+  }
+
+  ffgkye(fits, "PROJP1", &projp1, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    projp1 = 1.0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: PROJP1");
+    goto error;
+  }
+
+  ffgkye(fits, "PROJP3", &projp3, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    projp3 = 220.0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: PROJP3");
+    goto error;
+  }
+
+  tpa *= DEG_TO_RAD;
+  tpd *= DEG_TO_RAD;
+
+  a *= DEG_TO_RAD;
+  b *= DEG_TO_RAD;
+  d *= DEG_TO_RAD;
+  e *= DEG_TO_RAD;
+
+  secd = 1.0 / cosf(tpd);
+  tand = tanf(tpd);
 
   /* Get saturation level */
   ffgkye(fits, "SATURATE", &satlev, (char *) NULL, &status);
@@ -1187,7 +1307,15 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   ffgkye(fits, "GAIN", &gain, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "HIERARCH ESO DET OUT1 GAIN", &gain, (char *) NULL, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgkye: HIERARCH ESO DET OUT1 GAIN");
+      goto error;
+    }
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: GAIN");
     goto error;
   }
@@ -1247,6 +1375,20 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
+  /* ESO WFI needs a scattered light correction too */
+  ffgkys(fits, "INSTRUME", inst, (char *) NULL, &status);
+  ffgkys(fits, "TELESCOP", tel, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST)
+    status = 0;
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkys: INSTRUME/TELESCOP");
+    goto error;
+  }
+  else {
+    if(!strcasecmp(inst, "WFI") && !strcasecmp(tel, "MPI-2.2"))
+      scatcoeff = -1.5;
+  }
+
   /* Get block size for row I/O */
   ffgrsz(fits, &rblksz, &status);
   if(status) {
@@ -1299,6 +1441,12 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
 	points[r].x = xbuf[r];
 	points[r].y = ybuf[r];
+
+	/* Apply scattered light correction */
+	if(scatcoeff != 0.0) {
+	  XIXNZP(xbuf[r], ybuf[r], xi, xn);
+	  fluxbuf[r] *= powf(10.0, -0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
+	}
 
 	if(diffmode) {
 	  flux = fluxbuf[r] * mefinfo->apcor[col] * mefinfo->percorr;
