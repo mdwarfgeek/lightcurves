@@ -1018,7 +1018,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
 	/* Apply scattered light correction */
 	if(scatcoeff != 0.0) {
 	  XIXNZP(xbuf[r], ybuf[r], xi, xn);
-	  fluxbuf[r] *= powf(10.0, -0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
+	  fluxbuf[r] *= powf(10.0, 0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
 	}
 
 	stars[rout].ref[col].flux = fluxbuf[r] * apcor[col] * percorr;
@@ -1445,7 +1445,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	/* Apply scattered light correction */
 	if(scatcoeff != 0.0) {
 	  XIXNZP(xbuf[r], ybuf[r], xi, xn);
-	  fluxbuf[r] *= powf(10.0, -0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
+	  fluxbuf[r] *= powf(10.0, 0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
 	}
 
 	if(diffmode) {
