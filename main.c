@@ -1251,7 +1251,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     status = 0;
     satlev = 65535;
 
-    if(verbose)
+    if(verbose && !diffmode)
       printf("Warning: using default satlev = %.1f\n", satlev);
   }
   else if(status) {
@@ -1790,6 +1790,11 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     for(pt = 0; pt < mefinfo->nf; pt++) {
       if(lcbuf[pt].flux != 0.0 && !lcbuf[pt].satur) {
 	fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].flux;
+
+	if(abs(lcbuf[pt].flux > 20)) {
+	  printf("Warning: daft-looking flux for star %ld point %ld: %.2g\n",
+		 star+1, pt+1, lcbuf[pt].flux);
+	}
 
 	if(lcbuf[pt].fluxerr > 0.0)
 	  fluxerrbuf[soff+pt] = lcbuf[pt].fluxerr;
