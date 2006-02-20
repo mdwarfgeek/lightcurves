@@ -594,6 +594,23 @@ int main (int argc, char *argv[]) {
   (dec) = delta;								\
 }
 
+#define XYZP(ra, dec, x, y) {							\
+  float xi, xn, rfac, denom, rp;						\
+										\
+  xi = secd * sin(ra - tpa) / (tand * tan(dec) + cos(ra - tpa));		\
+  xn = (tan(dec) - tand * cos(ra - tpa)) / (tand * tan(dec) + cos(ra - tpa));	\
+										\
+  rp = sqrtf(xi * xi + xn * xn);						\
+  rfac = projp1 + projp3 * rp * rp;						\
+  xi *= rfac;									\
+  xn *= rfac;									\
+										\
+  denom = a * e - d * b;							\
+										\
+  x = (xi * e - xn * b) / denom + c;						\
+  y = (xn * a - xi * d) / denom + f;						\
+}
+
 #define XIXNZP(x1, y1, xi, xn) {						\
   float x, y, xit, xnt, rv, rfac;							\
 										\
@@ -1130,6 +1147,8 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
   float scatcoeff = 0.0, xi, xn;
 
+  float xexpect, yexpect;
+
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
   if(status) {
@@ -1439,8 +1458,12 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       for(r = 0; r < rread; r++) {
 	rout = roff + r;
 
-	points[r].x = xbuf[r];
-	points[r].y = ybuf[r];
+	/* Where should the star be? */
+	XYZP(mefinfo->stars[rout].ra, mefinfo->stars[rout].dec, xexpect, yexpect);
+
+	/* Store difference - gives offset of centroid */
+	points[r].x = xbuf[r] - xexpect;
+	points[r].y = ybuf[r] - yexpect;
 
 	/* Apply scattered light correction */
 	if(scatcoeff != 0.0) {
