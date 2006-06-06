@@ -108,6 +108,10 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   loge = log10f(expf(1.0));
   area = M_PI * rcore * rcore;
 
+  if(verbose)
+    printf("avzp=%g gain=%g sigma=%g area=%g sysbodge=%g\n",
+	   avzp, gain, sigma, area, sysbodge);
+
   for(t = 0; t < ntheo; t++) {
     mag = t * 0.01 + magmin;
 
