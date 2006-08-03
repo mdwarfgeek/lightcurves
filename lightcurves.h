@@ -4,12 +4,18 @@
 /* Number of flux measures */
 #define NFLUX  3
 
+/* Flags column in lightcurve file */
+#define FLAG_NODP  0x01  /* No data point (off chip) */
+#define FLAG_CONF  0x02  /* Aperture contains bad pixels */
+#define FLAG_SATUR 0x04  /* Saturated */
+
 struct lc_point {
   float x;
   float y;
   float flux;
   float fluxerr;
-  unsigned char satur;
+  unsigned char satur : 1;
+  unsigned char conf : 1;
 };
 
 struct lc_star {
@@ -41,6 +47,9 @@ struct lc_star {
 struct lc_frame {
   /* Frame MJD */
   double mjd;
+
+  /* Seeing */
+  float seeing;
 
   /* Frame offset and RMS after correction */
   float offset;
