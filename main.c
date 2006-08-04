@@ -490,6 +490,13 @@ int main (int argc, char *argv[]) {
       if(write_lc(inf, outf, &buf, &(meflist[mef]), errstr))
 	fatal(1, "write_lc: %s", errstr);
     }
+
+    /* Flush */
+    ffflus(outf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffflus");
+      fatal(1, "%s", errstr);
+    }
   }
 
 #ifdef DEBUG
