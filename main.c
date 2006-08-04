@@ -27,6 +27,10 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 			   char **fnlist, char *errstr);
 
+static float spearman (float *tmplist, long n);
+static void rank (float *list, long ioff, long n);
+static void sortrank (float *ia, long ioff, long n);
+
 static char *sstrip (char *str);
 
 /* Flux keywords and aperture sizes in terms of rcore */
@@ -1590,19 +1594,19 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   char *ttype[] = { "x", "y", "medflux", "rms", "chisq", "nchisq",
 		    "class", "bflag", "cflag", "sflag", "pointer",
-		    "apradius",
+		    "apradius", "blend",
 		    "hjd", "flux", "fluxerr", "xlc", "ylc", "flags", "ra", "dec" };
   char *tform[] = { "1E", "1E", "1E", "1E", "1E", "1J",
 		    "1I", "1I", "1J", "1J", "1J",
-		    "1E",
+		    "1E", "1E",
 		    "", "", "", "", "", "", "1E", "1E" };
   char *tunit[] = { "pixels", "pixels", "mag", "mag", "", "",
 		    "", "", "", "", "",
-		    "pixels",
+		    "pixels", "",
 		    "days", "mag", "mag", "pixels", "pixels", "", "radians", "radians" };
   char *tdisp[] = { "F8.2", "F8.2", "F7.4", "F7.4", "F10.1", "I4",
 		    "I2", "I2", "I4", "I8", "I8",
-		    "F4.2",
+		    "F4.2", "F5.3",
 		    "F14.6", "F7.4", "F7.4", "F8.2", "F8.2", "I3", "F9.6", "F9.6" };
   char kbuf[FLEN_KEYWORD], tfbuf[FLEN_VALUE], tdbuf[FLEN_VALUE], tbbuf[FLEN_VALUE];
   char cbuf[FLEN_COMMENT];
@@ -1614,11 +1618,15 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   double *epos = (double *) NULL;
 
   float *xbuf = (float *) NULL, *ybuf, *medbuf, *rmsbuf, *chibuf, *apbuf, *rabuf, *decbuf;
+  float *bibuf;
   long *nchibuf = (long *) NULL, *ptrbuf, *cfbuf, *sfbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
   float *fluxbuf = (float *) NULL, *fluxerrbuf, *xlcbuf, *ylcbuf;
   double *hjdbuf = (double *) NULL;
   unsigned char *flagbuf = (unsigned char *) NULL;
+
+  float *corrbuf = (float *) NULL;
+  long ncorr = 0;
 
   int ikey, nkeys, kclass;
   char card[FLEN_CARD];
@@ -1632,12 +1640,12 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   snprintf(tfbuf, sizeof(tfbuf), "%ldE", mefinfo->nf);
   snprintf(tbbuf, sizeof(tbbuf), "%ldB", mefinfo->nf);
 
-  tform[12] = tdbuf;
-  tform[13] = tfbuf;
+  tform[13] = tdbuf;
   tform[14] = tfbuf;
   tform[15] = tfbuf;
   tform[16] = tfbuf;
-  tform[17] = tbbuf;
+  tform[17] = tfbuf;
+  tform[18] = tbbuf;
 
   /* Create table */
   ncols = sizeof(ttype) / sizeof(ttype[0]);
@@ -1778,8 +1786,15 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     goto error;
   }
 
+  /* Allocate temporary buffers for calculating correlation */
+  corrbuf = (float *) malloc(4 * mefinfo->nf * sizeof(float));
+  if(!corrbuf) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+
   /* Allocate output buffers */
-  xbuf = (float *) malloc(8 * rblksz * sizeof(float));
+  xbuf = (float *) malloc(9 * rblksz * sizeof(float));
   nchibuf = (long *) malloc(4 * rblksz * sizeof(long));
   clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
   fluxbuf = (float *) malloc(4 * rblksz * mefinfo->nf * sizeof(float));
@@ -1797,6 +1812,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   rabuf = xbuf + 5 * rblksz;
   decbuf = xbuf + 6 * rblksz;
   apbuf = xbuf + 7 * rblksz;
+  bibuf = xbuf + 8 * rblksz;
 
   bfbuf = clsbuf + rblksz;
 
@@ -1839,11 +1855,16 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     soff = r * mefinfo->nf;
 
     satflag = 0;
+    ncorr = 0;
     for(pt = 0; pt < mefinfo->nf; pt++) {
       flags = 0;
 
       if(lcbuf[pt].flux != 0.0) {
 	fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].flux;
+
+	corrbuf[ncorr*4] = mefinfo->frames[pt].seeing;
+	corrbuf[ncorr*4+1] = fluxbuf[soff+pt];
+	ncorr++;
 
 	if(abs(lcbuf[pt].flux > 20)) {
 	  printf("Warning: daft-looking flux for star %ld point %ld: %.2g\n",
@@ -1881,6 +1902,12 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 				mefinfo->stars[star].dec);
     }
 
+    /* Compute blend index */
+    if(ncorr > 1)
+      bibuf[r] = fabsf(spearman(corrbuf, ncorr));
+    else
+      bibuf[r] = -999.0;
+
     sfbuf[r] = satflag;
 
     r++;
@@ -1899,14 +1926,15 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       ffpclj(fits, 10, frow, 1, r, sfbuf, &status);
       ffpclj(fits, 11, frow, 1, r, ptrbuf, &status);
       ffpcle(fits, 12, frow, 1, r, apbuf, &status);
-      ffpcnd(fits, 13, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
-      ffpcne(fits, 14, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
-      ffpcne(fits, 15, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
-      ffpcne(fits, 16, frow, 1, r * mefinfo->nf, xlcbuf, -999.0, &status);
-      ffpcne(fits, 17, frow, 1, r * mefinfo->nf, ylcbuf, -999.0, &status);
-      ffpclb(fits, 18, frow, 1, r * mefinfo->nf, flagbuf, &status);
-      ffpcle(fits, 19, frow, 1, r, rabuf, &status);
-      ffpcle(fits, 20, frow, 1, r, decbuf, &status);
+      ffpcne(fits, 13, frow, 1, r, bibuf, -999.0, &status);
+      ffpcnd(fits, 14, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
+      ffpcne(fits, 15, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
+      ffpcne(fits, 16, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
+      ffpcne(fits, 17, frow, 1, r * mefinfo->nf, xlcbuf, -999.0, &status);
+      ffpcne(fits, 18, frow, 1, r * mefinfo->nf, ylcbuf, -999.0, &status);
+      ffpclb(fits, 19, frow, 1, r * mefinfo->nf, flagbuf, &status);
+      ffpcle(fits, 20, frow, 1, r, rabuf, &status);
+      ffpcle(fits, 21, frow, 1, r, decbuf, &status);
       if(status) {
 	fitsio_err(errstr, status, "ffpcl");
 	goto error;
@@ -1932,14 +1960,15 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     ffpclj(fits, 10, frow, 1, r, sfbuf, &status);
     ffpclj(fits, 11, frow, 1, r, ptrbuf, &status);
     ffpcle(fits, 12, frow, 1, r, apbuf, &status);
-    ffpcnd(fits, 13, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
-    ffpcne(fits, 14, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
-    ffpcne(fits, 15, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
-    ffpcne(fits, 16, frow, 1, r * mefinfo->nf, xlcbuf, -999.0, &status);
-    ffpcne(fits, 17, frow, 1, r * mefinfo->nf, ylcbuf, -999.0, &status);
-    ffpclb(fits, 18, frow, 1, r * mefinfo->nf, flagbuf, &status);
-    ffpcle(fits, 19, frow, 1, r, rabuf, &status);
-    ffpcle(fits, 20, frow, 1, r, decbuf, &status);
+    ffpcne(fits, 13, frow, 1, r, bibuf, -999.0, &status);
+    ffpcnd(fits, 14, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
+    ffpcne(fits, 15, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
+    ffpcne(fits, 16, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
+    ffpcne(fits, 17, frow, 1, r * mefinfo->nf, xlcbuf, -999.0, &status);
+    ffpcne(fits, 18, frow, 1, r * mefinfo->nf, ylcbuf, -999.0, &status);
+    ffpclb(fits, 19, frow, 1, r * mefinfo->nf, flagbuf, &status);
+    ffpcle(fits, 20, frow, 1, r, rabuf, &status);
+    ffpcle(fits, 21, frow, 1, r, decbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpcl");
       goto error;
@@ -1948,6 +1977,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   free((void *) lcbuf);
   lcbuf = (struct lc_point *) NULL;
+  free((void *) corrbuf);
+  corrbuf = (float *) NULL;
   free((void *) epos);
   epos = (double *) NULL;
   free((void *) xbuf);
@@ -1968,6 +1999,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
  error:
   if(lcbuf)
     free((void *) lcbuf);
+  if(corrbuf)
+    free((void *) corrbuf);
   if(epos)
     free((void *) epos);
   if(xbuf)
@@ -1984,6 +2017,103 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     free((void *) flagbuf);
 
   return(1);
+}
+
+static float spearman (float *tmplist, long n) {
+  long i;
+  float rbar1 = 0.0, rbar2 = 0.0, s12 = 0.0, s11 = 0.0, s22 = 0.0, d1, d2;
+
+  /* Rank lists */
+  rank(tmplist, 0, n);
+  rank(tmplist, 1, n);
+
+  /* Compute means */
+  for(i = 0; i < n; i++) {
+    rbar1 += tmplist[i*4+2];
+    rbar2 += tmplist[i*4+3];
+  }
+  
+  rbar1 /= n;
+  rbar2 /= n;
+  
+  /* Compute r_s */
+  for(i = 0; i < n; i++) {
+    d1 = tmplist[i*4+2] - rbar1;
+    d2 = tmplist[i*4+3] - rbar2;
+    
+    s12 += d1*d2;
+    s11 += d1*d1;
+    s22 += d2*d2;
+  }
+  
+  return(s12 / sqrtf(s11*s22));
+}
+
+static void rank (float *list, long ioff, long n) {
+  long j, jt, ji;
+  float rank;
+
+  /* Sort on the right column */
+  sortrank(list, ioff, n);
+
+  j = 1;
+  while(j < n) {
+    if(list[j*4+ioff] != list[(j-1)*4+ioff]) {
+      list[(j-1)*4+ioff+2] = j;
+      j++;
+    }
+    else {
+      jt = j+1;
+      while(jt <= n && list[(jt-1)*4+ioff] == list[(j-1)*4+ioff]) {
+	jt++;
+      }
+
+      rank = 0.5*(j + jt - 1);
+      for(ji = j; ji < jt; ji++)
+	list[(ji-1)*4+ioff+2] = rank;
+
+      j = jt;
+    }
+  }
+
+  if(j == n) {
+    list[(n-1)*4+ioff+2] = n;
+  }
+}
+
+static void sortrank (float *ia, long ioff, long n) {
+  long i, j, ii, jj, ifin;
+  float it[4];
+
+  jj = 4;
+  while (jj < n) jj = 2 * jj;
+  jj = MIN(n,(3 * jj)/4 - 1);
+  while (jj > 1) {
+    jj = jj/2;
+    ifin = n - jj;
+    for (ii = 0; ii < ifin; ii++) {
+      i = ii;
+      j = i + jj;
+      if (ia[i*4+ioff] <= ia[j*4+ioff]) continue;
+      it[0] = ia[j*4];
+      it[1] = ia[j*4+1];
+      it[2] = ia[j*4+2];
+      it[3] = ia[j*4+3];
+      do {
+	ia[j*4] = ia[i*4];
+	ia[j*4+1] = ia[i*4+1];
+	ia[j*4+2] = ia[i*4+2];
+	ia[j*4+3] = ia[i*4+3];
+	j = i;
+	i = i - jj;
+	if (i < 0) break;
+      } while (ia[i*4+ioff] > it[ioff]);
+      ia[j*4] = it[0];
+      ia[j*4+1] = it[1];
+      ia[j*4+2] = it[2];
+      ia[j*4+3] = it[3];
+    }
+  }
 }
 
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
