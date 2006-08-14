@@ -17,6 +17,9 @@
 #include "floatmath.h"
 #include "util.h"
 
+extern int polynm (float *xbuf, float *ybuf, float *wtbuf, long npt,
+		   float *coeff, long ncoeff, float *chisq_r, char *errstr);
+
 static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr);
 static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 		     struct buffer_info *buf,
@@ -27,9 +30,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 			   char **fnlist, char *errstr);
 
-static float spearman (float *tmplist, long n);
-static void rank (float *list, long ioff, long n);
-static void sortrank (float *ia, long ioff, long n);
+static float blend (float *xbuf, float *ybuf, long n);
 
 static char *sstrip (char *str);
 
@@ -1632,7 +1633,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   double *hjdbuf = (double *) NULL;
   unsigned char *flagbuf = (unsigned char *) NULL;
 
-  float *corrbuf = (float *) NULL;
+  float *corxbuf = (float *) NULL, *corybuf;
   long ncorr = 0;
 
   int ikey, nkeys, kclass;
@@ -1794,11 +1795,13 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   }
 
   /* Allocate temporary buffers for calculating correlation */
-  corrbuf = (float *) malloc(4 * mefinfo->nf * sizeof(float));
-  if(!corrbuf) {
+  corxbuf = (float *) malloc(2 * mefinfo->nf * sizeof(float));
+  if(!corxbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
+
+  corybuf = corxbuf + mefinfo->nf;
 
   /* Allocate output buffers */
   xbuf = (float *) malloc(9 * rblksz * sizeof(float));
@@ -1869,8 +1872,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       if(lcbuf[pt].flux != 0.0) {
 	fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].flux;
 
-	corrbuf[ncorr*4] = mefinfo->frames[pt].seeing;
-	corrbuf[ncorr*4+1] = fluxbuf[soff+pt];
+	corxbuf[ncorr] = mefinfo->frames[pt].seeing;
+	corybuf[ncorr] = fluxbuf[soff+pt];
 	ncorr++;
 
 	if(abs(lcbuf[pt].flux > 20)) {
@@ -1910,8 +1913,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     }
 
     /* Compute blend index */
-    if(ncorr > 1)
-      bibuf[r] = fabsf(spearman(corrbuf, ncorr));
+    if(ncorr > 5)
+      bibuf[r] = blend(corxbuf, corybuf, ncorr);
     else
       bibuf[r] = -999.0;
 
@@ -1984,8 +1987,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   free((void *) lcbuf);
   lcbuf = (struct lc_point *) NULL;
-  free((void *) corrbuf);
-  corrbuf = (float *) NULL;
+  free((void *) corxbuf);
+  corxbuf = (float *) NULL;
   free((void *) epos);
   epos = (double *) NULL;
   free((void *) xbuf);
@@ -2006,8 +2009,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
  error:
   if(lcbuf)
     free((void *) lcbuf);
-  if(corrbuf)
-    free((void *) corrbuf);
+  if(corxbuf)
+    free((void *) corxbuf);
   if(epos)
     free((void *) epos);
   if(xbuf)
@@ -2026,101 +2029,45 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   return(1);
 }
 
-static float spearman (float *tmplist, long n) {
+static float blend (float *xbuf, float *ybuf, long n) {
+  float sy, chibefore, chifit;
   long i;
-  float rbar1 = 0.0, rbar2 = 0.0, s12 = 0.0, s11 = 0.0, s22 = 0.0, d1, d2;
 
-  /* Rank lists */
-  rank(tmplist, 0, n);
-  rank(tmplist, 1, n);
+  char errstr[ERRSTR_LEN];
+  float ret = -999.0;
 
-  /* Compute means */
+  /* Mean-correct and calculate chisq before */
+  sy = 0.0;
+
+  for(i = 0; i < n; i++)
+    sy += ybuf[i];
+
+  sy /= n;
+
+  chibefore = 0.0;
   for(i = 0; i < n; i++) {
-    rbar1 += tmplist[i*4+2];
-    rbar2 += tmplist[i*4+3];
-  }
-  
-  rbar1 /= n;
-  rbar2 /= n;
-  
-  /* Compute r_s */
-  for(i = 0; i < n; i++) {
-    d1 = tmplist[i*4+2] - rbar1;
-    d2 = tmplist[i*4+3] - rbar2;
-    
-    s12 += d1*d2;
-    s11 += d1*d1;
-    s22 += d2*d2;
-  }
-  
-  return(s12 / sqrtf(s11*s22));
-}
+    ybuf[i] -= sy;
 
-static void rank (float *list, long ioff, long n) {
-  long j, jt, ji;
-  float rank;
-
-  /* Sort on the right column */
-  sortrank(list, ioff, n);
-
-  j = 1;
-  while(j < n) {
-    if(list[j*4+ioff] != list[(j-1)*4+ioff]) {
-      list[(j-1)*4+ioff+2] = j;
-      j++;
-    }
-    else {
-      jt = j+1;
-      while(jt <= n && list[(jt-1)*4+ioff] == list[(j-1)*4+ioff]) {
-	jt++;
-      }
-
-      rank = 0.5*(j + jt - 1);
-      for(ji = j; ji < jt; ji++)
-	list[(ji-1)*4+ioff+2] = rank;
-
-      j = jt;
-    }
+    chibefore += ybuf[i]*ybuf[i];
   }
 
-  if(j == n) {
-    list[(n-1)*4+ioff+2] = n;
+  /* Fit a quartic */
+  if(polynm(xbuf, ybuf, (float *) NULL, n, (float *) NULL, 5, &chifit, errstr))
+    warning("polynm: %s", errstr);
+  else {
+    if(chibefore > 0.0)
+      ret = (chibefore - chifit) / chibefore;
+    else
+      ret = 0.0;
   }
-}
 
-static void sortrank (float *ia, long ioff, long n) {
-  long i, j, ii, jj, ifin;
-  float it[4];
+  /* Clip to correct range */
+  if(ret < 0.0)
+    ret = 0.0;
+  if(ret > 1.0)  /* impossible, but hey */
+    ret = 1.0;
 
-  jj = 4;
-  while (jj < n) jj = 2 * jj;
-  jj = MIN(n,(3 * jj)/4 - 1);
-  while (jj > 1) {
-    jj = jj/2;
-    ifin = n - jj;
-    for (ii = 0; ii < ifin; ii++) {
-      i = ii;
-      j = i + jj;
-      if (ia[i*4+ioff] <= ia[j*4+ioff]) continue;
-      it[0] = ia[j*4];
-      it[1] = ia[j*4+1];
-      it[2] = ia[j*4+2];
-      it[3] = ia[j*4+3];
-      do {
-	ia[j*4] = ia[i*4];
-	ia[j*4+1] = ia[i*4+1];
-	ia[j*4+2] = ia[i*4+2];
-	ia[j*4+3] = ia[i*4+3];
-	j = i;
-	i = i - jj;
-	if (i < 0) break;
-      } while (ia[i*4+ioff] > it[ioff]);
-      ia[j*4] = it[0];
-      ia[j*4+1] = it[1];
-      ia[j*4+2] = it[2];
-      ia[j*4+3] = it[3];
-    }
-  }
+  return(ret);
 }
 
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
