@@ -414,7 +414,7 @@ int main (int argc, char *argv[]) {
       printf("\n");
 
     /* Sort out averages */
-    meflist[mef].avsigma /= nf;
+    meflist[mef].avsigma = sqrtf(meflist[mef].avsigma / nf);
     meflist[mef].avapcor /= nf;
 
     /* Fix the cflag column - sometimes in difference imaging there
@@ -1561,10 +1561,10 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   points = (struct lc_point *) NULL;
 
   /* Accumulate average sigma */
-  tmp = skynoise * sqrtf(expfac);
+  tmp = skynoise*skynoise * expfac;
 
   if(diffmode)
-    mefinfo->avsigma += sqrtf(tmp * tmp + mefinfo->refsigma * mefinfo->refsigma);
+    mefinfo->avsigma += tmp + mefinfo->refsigma * mefinfo->refsigma;
   else
     mefinfo->avsigma += tmp;
 
