@@ -89,6 +89,9 @@ struct lc_mef {
   /* Average of aperture correction for theoretical curve */
   float avapcor;
 
+  /* Average of extinction for theoretical curve */
+  float avextinc;
+
   /* Reference MJD */
   double mjdref;
 

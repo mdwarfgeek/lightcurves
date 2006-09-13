@@ -21,8 +21,8 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   long star, pt;
   int mef;
 
-  float *medbuf1 = (float *) NULL, *medbuf2, *medbuf3, *medbuf4, *medbuf5;
-  float gain, rcore, sigma, avzp, avapcor;
+  float *medbuf1 = (float *) NULL, *medbuf2, *medbuf3, *medbuf4, *medbuf5, *medbuf6;
+  float gain, rcore, sigma, avzp, avapcor, avextinc;
 
   float *theox = (float *) NULL, *theop, *theos, *theoy, *theoys;
   long t, ntheo;
@@ -39,7 +39,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   cpgsch(1.4);
 
   /* Allocate workspace for median parameters */
-  medbuf1 = (float *) malloc(5 * nmefs * sizeof(float));
+  medbuf1 = (float *) malloc(6 * nmefs * sizeof(float));
   if(!medbuf1) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -49,6 +49,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   medbuf3 = medbuf1 + 2 * nmefs;
   medbuf4 = medbuf1 + 3 * nmefs;
   medbuf5 = medbuf1 + 4 * nmefs;
+  medbuf6 = medbuf1 + 5 * nmefs;
 
   /* RMS plot */
   magmin = medsat;
@@ -77,6 +78,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     medbuf3[mef] = meflist[mef].avsigma;
     medbuf4[mef] = meflist[mef].zp;
     medbuf5[mef] = meflist[mef].avapcor;
+    medbuf6[mef] = meflist[mef].avextinc;
   }
 
   medsig(medbuf1, nmefs, &gain, (float *) NULL);
@@ -84,12 +86,13 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   medsig(medbuf3, nmefs, &sigma, (float *) NULL);
   medsig(medbuf4, nmefs, &avzp, (float *) NULL);
   medsig(medbuf5, nmefs, &avapcor, (float *) NULL);
+  medsig(medbuf6, nmefs, &avextinc, (float *) NULL);
 
   free((void *) medbuf1);
   medbuf1 = (float *) NULL;
 
-  /* Apply average aperture correction to ZP */
-  avzp -= 2.5*log10(avapcor);
+  /* Apply average aperture and extinction correction to ZP */
+  avzp -= 2.5*log10(avapcor*avextinc);
 
   /* Generate theoretical curve */
   ntheo = ceil((magmax - magmin) / THEOSTEP);

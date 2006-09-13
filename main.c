@@ -483,6 +483,14 @@ int main (int argc, char *argv[]) {
     if(lightcurves(&buf, &(meflist[mef]), noapsel, pcafit, errstr))
       fatal(1, "%s", errstr);
 
+    /* Calculate average extinction */
+    meflist[mef].avextinc = 0.0;
+
+    for(f = 0; f < nf; f++)
+      meflist[mef].avextinc += powf(10.0, -0.4 * meflist[mef].frames[f].extinc);
+
+    meflist[mef].avextinc /= nf;
+
     /* Write out lightcurves for this MEF if requested */
     if(dooutput) {
       if(verbose)
