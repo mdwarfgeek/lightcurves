@@ -493,10 +493,12 @@ int main (int argc, char *argv[]) {
     }
 
     /* Flush */
-    ffflus(outf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffflus");
-      fatal(1, "%s", errstr);
+    if(dooutput) {
+      ffflus(outf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffflus");
+	fatal(1, "%s", errstr);
+      }
     }
   }
 
