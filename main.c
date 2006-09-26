@@ -1708,6 +1708,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	 "Flux limit of reference catalogue", &status);
   ffpkyf(fits, "ZP", mefinfo->zp, 4,
 	 "Zeropoint for magnitudes", &status);
+  ffpkyf(fits, "UMLIM", mefinfo->syslim, 2,
+	 "Upper mag limit for fit", &status);
   if(status) {
     fitsio_err(errstr, status, "ffkpy: frame info");
     goto error;
