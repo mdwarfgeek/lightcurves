@@ -156,16 +156,23 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     /* Calculate median flux */
     opt = 0;
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0) {
+      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerr != 0.0) {
 	medbuf[opt] = ptbuf[pt].flux;
 	opt++;
       }
     }
     
-    medsig(medbuf, opt, &medflux, &rmsflux);
-    mefinfo->stars[star].medflux[0] = medflux;
-    mefinfo->stars[star].sigflux[0] = rmsflux;
-    mefinfo->stars[star].rms = rmsflux;
+    if(opt > 1) {
+      medsig(medbuf, opt, &medflux, &rmsflux);
+      mefinfo->stars[star].medflux[0] = medflux;
+      mefinfo->stars[star].sigflux[0] = rmsflux;
+      mefinfo->stars[star].rms = rmsflux;
+    }
+    else {
+      mefinfo->stars[star].medflux[0] = 0.0;
+      mefinfo->stars[star].sigflux[0] = 0.0;
+      mefinfo->stars[star].rms = 0.0;
+    }
   }
 
   /* Compute chi-squared */

@@ -1528,17 +1528,18 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	    points[r].satur = 0;
 	}
 
-	points[r].flux = 2.5 * log10f(MAX(1.0, flux));
-
 	if(flux > 0.0) {
+	  points[r].flux = 2.5 * log10f(MAX(1.0, flux));
 	  points[r].fluxerr = 2.5 * log10f(1.0 + sqrtf(fluxerr) / flux);
 
 	  if(sysbodge > 0.0)
 	    points[r].fluxerr = sqrtf(points[r].fluxerr*points[r].fluxerr +
 				      sysbodge*sysbodge);
 	}
-	else
+	else {
+	  points[r].flux = 0.0;
 	  points[r].fluxerr = 0.0;
+	}
 
 	/* Apply intrapixel correction if requested */
 	if(dointra)
