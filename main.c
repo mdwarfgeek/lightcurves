@@ -662,13 +662,13 @@ int main (int argc, char *argv[]) {
 static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   int status = 0;
 
-  char *colnames[5] = { "X_coordinate", "Y_coordinate", "Peak_height",
-			"Classification", "Areal_7_profile" };
-  int gcols[5+NFLUX], col, collim;
+  char *colnames[6] = { "X_coordinate", "Y_coordinate", "Peak_height",
+			"Classification", "Areal_7_profile", "Skylev" };
+  int gcols[6+NFLUX], col, collim;
 
   struct lc_star *stars = (struct lc_star *) NULL;
 
-  float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *clsbuf, *a7buf;
+  float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *clsbuf, *a7buf, *locskybuf;
   float *sattmp = (float *) NULL;
   long nsattmp;
 
@@ -1014,7 +1014,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   }
   
   /* Allocate column buffers */
-  xbuf = (float *) malloc(6 * rblksz * sizeof(float));
+  xbuf = (float *) malloc(7 * rblksz * sizeof(float));
   if(!xbuf) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -1025,6 +1025,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   pkhtbuf = xbuf + 3 * rblksz;
   clsbuf = xbuf + 4 * rblksz;
   a7buf = xbuf + 5 * rblksz;
+  locskybuf = xbuf + 6 * rblksz;
   
   /* Allocate memory for catalogue stars */
   stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
@@ -1050,9 +1051,10 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
     ffgcve(fits, gcols[2], roff + 1L, 1L, rread, 0.0, pkhtbuf, (int *) NULL, &status);
     ffgcve(fits, gcols[3], roff + 1L, 1L, rread, 0.0, clsbuf, (int *) NULL, &status);
     ffgcve(fits, gcols[4], roff + 1L, 1L, rread, 0.0, a7buf, (int *) NULL, &status);
+    ffgcve(fits, gcols[5], roff + 1L, 1L, rread, 0.0, locskybuf, (int *) NULL, &status);
 
     for(col = 0; col < NFLUX; col++) {
-      ffgcve(fits, gcols[5+col], roff + 1L, 1L, rread, 0.0, fluxbuf,
+      ffgcve(fits, gcols[6+col], roff + 1L, 1L, rread, 0.0, fluxbuf,
 	     (int *) NULL, &status);
 
       for(r = 0; r < rread; r++) {
@@ -1068,7 +1070,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
 	stars[rout].ref[col].fluxerr = fabsf(fluxbuf[r]) * apcor[col] / gain;
 	/* +skyvar * flux_apers[col] * flux_apers[col] ? */
 
-	if(pkhtbuf[r] > satlev)
+	if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev)
 	  stars[rout].ref[col].satur = 1;
 	else
 	  stars[rout].ref[col].satur = 0;
@@ -1093,7 +1095,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
       stars[rout].bflag = (a7buf[r] < 0.0 ? 1 : 0);
       stars[rout].cflag = 0;
 
-      if(pkhtbuf[r] > satlev) {
+      if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev) {
 	sattmp[nsattmp] = stars[rout].ref[0].flux;
 	nsattmp++;
       }
@@ -1152,13 +1154,14 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   fitsfile *fits;
   int status = 0;
 
-  char *colnames[4] = { "X_coordinate", "Y_coordinate", "Peak_height", "Skyrms" };
+  char *colnames[5] = { "X_coordinate", "Y_coordinate", "Peak_height", "Skylev", "Skyrms" };
   char *optcolnames[1] = { "Bad_pixels" };
-  int gcols[5+NFLUX], col, collim, optcollim;
+  int gcols[6+NFLUX], col, collim, optcollim;
 
   struct lc_point *points = (struct lc_point *) NULL;
 
-  float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *skyrmsbuf, *badpixbuf;
+  float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf;
+  float *locskybuf, *skyrmsbuf, *badpixbuf;
 
   float tpa, tpd, a, b, c, d, e, f, projp1, projp3, secd, tand;
   float seeing, skylev, skynoise, satlev, exptime, rcore, gain, percorr;
@@ -1448,7 +1451,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
   
   /* Allocate column buffers */
-  xbuf = (float *) malloc(6 * rblksz * sizeof(float));
+  xbuf = (float *) malloc(7 * rblksz * sizeof(float));
   if(!xbuf) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -1457,8 +1460,9 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   ybuf = xbuf + rblksz;
   fluxbuf = xbuf + 2 * rblksz;
   pkhtbuf = xbuf + 3 * rblksz;
-  skyrmsbuf = xbuf + 4 * rblksz;
-  badpixbuf = xbuf + 5 * rblksz;
+  locskybuf = xbuf + 4 * rblksz;
+  skyrmsbuf = xbuf + 5 * rblksz;
+  badpixbuf = xbuf + 6 * rblksz;
 
   /* Allocate memory for lightcurve points */
   points = (struct lc_point *) malloc(rblksz * sizeof(struct lc_point));
@@ -1478,13 +1482,14 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     ffgcve(fits, gcols[0], roff + 1L, 1L, rread, 0.0, xbuf, (int *) NULL, &status);
     ffgcve(fits, gcols[1], roff + 1L, 1L, rread, 0.0, ybuf, (int *) NULL, &status);
     ffgcve(fits, gcols[2], roff + 1L, 1L, rread, 0.0, pkhtbuf, (int *) NULL, &status);
-    ffgcve(fits, gcols[3], roff + 1L, 1L, rread, 0.0, skyrmsbuf, (int *) NULL, &status);
+    ffgcve(fits, gcols[3], roff + 1L, 1L, rread, 0.0, locskybuf, (int *) NULL, &status);
+    ffgcve(fits, gcols[4], roff + 1L, 1L, rread, 0.0, skyrmsbuf, (int *) NULL, &status);
 
-    if(gcols[4])
-      ffgcve(fits, gcols[4], roff + 1L, 1L, rread, 0.0, badpixbuf, (int *) NULL, &status);
+    if(gcols[5])
+      ffgcve(fits, gcols[5], roff + 1L, 1L, rread, 0.0, badpixbuf, (int *) NULL, &status);
 
     for(col = 0; col < NFLUX; col++) {
-      ffgcve(fits, gcols[5+col], roff + 1L, 1L, rread, 0.0, fluxbuf,
+      ffgcve(fits, gcols[6+col], roff + 1L, 1L, rread, 0.0, fluxbuf,
 	     (int *) NULL, &status);
 
       for(r = 0; r < rread; r++) {
@@ -1522,7 +1527,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  fluxerr = fabsf(fluxbuf[r]) * apcor[col] / gain +
 	    (skyvar + skyrmsbuf[r]*skyrmsbuf[r]) * flux_apers[col] * flux_apers[col];
 
-	  if(pkhtbuf[r] > satlev || mefinfo->stars[rout].ref[col].satur)
+	  if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev || mefinfo->stars[rout].ref[col].satur)
 	    points[r].satur = 1;
 	  else
 	    points[r].satur = 0;
