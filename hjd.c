@@ -15,7 +15,7 @@ void getearth (double mjd, double ep[3]) {
 
   /* Convert MJD to TT */
   dtt = slaDtt(mjd);
-  tt = mjd + dtt;
+  tt = mjd + dtt / 86400.0;
 
   /* Compute Earth position and velocity using TT as an approximation
    * to the correct TDB.
