@@ -956,6 +956,10 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
     goto error;
   }
 
+  /* Copy */
+  strncpy(mefinfo->filter, filter, sizeof(mefinfo->filter)-1);
+  mefinfo->filter[sizeof(mefinfo->filter)-1] = '\0';
+
   /* Append a space */
   l1 = strlen(filter);
   if(l1+1 < sizeof(filter)) {

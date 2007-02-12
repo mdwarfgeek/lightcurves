@@ -83,6 +83,9 @@ struct lc_mef {
   /* Saturation clip level used for systematics fit */
   float satclip[NFLUX];
 
+  /* Filter */
+  char filter[64];
+
   /* Average of sigma for theoretical curve */
   float avsigma;
 

@@ -29,7 +29,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 
   float tmpx[2], tmpy[2];
 
-  char title[1024];
+  char title[1024], xlab[1024];
   float ptmin, ptmax, tpt, ty;
 
   /* Open PGPLOT */
@@ -55,8 +55,10 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   magmin = medsat;
   magmax = medlim;
 
+  snprintf(xlab, sizeof(xlab), "%s magnitude", meflist[0].filter);
+
   cpgenv(magmin, magmax, -0.1, 2.9, 0, 20);
-  cpglab("Magnitude", "RMS (millimag)", "");
+  cpglab(xlab, "RMS (millimag)", "");
 
   for(mef = 0; mef < nmefs; mef++) {
     for(star = 0; star < meflist[mef].nstars; star++) {
@@ -171,7 +173,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 
   /* Chi squared plot */
   cpgenv(magmin, magmax, -1.0, 4.0, 0, 20);
-  cpglab("Magnitude", "\\gx\\u2\\d\\dred\\u", "");
+  cpglab(xlab, "\\gx\\u2\\d\\dred\\u", "");
 
   for(mef = 0; mef < nmefs; mef++)
     for(star = 0; star < meflist[mef].nstars; star++) {
