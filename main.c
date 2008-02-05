@@ -36,15 +36,21 @@ static float blend (float *xbuf, float *ybuf, long n);
 static char *sstrip (char *str);
 
 /* Flux keywords and aperture sizes in terms of rcore */
-static char *flux_keys[NFLUX] = { "Core_flux",
-				  "Core2_flux",
-				  "Core3_flux" };
+static char *flux_keys_32[NFLUX] = { "Core_flux",
+				     "Core2_flux",
+				     "Core3_flux" };
+static char *flux_keys_80[NFLUX] = { "Aper_flux_3",
+				     "Aper_flux_4",
+				     "Aper_flux_5" };
 float flux_apers[NFLUX] = { 1.0,
 			    M_SQRT2,
 			    2.0 };
-static char *apcor_keys[NFLUX] = { "APCOR",
-				   "APCOR2",
-				   "APCOR3" };
+static char *apcor_keys_32[NFLUX] = { "APCOR",
+				      "APCOR2",
+				      "APCOR3" };
+static char *apcor_keys_80[NFLUX] = { "APCOR3",
+				      "APCOR4",
+				      "APCOR5" };
 
 /* Getopt stuff */
 extern char *optarg;
@@ -690,6 +696,8 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
   float scatcoeff = 0.0, xi, xn;
 
+  int cats_are_80 = 0;
+
   struct {
     char *filt;
     float extinct;
@@ -716,6 +724,17 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
     goto error;
   }
   
+  /* Simple test for the new 80-column format */
+  ffgcno(fits, CASEINSEN, flux_keys_80[0], &cats_are_80, &status);
+  if(status == COL_NOT_FOUND || status == COL_NOT_UNIQUE)
+    status = 0;
+  else if(status) {
+    fitsio_err(errstr, status, "ffgcno: %s", flux_keys_80[0]);
+    goto error;
+  }
+  else
+    cats_are_80 = 1;
+
   /* Get column numbers */
   collim = sizeof(colnames) / sizeof(colnames[0]);
   for(col = 0; col < collim; col++) {
@@ -729,11 +748,13 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   }
 
   for(col = 0; col < NFLUX; col++) {
-    ffgcno(fits, CASEINSEN, flux_keys[col], &(gcols[collim+col]), &status);
+    ffgcno(fits, CASEINSEN, cats_are_80 ? flux_keys_80[col] : flux_keys_32[col],
+	   &(gcols[collim+col]), &status);
     if(status == COL_NOT_UNIQUE)
       status = 0;  /* ignore */
     else if(status) {
-      fitsio_err(errstr, status, "ffgcno: %s", flux_keys[col]);
+      fitsio_err(errstr, status, "ffgcno: %s",
+		 cats_are_80 ? flux_keys_80[col] : flux_keys_32[col]);
       goto error;
     }
   }
@@ -888,13 +909,15 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
   }
 
   for(col = 0; col < NFLUX; col++) {
-    ffgkye(fits, apcor_keys[col], &(apcor[col]), (char *) NULL, &status);
+    ffgkye(fits, cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col],
+	   &(apcor[col]), (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       apcor[col] = 1.0;
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: %s", apcor_keys[col]);
+      fitsio_err(errstr, status, "ffgkye: %s", 
+		 cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col]);
       goto error;
     }
     else {
@@ -1187,6 +1210,8 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   double amprms[21], aoprms[14];
   unsigned char doairm;
 
+  int cats_are_80 = 0;
+
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
   if(status) {
@@ -1208,6 +1233,17 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
   
+  /* Simple test for the new 80-column format */
+  ffgcno(fits, CASEINSEN, flux_keys_80[0], &cats_are_80, &status);
+  if(status == COL_NOT_FOUND || status == COL_NOT_UNIQUE)
+    status = 0;
+  else if(status) {
+    fitsio_err(errstr, status, "ffgcno: %s", flux_keys_80[0]);
+    goto error;
+  }
+  else
+    cats_are_80 = 1;
+
   /* Get column numbers */
   collim = sizeof(colnames) / sizeof(colnames[0]);
   for(col = 0; col < collim; col++) {
@@ -1238,11 +1274,13 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   collim += optcollim;
 
   for(col = 0; col < NFLUX; col++) {
-    ffgcno(fits, CASEINSEN, flux_keys[col], &(gcols[collim+col]), &status);
+    ffgcno(fits, CASEINSEN, cats_are_80 ? flux_keys_80[col] : flux_keys_32[col],
+	   &(gcols[collim+col]), &status);
     if(status == COL_NOT_UNIQUE)
       status = 0;  /* ignore */
     else if(status) {
-      fitsio_err(errstr, status, "ffgcno: %s", flux_keys[col]);
+      fitsio_err(errstr, status, "ffgcno: %s", 
+		 cats_are_80 ? flux_keys_80[col] : flux_keys_32[col]);
       goto error;
     }
   }
@@ -1387,13 +1425,15 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   tpi = 2.0 * M_PI;
 
   for(col = 0; col < NFLUX; col++) {
-    ffgkye(fits, apcor_keys[col], &(apcor[col]), (char *) NULL, &status);
+    ffgkye(fits, cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col],
+	   &(apcor[col]), (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       apcor[col] = mefinfo->apcor[col];  /* as a backup */
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: %s", apcor_keys[col]);
+      fitsio_err(errstr, status, "ffgkye: %s", 
+		 cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col]);
       goto error;
     }
     else {
