@@ -16,9 +16,6 @@
 /* Clip saturation at 2.5 mags below nominal level from frame */
 #define SATCLIP  2.5
 
-/* Use all objects within 4 mags below saturation for fit */
-#define USEMAG  4
-
 /* Bin size for plotting */
 #define BINSIZE  256  /* pixels */
 

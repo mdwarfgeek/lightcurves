@@ -559,7 +559,8 @@ int main (int argc, char *argv[]) {
 
   /* Do diagnostic plots */
   if(!noplots) {
-    if(do_plots(meflist, nmefs, medsat, medlim, sysbodge, errstr))
+    if(do_plots(meflist, nmefs, medsat, medlim, syslim < 0.0 ? medsat : syslim,
+		sysbodge, errstr))
       fatal(1, "do_plots: %s");
   }
 

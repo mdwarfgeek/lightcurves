@@ -16,7 +16,7 @@
 #define THEOSTEP  0.01  /* mag */
 
 int do_plots (struct lc_mef *meflist, int nmefs,
-	      float medsat, float medlim, float sysbodge, char *errstr) {
+	      float medsat, float medlim, float umlim, float sysbodge, char *errstr) {
   float magmin, magmax, mag, rms, chi, photons, loge, area, tmp, tmpp, tmps;
   long star, pt;
   int mef;
@@ -52,7 +52,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   medbuf6 = medbuf1 + 5 * nmefs;
 
   /* RMS plot */
-  magmin = medsat;
+  magmin = MIN(medsat, umlim);
   magmax = medlim;
 
   snprintf(xlab, sizeof(xlab), "%s magnitude", meflist[0].filter);
@@ -157,6 +157,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     tmpy[0] = 3.0 + log10f(sysbodge);
     tmpy[1] = tmpy[0];
     cpgline(2, tmpx, tmpy);
+    cpgsls(1);
   }
   cpgslw(1);
   cpgsci(1);
@@ -170,13 +171,27 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   tmpy[1] = 2.9;
   cpgline(2, tmpx, tmpy);
 
-  tmpx[0] = medlim;
-  tmpx[1] = medlim;
+  cpgsls(2);
+
+  tmpx[0] = umlim;
+  tmpx[1] = umlim;
+  tmpy[0] = -0.1;
+  tmpy[1] = 2.9;
+  cpgline(2, tmpx, tmpy);
+
+  tmpx[0] = umlim+USEMAG;
+  tmpx[1] = umlim+USEMAG;
   tmpy[0] = -0.1;
   tmpy[1] = 2.9;
   cpgline(2, tmpx, tmpy);
 
   cpgsls(1);
+
+  tmpx[0] = medlim;
+  tmpx[1] = medlim;
+  tmpy[0] = -0.1;
+  tmpy[1] = 2.9;
+  cpgline(2, tmpx, tmpy);
 
   /* Chi squared plot */
   cpgenv(magmin, magmax, -1.0, 4.0, 0, 20);

@@ -9,6 +9,9 @@
 #define FLAG_CONF  0x02  /* Aperture contains bad pixels */
 #define FLAG_SATUR 0x04  /* Saturated */
 
+/* Use all objects within 4 mags below saturation for fit */
+#define USEMAG  4
+
 struct lc_point {
   float x;
   float y;
@@ -179,7 +182,7 @@ int pcasys (struct buffer_info *buf, struct lc_point *ptbuf, struct lc_mef *mefi
 
 /* Diagnostic plots: plots.c */
 int do_plots (struct lc_mef *meflist, int nmefs,
-	      float medsat, float medlim, float sysbodge, char *errstr);
+	      float medsat, float medlim, float umlim, float sysbodge, char *errstr);
 
 int plot_corr (float *beforehist, float *beforewthist,
 	       float *corrhist, float *corrwthist,
