@@ -64,14 +64,21 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     for(star = 0; star < meflist[mef].nstars; star++) {
       /* Use only the ones classified as stars */
       if(meflist[mef].stars[star].medflux[0] > 0.0 &&
-	 meflist[mef].stars[star].rms > 0.0 &&
-	 meflist[mef].stars[star].cls == -1 &&
-	 meflist[mef].stars[star].bflag == 0 &&
-	 meflist[mef].stars[star].cflag == 0) {  /* BODGE */
+	 meflist[mef].stars[star].rms > 0.0) {
 	mag = meflist[mef].zp - meflist[mef].stars[star].medflux[0];
 	rms = 3.0 + log10f(meflist[mef].stars[star].rms);
 
-	cpgpt(1, &mag, &rms, 1);
+	if(meflist[mef].stars[star].cls == -1 &&
+	   meflist[mef].stars[star].bflag == 0 &&
+	   meflist[mef].stars[star].cflag == 0) {  /* BODGE */
+	  cpgpt(1, &mag, &rms, 1);
+	}
+	else if(meflist[mef].stars[star].cls == 9) {
+	  cpgpt(1, &mag, &rms, 1);
+	  cpgsci(2);
+	  cpgpt(1, &mag, &rms, 22);
+	  cpgsci(1);
+	}
       }
     }
 
