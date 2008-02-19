@@ -162,11 +162,14 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       }
     }
     
-    if(opt > 1) {
+    if(opt > 0) {
       medsig(medbuf, opt, &medflux, &rmsflux);
       mefinfo->stars[star].medflux[0] = medflux;
-      mefinfo->stars[star].sigflux[0] = rmsflux;
-      mefinfo->stars[star].rms = rmsflux;
+
+      if(opt > 1) {
+	mefinfo->stars[star].sigflux[0] = rmsflux;
+	mefinfo->stars[star].rms = rmsflux;
+      }
     }
     else {
       mefinfo->stars[star].medflux[0] = 0.0;
