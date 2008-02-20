@@ -11,7 +11,7 @@
 #include "util.h"
 
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
-		 int noapsel, int dopca, char *errstr) {
+		 int noapsel, int norenorm, int dopca, char *errstr) {
   struct lc_point *ptbuf = (struct lc_point *) NULL;
   float *medbuf = (float *) NULL;
   long nmedbuf;
@@ -23,6 +23,8 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   float medflux, sigflux, rmsflux, frameoff, framerms;
   float tmp, chisq;
   long nchisq;
+
+  float medoff, sigoff;
 
   /* Allocate temporary workspace for calculating medians */
   nmedbuf = MAX(mefinfo->nf, mefinfo->nstars);
@@ -112,7 +114,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	goto error;
     }
 
-    if(!noapsel) {
+    if(!noapsel || !norenorm) {
       /* Compute final per-object median flux */
       for(star = 0; star < mefinfo->nstars; star++) {
 	/* Read in measurements for this star */
@@ -131,6 +133,36 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	medsig(medbuf, opt, &medflux, &sigflux);
 	mefinfo->stars[star].medflux[meas] = medflux;
 	mefinfo->stars[star].sigflux[meas] = sigflux;
+      }
+    }
+
+    if(!norenorm) {
+      /* Compute median offset from reference system */
+      opt = 0;
+      for(star = 0; star < mefinfo->nstars; star++)
+	if(mefinfo->stars[star].medflux[meas] != 0.0 &&
+	   mefinfo->stars[star].sigflux[meas] != 0.0) {
+	  medbuf[opt] = mefinfo->stars[star].medflux[meas] - mefinfo->stars[star].refmag;
+	  opt++;
+	}
+      
+      medsig(medbuf, opt, &medoff, &sigoff);
+      
+      /* Apply offset */
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+	/* Read in measurements for this frame */
+	if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
+	  goto error;
+	
+	for(star = 0; star < mefinfo->nstars; star++)
+	  ptbuf[star].flux -= medoff;
+	
+	/* Write out corrected fluxes */
+	if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
+	  goto error;
+      
+	if(meas == 0)
+	  mefinfo->frames[pt].extinc += medoff;
       }
     }
   }

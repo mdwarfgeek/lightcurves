@@ -35,6 +35,9 @@ struct lc_star {
 
   struct lc_point ref[NFLUX];
 
+  /* Reference magnitude to which to tie the photometry */
+  float refmag;
+
   /* Median flux and sigma in each aperture */
   float medflux[NFLUX];
   float sigflux[NFLUX];
@@ -174,7 +177,7 @@ float calc_intra (float x, float y, struct intra *corr);
 
 /* Main routine: lightcurves.c */
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
-		 int noapsel, int dopca, char *errstr);
+		 int noapsel, int norenorm, int dopca, char *errstr);
 
 /* PCA-like systematics removal: pcasys.c */
 int pcasys (struct buffer_info *buf, struct lc_point *ptbuf, struct lc_mef *mefinfo,

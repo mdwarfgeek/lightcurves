@@ -72,6 +72,7 @@ static void usage (char *av) {
 	  "         -d        Enables difference imaging mode.\n"
 	  "         -f degree Apply polynomial of 'degree' for systematics removal.\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
+	  "         -n        Do not renormalise median to reference magnitude.\n"
 	  "         -u mag    Set upper mag limit for systematics correction.\n\n"
 	  "Output:\n"
 	  "         -g file   Writes good frames list to 'file'.\n"
@@ -111,6 +112,7 @@ int main (int argc, char *argv[]) {
   int dointra = 0;
 
   int noapsel = 0;
+  int norenorm = 0;
   int polydeg = -1;
   int pcafit = 0;
 
@@ -135,7 +137,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "ab:df:g:i:o:pqtu:v")) != -1)
+  while((c = getopt(argc, argv, "ab:df:g:i:no:pqtu:v")) != -1)
     switch(c) {
     case 'a':
       noapsel++;
@@ -165,6 +167,9 @@ int main (int argc, char *argv[]) {
       strncpy(intrafile, optarg, sizeof(intrafile)-1);
       intrafile[sizeof(intrafile)-1] = '\0';
       dointra = 1;
+      break;
+    case 'n':
+      norenorm = 1;
       break;
     case 'o':
       strncpy(outfile, optarg, sizeof(outfile)-1);
@@ -487,7 +492,7 @@ int main (int argc, char *argv[]) {
       meflist[mef].syslim = meflist[mef].zp - syslim;  /* user-supplied */
 
     /* Call into the main part of the program */
-    if(lightcurves(&buf, &(meflist[mef]), noapsel, pcafit, errstr))
+    if(lightcurves(&buf, &(meflist[mef]), noapsel, norenorm, pcafit, errstr))
       fatal(1, "%s", errstr);
 
     /* Calculate average extinction */
@@ -1098,6 +1103,10 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
 	stars[rout].ref[col].flux = fluxbuf[r] * apcor[col] * percorr;
 	stars[rout].ref[col].fluxerr = fabsf(fluxbuf[r]) * apcor[col] / gain;
 	/* +skyvar * flux_apers[col] * flux_apers[col] ? */
+
+	/* Store reference magnitude for this star */
+	if(col == 0)
+	  stars[rout].refmag = 2.5 * log10f(MAX(1.0, stars[rout].ref[col].flux));
 
 	if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev)
 	  stars[rout].ref[col].satur = 1;
