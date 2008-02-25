@@ -1607,8 +1607,9 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	XYZP(mefinfo->stars[rout].ra, mefinfo->stars[rout].dec, xexpect, yexpect);
 
 	/* Store difference - gives offset of centroid */
-	points[r].x = xbuf[r] - xexpect;
-	points[r].y = ybuf[r] - yexpect;
+	/* Changed back to simple x and y positions */
+	points[r].x = xbuf[r]; //- xexpect;
+	points[r].y = ybuf[r]; //- yexpect;
 
 	/* Apply scattered light correction */
 	if(scatcoeff != 0.0) {
