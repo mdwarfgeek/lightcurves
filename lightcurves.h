@@ -18,6 +18,7 @@ struct lc_point {
   float flux;
   float fluxerr;
   float airmass;
+  float ha;
   unsigned char satur : 1;
   unsigned char conf : 1;
 };
