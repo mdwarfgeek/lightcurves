@@ -103,6 +103,9 @@ struct lc_mef {
   /* Average of extinction for theoretical curve */
   float avextinc;
 
+  /* Scintillation for theoretical curve */
+  float avscint;
+
   /* Reference MJD */
   double mjdref;
 

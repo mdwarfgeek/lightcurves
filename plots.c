@@ -21,8 +21,9 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   long star, pt;
   int mef;
 
-  float *medbuf1 = (float *) NULL, *medbuf2, *medbuf3, *medbuf4, *medbuf5, *medbuf6;
-  float gain, rcore, sigma, avzp, avapcor, avextinc;
+  float *medbuf1 = (float *) NULL, *medbuf2, *medbuf3, *medbuf4;
+  float *medbuf5, *medbuf6, *medbuf7;
+  float gain, rcore, sigma, avzp, avapcor, avextinc, avscint;
 
   float *theox = (float *) NULL, *theop, *theos, *theoy, *theoys;
   long t, ntheo;
@@ -39,7 +40,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   cpgsch(1.4);
 
   /* Allocate workspace for median parameters */
-  medbuf1 = (float *) malloc(6 * nmefs * sizeof(float));
+  medbuf1 = (float *) malloc(7 * nmefs * sizeof(float));
   if(!medbuf1) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -50,6 +51,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   medbuf4 = medbuf1 + 3 * nmefs;
   medbuf5 = medbuf1 + 4 * nmefs;
   medbuf6 = medbuf1 + 5 * nmefs;
+  medbuf7 = medbuf1 + 6 * nmefs;
 
   /* RMS plot */
   magmin = MIN(medsat, umlim);
@@ -88,6 +90,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     medbuf4[mef] = meflist[mef].zp;
     medbuf5[mef] = meflist[mef].avapcor;
     medbuf6[mef] = meflist[mef].avextinc;
+    medbuf7[mef] = meflist[mef].avscint;
   }
 
   medsig(medbuf1, nmefs, &gain, (float *) NULL);
@@ -96,6 +99,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   medsig(medbuf4, nmefs, &avzp, (float *) NULL);
   medsig(medbuf5, nmefs, &avapcor, (float *) NULL);
   medsig(medbuf6, nmefs, &avextinc, (float *) NULL);
+  medsig(medbuf7, nmefs, &avscint, (float *) NULL);
 
   free((void *) medbuf1);
   medbuf1 = (float *) NULL;
@@ -121,8 +125,8 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   area = M_PI * rcore * rcore;
 
   if(verbose)
-    printf("avzp=%g gain=%g sigma=%g area=%g sysbodge=%g\n",
-	   avzp, gain, sigma, area, sysbodge);
+    printf("avzp=%g gain=%g sigma=%g area=%g sysbodge=%g avscint=%g\n",
+	   avzp, gain, sigma, area, sysbodge, avscint);
 
   for(t = 0; t < ntheo; t++) {
     mag = t * 0.01 + magmin;
@@ -138,7 +142,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     theop[t] = 3.0 + log10f(tmpp);
     theos[t] = 3.0 + log10f(tmps);
     theoy[t] = 3.0 + log10f(tmp);
-    theoys[t] = 3.0 + 0.5 * log10f(tmp*tmp + sysbodge*sysbodge);
+    theoys[t] = 3.0 + 0.5 * log10f(tmp*tmp + sysbodge*sysbodge + avscint*avscint);
   }
 
   cpgsci(2);
@@ -155,6 +159,15 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     tmpx[0] = magmin;
     tmpx[1] = magmax;
     tmpy[0] = 3.0 + log10f(sysbodge);
+    tmpy[1] = tmpy[0];
+    cpgline(2, tmpx, tmpy);
+    cpgsls(1);
+  }
+  if(avscint > 0.0) {
+    cpgsls(5);
+    tmpx[0] = magmin;
+    tmpx[1] = magmax;
+    tmpy[0] = 3.0 + log10f(avscint);
     tmpy[1] = tmpy[0];
     cpgline(2, tmpx, tmpy);
     cpgsls(1);

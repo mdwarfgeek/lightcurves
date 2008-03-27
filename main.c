@@ -386,6 +386,7 @@ int main (int argc, char *argv[]) {
 
     meflist[mef].avsigma = 0.0;
     meflist[mef].avapcor = 0.0;
+    meflist[mef].avscint = 0.0;
 
     meflist[mef].frames = (struct lc_frame *) NULL;
     meflist[mef].nf = nf;
@@ -428,6 +429,7 @@ int main (int argc, char *argv[]) {
     /* Sort out averages */
     meflist[mef].avsigma = sqrtf(meflist[mef].avsigma / nf);
     meflist[mef].avapcor /= nf;
+    meflist[mef].avscint /= nf;
 
     /* Fix the cflag column - sometimes in difference imaging there
      * are frames with zero confidence all-over, so subtract off
@@ -1220,6 +1222,9 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   double amprms[21], aoprms[14];
   unsigned char doairm;
 
+  float diam, rms, var, sc, scrms, avscint;
+  long navscint;
+
   int cats_are_80 = 0;
 
   /* Open catalogue */
@@ -1537,18 +1542,49 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	     273.0, 1013.25, 0.5, 0.80, 0.0065, aoprms);
   }
 
-  /* ESO WFI needs a scattered light correction too */
+  /* Check for telescope-specific things */
   ffgkys(fits, "INSTRUME", inst, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkys(fits, "DETECTOR", inst, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST)
+      status = 0;
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkys: INSTRUME/DETECTOR");
+      goto error;
+    }
+  }
   ffgkys(fits, "TELESCOP", tel, (char *) NULL, &status);
   if(status == KEY_NO_EXIST)
     status = 0;
   else if(status) {
-    fitsio_err(errstr, status, "ffgkys: INSTRUME/TELESCOP");
+    fitsio_err(errstr, status, "ffgkys: TELESCOP");
     goto error;
   }
   else {
-    if(!strcasecmp(inst, "WFI") && !strcasecmp(tel, "MPI-2.2"))
+    if(!strcasecmp(inst, "WFC") && !strcasecmp(tel, "INT"))
+      diam = 2540;
+    else if(!strcasecmp(inst, "WFI") && !strcasecmp(tel, "MPI-2.2")) {
       scatcoeff = -1.5;
+      diam = 2200;
+    }
+    else if(!strcasecmp(inst, "CCDMosaThin1"))
+      diam = 3934;
+    else if(!strcasecmp(inst, "Mosaic2"))
+      diam = 3934;
+    else if(!strcasecmp(inst, "Apogee Alta"))
+      diam = 400;
+  }
+
+  /* Try to read telescope aperture diameter */
+  ffgkye(fits, "APTDIA", &diam, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    diam = -1.0;  /* flag as dunno */
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: APTDIA");
+    goto error;
   }
 
   /* Get block size for row I/O */
@@ -1584,6 +1620,9 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   remain = nrows;
   rout = 0L;
 
+  avscint = 0;
+  navscint = 0;
+
   while(remain > 0) {
     rread = (remain > rblksz ? rblksz : remain);
     
@@ -1617,6 +1656,19 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  fluxbuf[r] *= powf(10.0, 0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
 	}
 
+	/* Compute airmass */
+	if(doairm) {
+	  slaMapqkz(mefinfo->stars[rout].ra, mefinfo->stars[rout].dec,
+		    amprms, &apra, &apdec);
+	  slaAopqk(apra, apdec, aoprms, &aob, &zob, &hob, &dob, &rob);
+	  points[r].airmass = slaAirmas(zob);
+	  points[r].ha = hob;
+	}
+	else {
+	  points[r].airmass = -999.0;  /* flag unusability */
+	  points[r].ha = -999.0;
+	}
+
 	if(diffmode) {
 	  flux = fluxbuf[r] * mefinfo->apcor[col] * mefinfo->percorr;
 	  fluxerr = fabsf(fluxbuf[r]) * mefinfo->apcor[col] / gain +
@@ -1644,11 +1696,31 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
 	if(flux > 0.0) {
 	  points[r].flux = 2.5 * log10f(MAX(1.0, flux));
-	  points[r].fluxerr = 2.5 * log10f(1.0 + sqrtf(fluxerr) / flux);
 
+	  /* Compute uncertainty */
+	  rms = 2.5 * log10f(1.0 + sqrtf(fluxerr) / flux);
+	  var = rms*rms;
+
+	  /* Scintillation */
+	  if(diam > 0.0 && points[r].airmass > 0.0) {
+	    sc = 0.09 * powf(diam / 10.0, -2.0 / 3.0) *
+ 	                powf(points[r].airmass, 3.0 / 2.0) *
+ 	                expf(-height / 8000.0) /
+	                sqrtf(2*exptime);
+	    scrms = 2.5 * log10f(1.0 + sc);
+
+	    avscint += scrms;
+	    navscint++;
+
+	    var += scrms*scrms;
+	  }
+
+	  /* Fudge factor */
 	  if(sysbodge > 0.0)
-	    points[r].fluxerr = sqrtf(points[r].fluxerr*points[r].fluxerr +
-				      sysbodge*sysbodge);
+	    var += sysbodge*sysbodge;
+
+	  /* Stash result */
+	  points[r].fluxerr = sqrtf(var);
 	}
 	else {
 	  points[r].flux = 0.0;
@@ -1666,19 +1738,6 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	}
 	else
 	  points[r].conf = 0;
-
-	/* Compute airmass */
-	if(doairm) {
-	  slaMapqkz(mefinfo->stars[rout].ra, mefinfo->stars[rout].dec,
-		    amprms, &apra, &apdec);
-	  slaAopqk(apra, apdec, aoprms, &aob, &zob, &hob, &dob, &rob);
-	  points[r].airmass = slaAirmas(zob);
-	  points[r].ha = hob;
-	}
-	else {
-	  points[r].airmass = -999.0;  /* flag unusability */
-	  points[r].ha = -999.0;
-	}
       }
 
       /* Write out those */
@@ -1711,6 +1770,9 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     mefinfo->avsigma += tmp;
 
   mefinfo->avapcor += apcor[0];
+
+  if(navscint > 0)
+    mefinfo->avscint += avscint / navscint;
 
   /* Store this frame MJD and seeing */
   mefinfo->frames[iframe].mjd = mjd;
