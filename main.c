@@ -740,8 +740,11 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
     fitsio_err(errstr, status, "ffgcno: %s", flux_keys_80[0]);
     goto error;
   }
-  else
+  else {
     cats_are_80 = 1;
+
+    colnames[5] = "Sky_level";  /* WHY were these changed? */
+  }
 
   /* Get column numbers */
   collim = sizeof(colnames) / sizeof(colnames[0]);
@@ -1248,6 +1251,14 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
   
+  /* Check for mismatches */
+  if(nrows != mefinfo->nstars) {
+    report_err(errstr,
+	       "number of stars does not match: %d != %d",
+	       nrows, mefinfo->nstars);
+    goto error;
+  }
+
   /* Simple test for the new 80-column format */
   ffgcno(fits, CASEINSEN, flux_keys_80[0], &cats_are_80, &status);
   if(status == COL_NOT_FOUND || status == COL_NOT_UNIQUE)
@@ -1256,8 +1267,12 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     fitsio_err(errstr, status, "ffgcno: %s", flux_keys_80[0]);
     goto error;
   }
-  else
+  else {
     cats_are_80 = 1;
+
+    colnames[3] = "Sky_level";  /* WHY were these changed? */
+    colnames[4] = "Sky_rms";
+  }
 
   /* Get column numbers */
   collim = sizeof(colnames) / sizeof(colnames[0]);
