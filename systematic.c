@@ -416,7 +416,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   memcpy(f->coeff, coeff, sizeof(f->coeff));
 
   /* Print coeffs */
-  //printf("Coefficients %9.5f %9.5f %9.5f %9.5f %9.5f %9.5f\n", coeff[0]*1000, coeff[1]*1000, coeff[3]*1000, coeff[2]*1000000, coeff[5]*1000000, coeff[4]*1000000);
+  //printf("Coefficients %9.5f %9.5f x %9.5f y %9.5f x**2 %9.5f y**2 %9.5f x*y\n", coeff[0]*1000, coeff[1]*1000, coeff[3]*1000, coeff[2]*1000000, coeff[5]*1000000, coeff[4]*1000000);
 
   *med_r = medoff;
   *rms_r = sigoff;
