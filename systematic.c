@@ -304,9 +304,15 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	pval = val - pcorr;
 
 	/* Use the ones within SIGCLIP of the median */
-	if(sigoff == 0.0 || fabsf(pval - medoff) < SIGCLIP * sigoff)
+	if(sigoff == 0.0 || fabsf(pval - medoff) < SIGCLIP * sigoff) {
 	  polyaccum(dx, dy, wt, val, a, b, mefinfo->degree);
+	  data[star].wt = wt;
+	}
+	else
+	  data[star].wt = 0;
       }
+      else
+	data[star].wt = 0;
     }
 
     /* Solve for coefficients */

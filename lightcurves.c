@@ -90,14 +90,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  mefinfo->frames[pt].rms = framerms;
 	  mefinfo->frames[pt].extinc = sysbuf[pt].coeff[0];
 	}
-      }
-      
-      /* Apply 2-D correction for each frame */
-      for(pt = 0; pt < mefinfo->nf; pt++) {
-	/* Read in measurements for this frame */
-	if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
-	  goto error;
-	
+
 	/* Perform polynomial fit correction */
 	if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf, errstr))
 	  goto error;

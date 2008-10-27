@@ -19,6 +19,7 @@ struct lc_point {
   float fluxerr;
   float airmass;
   float ha;
+  float wt;  /* weight given in computing polynomial corr. */
   unsigned char satur : 1;
   unsigned char conf : 1;
 };
