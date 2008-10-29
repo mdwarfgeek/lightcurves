@@ -1376,7 +1376,7 @@ static int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     status = 0;
     satlev = 65535;
 
-    if(verbose && !diffmode)
+    if(verbose > 1 && !diffmode)
       printf("Warning: using default satlev = %.1f\n", satlev);
   }
   else if(status) {
