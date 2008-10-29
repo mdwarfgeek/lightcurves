@@ -10,11 +10,15 @@
 #include "floatmath.h"
 #include "util.h"
 
+#define NITER 3
+
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 		 int noapsel, int norenorm, int dopca, char *errstr) {
   struct lc_point *ptbuf = (struct lc_point *) NULL;
   float *medbuf = (float *) NULL;
   long nmedbuf;
+
+  int iter, degree;
 
   struct systematic_fit *sysbuf = (struct systematic_fit *) NULL;
 
@@ -53,51 +57,68 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	printf("\r Processing aperture %ld of %d",
 	       meas+1, NFLUX);
       
-      /* Compute per-object median flux */
-      for(star = 0; star < mefinfo->nstars; star++) {
-	/* Read in measurements for this star */
-	if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
-	  goto error;
-	
-	/* Calculate median flux */
-	opt = 0;
-	for(pt = 0; pt < mefinfo->nf; pt++) {
-	  if(ptbuf[pt].flux != 0.0) {
-	    medbuf[opt] = ptbuf[pt].flux;
-	    opt++;
-	  }
-	}
-	
-	medsig(medbuf, opt, &medflux, &sigflux);
-	mefinfo->stars[star].medflux[meas] = medflux;
-	mefinfo->stars[star].sigflux[meas] = sigflux;
-      }
-      
-      /* Compute 2-D correction for each frame */
-      for(pt = 0; pt < mefinfo->nf; pt++) {
-	/* Read in measurements for this frame */
-	if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
-	  goto error;
-	
-	/* Perform polynomial fit correction */
-	if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf, sysbuf+pt,
-			  &frameoff, &framerms, errstr))
-	  goto error;
-	
-	/* Store frame RMS for normal aperture (meas = 0) */
-	if(meas == 0) {
-	  mefinfo->frames[pt].offset = frameoff;
-	  mefinfo->frames[pt].rms = framerms;
-	  mefinfo->frames[pt].extinc = sysbuf[pt].coeff[0];
-	}
+      /* Iterate between computing object median and rms, and
+       * successive frame corrections.  The polynomial fit
+       * (if any) is only done on the last iteration, using
+       * a simple constant for the others, so we don't
+       * disappear up our own exhaust pipe.
+       *
+       * The purpose of the earlier iterations is to refine
+       * the rms estimate used for weighting in the least
+       * squares analysis, so that it reflects the actual
+       * error in that object and not the frame-to-frame
+       * offsets (which are the dominant effect otherwise
+       * on data taken in non-photometric conditions).
+       */
+      for(iter = 0; iter < NITER; iter++) {
+	degree = (iter == NITER-1 ? mefinfo->degree : 0);
 
-	/* Perform polynomial fit correction */
-	if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf, errstr))
-	  goto error;
+	/* Compute per-object median flux */
+	for(star = 0; star < mefinfo->nstars; star++) {
+	  /* Read in measurements for this star */
+	  if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
+	    goto error;
+	  
+	  /* Calculate median flux */
+	  opt = 0;
+	  for(pt = 0; pt < mefinfo->nf; pt++) {
+	    if(ptbuf[pt].flux != 0.0) {
+	      medbuf[opt] = ptbuf[pt].flux;
+	      opt++;
+	    }
+	  }
+	  
+	  medsig(medbuf, opt, &medflux, &sigflux);
+	  mefinfo->stars[star].medflux[meas] = medflux;
+	  mefinfo->stars[star].sigflux[meas] = sigflux;
+	}
 	
-	/* Write out corrected fluxes */
-	if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
-	  goto error;
+	/* Compute 2-D correction for each frame */
+	for(pt = 0; pt < mefinfo->nf; pt++) {
+	  /* Read in measurements for this frame */
+	  if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
+	    goto error;
+	  
+	  /* Perform polynomial fit correction */
+	  if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf, degree, sysbuf+pt,
+			    &frameoff, &framerms, errstr))
+	    goto error;
+	  
+	  /* Store frame RMS for normal aperture (meas = 0) */
+	  if(meas == 0) {
+	    mefinfo->frames[pt].offset = frameoff;
+	    mefinfo->frames[pt].rms = framerms;
+	    mefinfo->frames[pt].extinc = sysbuf[pt].coeff[0];
+	  }
+	  
+	  /* Perform polynomial fit correction */
+	  if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf, errstr))
+	    goto error;
+	  
+	  /* Write out corrected fluxes */
+	  if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
+	    goto error;
+	}
       }
     }
 

@@ -138,6 +138,7 @@ struct systematic_fit {
   float xbar;
   float ybar;
   double coeff[50];
+  int degree;
 };
 
 /* Intrapixel sensitivity map */
@@ -201,7 +202,7 @@ int plot_corr (float *beforehist, float *beforewthist,
 
 /* Systematics correction: systematic.c */
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
-		    float *medbuf, struct systematic_fit *f,
+		    float *medbuf, int degree, struct systematic_fit *f,
 		    float *med_r, float *rms_r, char *errstr);
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		      float *medbuf, struct systematic_fit *f, char *errstr);

@@ -68,12 +68,13 @@ static float polyeval(float dx, float dy, double coeff[50], int degree) {
 }
 
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
-		    float *medbuf, struct systematic_fit *f,
+		    float *medbuf, int degree, struct systematic_fit *f,
 		    float *med_r, float *rms_r, char *errstr) {
   double a[50][50], b[50], coeff[50];
   int ncoeff, ncoeffmax, iter;
   long star, opt;
-  float fmin, fmax, siglq;
+  float fmin, fmax;
+  float medrms, sigrms, rmsclip;
 
   int mfirst;
 
@@ -92,10 +93,10 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
   /* Calculate number of coefficients */
   ncoeffmax = sizeof(coeff) / sizeof(coeff[0]);
-  ncoeff = ((mefinfo->degree + 1) * (mefinfo->degree + 2)) / 2;
+  ncoeff = ((degree + 1) * (degree + 2)) / 2;
 
   if(ncoeff > ncoeffmax) {
-    report_err(errstr, "polynomial degree %d too large, maximum is 8", mefinfo->degree);
+    report_err(errstr, "polynomial degree %d too large, maximum is 8", degree);
     goto error;
   }
 
@@ -147,7 +148,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   printf("Flux range %.1f %.1f\n", fmin, fmax);
 #endif
 
-  /* Calculate lower quartile of sigflux */
+  /* Calculate median and sigma of the rms of the comp stars */
   opt = 0;
   for(star = 0; star < mefinfo->nstars; star++) {
     if(data[star].flux > 0.0 &&          /* Has a flux measurement */
@@ -163,17 +164,12 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     }
   }
 
-  sortfloat(medbuf, opt);
-
-  /* Don't bother if there aren't enough */
-  if(opt > 10)
-    siglq = medbuf[opt/4];
+  if(opt > 5) {
+    medsig(medbuf, opt, &medrms, &sigrms);
+    rmsclip = medrms + 5*sigrms;  /* clip out junk */
+  }
   else
-    siglq = medbuf[opt-1];  /* use everything */
-
-#ifdef DEBUG
-  printf("siglq = %f\n", siglq);
-#endif
+    rmsclip = 999.0;  /* I think this should be safe :) */
 
   /* Calculate initial median and sigma offset */
   opt = 0;
@@ -181,7 +177,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     if(data[star].flux > 0.0 &&          /* Has a flux measurement */
        data[star].fluxerr > 0.0 &&       /* And a reliable error */
        mefinfo->stars[star].sigflux[meas] > 0 &&
-       //       mefinfo->stars[star].sigflux[meas] < siglq &&
+       mefinfo->stars[star].sigflux[meas] < rmsclip &&
        data[star].flux > fmin &&
        data[star].flux < fmax &&         /* Not saturated */
        !mefinfo->stars[star].bflag &&    /* Not blended */
@@ -243,7 +239,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
       if(data[star].flux > 0.0 &&          /* Has a flux measurement */
 	 data[star].fluxerr > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
-	 //	 mefinfo->stars[star].sigflux[meas] < siglq &&
+	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 data[star].flux > fmin &&
 	 data[star].flux < fmax &&         /* Not saturated */
 	 !mefinfo->stars[star].bflag &&    /* Not blended */
@@ -254,7 +250,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
 		    mefinfo->stars[star].sigflux[meas]);
 
-	pcorr = polyeval(pdx, pdy, coeff, mefinfo->degree);
+	pcorr = polyeval(pdx, pdy, coeff, degree);
 
 	val = data[star].flux - mefinfo->stars[star].medflux[meas];
 	pval = val - pcorr;
@@ -285,7 +281,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
       if(data[star].flux > 0.0 &&          /* Has a flux measurement */
 	 data[star].fluxerr > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
-	 //	 mefinfo->stars[star].sigflux[meas] < siglq &&
+	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 data[star].flux > fmin &&
 	 data[star].flux < fmax &&         /* Not saturated */
 	 !mefinfo->stars[star].bflag &&    /* Not blended */
@@ -298,14 +294,14 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
 		    mefinfo->stars[star].sigflux[meas]);
             
-	pcorr = polyeval(pdx, pdy, coeff, mefinfo->degree);
+	pcorr = polyeval(pdx, pdy, coeff, degree);
 
 	val = data[star].flux - mefinfo->stars[star].medflux[meas];
 	pval = val - pcorr;
 
 	/* Use the ones within SIGCLIP of the median */
 	if(sigoff == 0.0 || fabsf(pval - medoff) < SIGCLIP * sigoff) {
-	  polyaccum(dx, dy, wt, val, a, b, mefinfo->degree);
+	  polyaccum(dx, dy, wt, val, a, b, degree);
 	  data[star].wt = wt;
 	}
 	else
@@ -330,7 +326,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
     for(xcord = xmin; xcord <= xmax; xcord += BINSIZE)
       for(ycord = ymin; ycord <= ymax; ycord += BINSIZE) {
-	corr = polyeval(xcord - xbar, ycord - ybar, b, mefinfo->degree);
+	corr = polyeval(xcord - xbar, ycord - ybar, b, degree);
 
 	tmpx[0] = xcord;
 	tmpy[0] = ycord;
@@ -355,7 +351,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
       if(data[star].flux > 0.0 &&          /* Has a flux measurement */
 	 data[star].fluxerr > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
-	 //	 mefinfo->stars[star].sigflux[meas] < siglq &&
+	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 data[star].flux > fmin &&
 	 data[star].flux < fmax &&         /* Not saturated */
 	 !mefinfo->stars[star].bflag &&    /* Not blended */
@@ -368,8 +364,8 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
 		    mefinfo->stars[star].sigflux[meas]);
             
-	pcorr = polyeval(pdx, pdy, coeff, mefinfo->degree);
-	corr = polyeval(dx, dy, b, mefinfo->degree);
+	pcorr = polyeval(pdx, pdy, coeff, degree);
+	corr = polyeval(dx, dy, b, degree);
 
 	val = data[star].flux - mefinfo->stars[star].medflux[meas];
 	pval = val - pcorr;
@@ -414,6 +410,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   f->xbar = cxbar;
   f->ybar = cybar;
   memcpy(f->coeff, coeff, sizeof(f->coeff));
+  f->degree = degree;
 
   /* Print coeffs */
   //printf("Coefficients %9.5f %9.5f x %9.5f y %9.5f x**2 %9.5f y**2 %9.5f x*y\n", coeff[0]*1000, coeff[1]*1000, coeff[3]*1000, coeff[2]*1000000, coeff[5]*1000000, coeff[4]*1000000);
@@ -441,7 +438,7 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
 	dx = mefinfo->stars[star].x - sysbuf[f].xbar;
 	dy = mefinfo->stars[star].y - sysbuf[f].ybar;
 
-	corr = polyeval(dx, dy, sysbuf[f].coeff, mefinfo->degree);
+	corr = polyeval(dx, dy, sysbuf[f].coeff, sysbuf[f].degree);
 
 	medbuf[f] = corr;
       }
@@ -454,7 +451,7 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
       dx = mefinfo->stars[star].x - sysbuf[frame].xbar;
       dy = mefinfo->stars[star].y - sysbuf[frame].ybar;
 
-      corr = polyeval(dx, dy, sysbuf[frame].coeff, mefinfo->degree);
+      corr = polyeval(dx, dy, sysbuf[frame].coeff, sysbuf[frame].degree);
 
       if(star == 0 || corr < corrmin)
 	corrmin = corr;
