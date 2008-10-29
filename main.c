@@ -831,7 +831,7 @@ static int read_ref (fitsfile *fits, struct lc_mef *mefinfo, char *errstr) {
     status = 0;
     satlev = 65535;
 
-    if(verbose)
+    if(verbose > 1)
       printf("Warning: using default satlev = %.1f\n", satlev);
   }
   else if(status) {
