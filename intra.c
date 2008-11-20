@@ -13,8 +13,6 @@
 #include "floatmath.h"
 #include "util.h"
 
-static char *sstrip (char *str);
-
 int read_intra (char *filename, struct intra *intralist, int nmefs,
 		char *errstr) {
   FILE *fp;
@@ -140,33 +138,4 @@ float calc_intra (float x, float y, struct intra *corr) {
   val = (1.0-dely) * val1 + dely * val2;
 
   return(val);
-}
-
-static char *sstrip (char *str) {
-  char *p;
-
-  /* Stop at the first comment character */
-  p = strchr(str, '#');
-  if(p)
-    *p = '\0';
-
-  /* First remove whitespace from start of string */
-  while(*str != '\0' && isspace((unsigned char) *str))
-    str++;
-
-  if(*str == '\0')
-    return(str);
-
-  /* Remove whitespace from end of string */
-  p = str + strlen(str) - 1;
-
-  while(p > str && isspace((unsigned char) *p))
-    p--;
-
-  if(p == str && isspace((unsigned char) *p))
-    *p = '\0';
-  else
-    *(p+1) = '\0';
-
-  return(str);
 }

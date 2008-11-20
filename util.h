@@ -39,6 +39,8 @@ void fitsio_err (char *errstr, int status, const char *fmt, ...);
 void report_err (char *errstr, const char *fmt, ...);
 void report_syserr (char *errstr, const char *fmt, ...);
 
+char *sstrip (char *str);
+
 /* In libc, but not the headers */
 
 char *basename (const char *);

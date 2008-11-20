@@ -1,6 +1,8 @@
 #ifndef __LIGHTCURVES_H__
 #define __LIGHTCURVES_H__
 
+#include <fitsio.h>
+
 /* Number of flux measures */
 #define NFLUX  3
 
@@ -202,6 +204,16 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 		    float *med_r, float *rms_r, char *errstr);
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		      float *medbuf, struct systematic_fit *f, char *errstr);
+
+/* Catalogue and list driven file reading: readfits.c */
+int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
+	      int diffmode, float sysbodge,
+	      char *errstr);
+int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
+	      struct buffer_info *buf,
+	      int dointra, struct intra *icorr,
+	      int diffmode, float sysbodge,
+	      char *errstr);
 
 /* Utility functions: dsolve.c, linear.c, medsig.c, sortfloat.c */
 void dsolve (double a[50][50], double b[50], int m);

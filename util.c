@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <ctype.h>
 #include <errno.h>
 
 #include <fitsio.h>
@@ -91,4 +92,33 @@ void report_syserr (char *errstr, const char *fmt, ...) {
   
   if(rv != -1 && rv < ERRSTR_LEN)
     (void) snprintf(errstr + rv, ERRSTR_LEN - rv, ": %s", strerror(errno));
+}
+
+char *sstrip (char *str) {
+  char *p;
+
+  /* Stop at the first comment character */
+  p = strchr(str, '#');
+  if(p)
+    *p = '\0';
+
+  /* First remove whitespace from start of string */
+  while(*str != '\0' && isspace((unsigned char) *str))
+    str++;
+
+  if(*str == '\0')
+    return(str);
+
+  /* Remove whitespace from end of string */
+  p = str + strlen(str) - 1;
+
+  while(p > str && isspace((unsigned char) *p))
+    p--;
+
+  if(p == str && isspace((unsigned char) *p))
+    *p = '\0';
+  else
+    *(p+1) = '\0';
+
+  return(str);
 }
