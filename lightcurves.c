@@ -13,7 +13,7 @@
 #define NITER 3
 
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
-		 int noapsel, int norenorm, int dopca, char *errstr) {
+		 int noapsel, int norenorm, char *errstr) {
   struct lc_point *ptbuf = (struct lc_point *) NULL;
   float *medbuf = (float *) NULL;
   long nmedbuf;
@@ -120,12 +120,6 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    goto error;
 	}
       }
-    }
-
-    /* Apply PCA-like systematics removal if requested */
-    if(dopca) {
-      if(pcasys(buf, ptbuf, mefinfo, meas, medbuf, errstr))
-	goto error;
     }
 
     if(!noapsel || !norenorm) {

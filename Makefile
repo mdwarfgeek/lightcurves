@@ -29,7 +29,7 @@ LIBS=-L$(CFITSIO_LIB) -lcfitsio -L$(PGPLOT_LIB) -lcpgplot -lpgplot -L$(SLA_LIB) 
 
 #### End constants section ####
 
-LIGHTCURVES_SRCS=main.c buffer.c chooseap.c intra.c lightcurves.c pcasys.c plots.c systematic.c \
+LIGHTCURVES_SRCS=main.c buffer.c chooseap.c intra.c lightcurves.c plots.c systematic.c \
 	hjd.c sla.c \
 	dsolve.c polynm.c hanning.c medsig.c sortfloat.c sortlong.c cvtunit.c util.c
 LIGHTCURVES_OBJS=${LIGHTCURVES_SRCS:%.c=%.o}

@@ -114,7 +114,6 @@ int main (int argc, char *argv[]) {
   int noapsel = 0;
   int norenorm = 0;
   int polydeg = -1;
-  int pcafit = 0;
 
   int len, maxflen, fspc;
   float *medbuf1 = (float *) NULL, *medbuf2, medsat, medlim;
@@ -137,7 +136,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "ab:df:g:i:no:pqtu:v")) != -1)
+  while((c = getopt(argc, argv, "ab:df:g:i:no:pqu:v")) != -1)
     switch(c) {
     case 'a':
       noapsel++;
@@ -181,9 +180,6 @@ int main (int argc, char *argv[]) {
       break;
     case 'q':
       verbose--;
-      break;
-    case 't':
-      pcafit++;
       break;
     case 'u':
       syslim = (float) strtod(optarg, &ep);
@@ -494,7 +490,7 @@ int main (int argc, char *argv[]) {
       meflist[mef].syslim = meflist[mef].zp - syslim;  /* user-supplied */
 
     /* Call into the main part of the program */
-    if(lightcurves(&buf, &(meflist[mef]), noapsel, norenorm, pcafit, errstr))
+    if(lightcurves(&buf, &(meflist[mef]), noapsel, norenorm, errstr))
       fatal(1, "%s", errstr);
 
     /* Calculate average extinction */
