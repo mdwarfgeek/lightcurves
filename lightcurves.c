@@ -108,7 +108,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  if(meas == 0) {
 	    mefinfo->frames[pt].offset = frameoff;
 	    mefinfo->frames[pt].rms = framerms;
-	    mefinfo->frames[pt].extinc = sysbuf[pt].coeff[0];
+	    mefinfo->frames[pt].extinc += sysbuf[pt].coeff[0];
 	  }
 	  
 	  /* Perform polynomial fit correction */
