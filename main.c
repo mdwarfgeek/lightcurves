@@ -644,7 +644,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     }
 
     snprintf(kbuf, sizeof(kbuf), "EXTC%ld", pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Frame extinction for datapoint %ld", pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Extinction correction for datapoint %ld", pt+1);
     ffpkyf(fits, kbuf, mefinfo->frames[pt].extinc, 4, cbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
