@@ -70,6 +70,8 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 	mag = meflist[mef].zp - meflist[mef].stars[star].medflux[0];
 	rms = 3.0 + log10f(meflist[mef].stars[star].rms);
 
+	cpgsci(1+mef);
+
 	if(meflist[mef].stars[star].cls == -1 &&
 	   meflist[mef].stars[star].bflag == 0 &&
 	   meflist[mef].stars[star].cflag == 0) {  /* BODGE */
@@ -79,8 +81,9 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 	  cpgpt(1, &mag, &rms, 1);
 	  cpgsci(2);
 	  cpgpt(1, &mag, &rms, 22);
-	  cpgsci(1);
 	}
+
+	cpgsci(1);
       }
     }
 
@@ -221,7 +224,9 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 	chi = log10f(meflist[mef].stars[star].chisq /
 		     (meflist[mef].stars[star].nchisq - 1));
 	
+	cpgsci(1+mef);
 	cpgpt(1, &mag, &chi, 1);
+	cpgsci(1);
       }
     }
 
