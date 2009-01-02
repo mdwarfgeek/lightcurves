@@ -65,9 +65,9 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   for(mef = 0; mef < nmefs; mef++) {
     for(star = 0; star < meflist[mef].nstars; star++) {
       /* Use only the ones classified as stars */
-      if(meflist[mef].stars[star].medflux[0] > 0.0 &&
+      if(meflist[mef].stars[star].med > 0.0 &&
 	 meflist[mef].stars[star].rms > 0.0) {
-	mag = meflist[mef].zp - meflist[mef].stars[star].medflux[0];
+	mag = meflist[mef].zp - meflist[mef].stars[star].med;
 	rms = 3.0 + log10f(meflist[mef].stars[star].rms);
 
 	cpgsci(1+mef);
@@ -216,11 +216,11 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   for(mef = 0; mef < nmefs; mef++)
     for(star = 0; star < meflist[mef].nstars; star++) {
       /* Use only the ones classified as stars */
-      if(meflist[mef].stars[star].medflux[0] > 0.0 &&
+      if(meflist[mef].stars[star].med > 0.0 &&
 	 meflist[mef].stars[star].chisq > 0.0 &&
 	 meflist[mef].stars[star].nchisq > 1 &&
 	 meflist[mef].stars[star].cls == -1) {
-	mag = meflist[mef].zp - meflist[mef].stars[star].medflux[0];
+	mag = meflist[mef].zp - meflist[mef].stars[star].med;
 	chi = log10f(meflist[mef].stars[star].chisq /
 		     (meflist[mef].stars[star].nchisq - 1));
 	
