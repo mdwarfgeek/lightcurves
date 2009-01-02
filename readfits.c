@@ -951,7 +951,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   /* Correct to midpoint of observation */
-  mjd += exptime / 86400.0;
+  mjd += 0.5 * exptime / 86400.0;
 
   /* Get telescope location for airmass calculation */
   doairm = 1;
