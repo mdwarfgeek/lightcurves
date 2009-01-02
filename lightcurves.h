@@ -49,7 +49,8 @@ struct lc_star {
   /* Which aperture did we use? */
   float apradius;
 
-  /* RMS and chisq */
+  /* Median flux, RMS and chisq for chosen aperture */
+  float med;
   float rms;
   float chisq;
   long nchisq;

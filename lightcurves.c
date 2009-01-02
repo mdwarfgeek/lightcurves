@@ -204,16 +204,14 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     
     if(opt > 0) {
       medsig(medbuf, opt, &medflux, &rmsflux);
-      mefinfo->stars[star].medflux[0] = medflux;
+      mefinfo->stars[star].med = medflux;
 
       if(opt > 1) {
-	mefinfo->stars[star].sigflux[0] = rmsflux;
 	mefinfo->stars[star].rms = rmsflux;
       }
     }
     else {
-      mefinfo->stars[star].medflux[0] = 0.0;
-      mefinfo->stars[star].sigflux[0] = 0.0;
+      mefinfo->stars[star].med = 0.0;
       mefinfo->stars[star].rms = 0.0;
     }
   }
@@ -233,7 +231,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
     for(pt = 0; pt < mefinfo->nf; pt++) {
       if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerr != 0.0) {
-	tmp = ptbuf[pt].flux - mefinfo->stars[star].medflux[0];
+	tmp = ptbuf[pt].flux - mefinfo->stars[star].med;
 
 	chisq += tmp*tmp / (ptbuf[pt].fluxerr * ptbuf[pt].fluxerr);
 	nchisq++;
