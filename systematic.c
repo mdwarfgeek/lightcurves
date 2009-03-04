@@ -69,7 +69,7 @@ static float polyeval(float dx, float dy, double coeff[50], int degree) {
 
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f,
-		    float *med_r, float *rms_r, char *errstr) {
+		    float *med_r, float *rms_r, long *npt_r, char *errstr) {
   double a[50][50], b[50], coeff[50];
   int ncoeff, ncoeffmax, iter;
   long star, opt;
@@ -417,6 +417,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
   *med_r = medoff;
   *rms_r = sigoff;
+  *npt_r = opt;
 
   return(0);
 

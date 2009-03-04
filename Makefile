@@ -34,6 +34,11 @@ LIGHTCURVES_SRCS=main.c buffer.c chooseap.c intra.c lightcurves.c plots.c system
 	dsolve.c hanning.c medsig.c sortfloat.c sortlong.c cvtunit.c util.c
 LIGHTCURVES_OBJS=${LIGHTCURVES_SRCS:%.c=%.o}
 
+UPDATE_SRCS=update.c buffer.c chooseap.c intra.c lightcurves.c plots.c systematic.c \
+	readfits.c hjd.c sla.c \
+	dsolve.c hanning.c medsig.c sortfloat.c sortlong.c cvtunit.c util.c
+UPDATE_OBJS=${UPDATE_SRCS:%.c=%.o}
+
 TESTBUF_SRCS=testbuf.c buffer.c cvtunit.c util.c
 TESTBUF_OBJS=${TESTBUF_SRCS:%.c=%.o}
 
@@ -44,17 +49,21 @@ TESTBUF_OBJS=${TESTBUF_SRCS:%.c=%.o}
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 
-all: lightcurves testbuf
+all: lightcurves update testbuf
 
 # Rules for lightcurves
 
 lightcurves: $(LIGHTCURVES_OBJS)
 	$(CC) -o $@ $(LIGHTCURVES_OBJS) $(LIBS)
 
+update: $(UPDATE_OBJS)
+	$(CC) -o $@ $(UPDATE_OBJS) $(LIBS)
+
 testbuf: $(TESTBUF_OBJS)
 	$(CC) -o $@ $(TESTBUF_OBJS) $(LIBS)
 
 clean:
 	rm -f $(LIGHTCURVES_OBJS) lightcurves
+	rm -f $(UPDATE_OBJS) update
 	rm -f $(TESTBUF_OBJS) testbuf
 	rm -f *.core *~

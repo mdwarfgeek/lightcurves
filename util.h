@@ -25,6 +25,10 @@
 #define NINT(a) ((int) ((a)+((a) < 0 ? -0.5 : 0.5)))
 #define NLNG(a) ((long) ((a)+((a) < 0 ? -0.5 : 0.5)))
 
+/* --Variables-- */
+
+extern char progname[];
+
 /* --Functions-- */
 
 /* Utility functions */
@@ -40,6 +44,8 @@ void report_err (char *errstr, const char *fmt, ...);
 void report_syserr (char *errstr, const char *fmt, ...);
 
 char *sstrip (char *str);
+
+char **read_file_list (int argc, char **argv, long *nf_r, char *errstr);
 
 /* In libc, but not the headers */
 

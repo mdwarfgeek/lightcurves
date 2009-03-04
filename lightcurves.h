@@ -119,6 +119,12 @@ struct lc_mef {
 
   /* Systematics fitting upper mag limit */
   float syslim;
+
+  /* Fudge factor */
+  float sysbodge;
+
+  /* Aperture selection enabled? */
+  int doapsel;
 };
 
 /* Structure holding disk buffer information */
@@ -186,11 +192,13 @@ float calc_intra (float x, float y, struct intra *corr);
 
 /* Main routine: lightcurves.c */
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
-		 int noapsel, int norenorm, char *errstr);
+		 int norenorm, char *errstr);
+int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
+			char *errstr);
 
 /* Diagnostic plots: plots.c */
 int do_plots (struct lc_mef *meflist, int nmefs,
-	      float medsat, float medlim, float umlim, float sysbodge, char *errstr);
+	      float medsat, float medlim, float umlim, char *errstr);
 
 int plot_corr (float *beforehist, float *beforewthist,
 	       float *corrhist, float *corrwthist,
@@ -202,18 +210,20 @@ int plot_corr (float *beforehist, float *beforewthist,
 /* Systematics correction: systematic.c */
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f,
-		    float *med_r, float *rms_r, char *errstr);
+		    float *med_r, float *rms_r, long *npt_r, char *errstr);
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		      float *medbuf, struct systematic_fit *f, char *errstr);
 
 /* Catalogue and list driven file reading: readfits.c */
+int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
+	     char *errstr);
 int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
-	      int diffmode, float sysbodge,
+	      int diffmode,
 	      char *errstr);
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
-	      int diffmode, float sysbodge,
+	      int diffmode,
 	      char *errstr);
 
 /* Utility functions: dsolve.c, linear.c, medsig.c, sortfloat.c */

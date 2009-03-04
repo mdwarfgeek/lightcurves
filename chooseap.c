@@ -130,6 +130,13 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
     }
   }
 
+  /* Also apply aperture corrections to median fluxes */
+  for(star = 0; star < mefinfo->nstars; star++) {
+    for(aper = 1; aper < NFLUX; aper++)
+      if(mefinfo->stars[star].medflux[aper] != 0.0)
+	mefinfo->stars[star].medflux[aper] -= avapcor[aper];
+  }
+
   return(0);
 
  error:

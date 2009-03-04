@@ -112,8 +112,307 @@ static char *apcor_keys_80[NFLUX] = { "APCOR3",
   (xn) = xnt;									\
 }
 
+/* Reconstruct internal state from a lightcurve file.  This routine
+ * should work in the normal case, but we still need the reference
+ * fluxes for difference imaging - NOT YET IMPLEMENTED.
+ */
+
+int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
+	     char *errstr) {
+  int status = 0, anynull;
+  int ncoluse, col;
+
+  char *colnames[11] = { "x", "y", "class", "pointer", "bflag", "cflag",
+			 "apflux", "aprms", "apradius", "ra", "dec" };
+  int gcols[11];
+
+  int cats_are_80 = 0;
+
+  float exptime, skylev, skynoise, rcore, gain;
+  float apcor[NFLUX], percorr;
+
+  float *xbuf = (float *) NULL, *ybuf, *apbuf, *rabuf, *decbuf;
+  short *clsbuf = (short *) NULL, *bfbuf;
+  long *ptrbuf = (long *) NULL, *cfbuf;
+  float *apmedbuf = (float *) NULL, *aprmsbuf;
+
+  struct lc_star *stars = (struct lc_star *) NULL;
+  long nmeas;
+
+  float umlim, apcor7;
+  long degree;
+
+  long nrows, r, rr, roff, remain, rread, rblksz;
+  int ap;
+
+  /* Get header information */
+  ffgkyj(fits, "NMEAS", &nmeas, (char *) NULL, &status);
+  ffgkyd(fits, "MJDBASE", &(mefinfo->mjdref), (char *) NULL, &status);
+  ffgkye(fits, "SATMAG", &(mefinfo->satmag), (char *) NULL, &status);
+  ffgkye(fits, "FLIM", &(mefinfo->refflim), (char *) NULL, &status);
+  ffgkye(fits, "ZP", &(mefinfo->zp), (char *) NULL, &status);
+  ffgkye(fits, "UMLIM", &umlim, (char *) NULL, &status);
+  ffgkye(fits, "SYSBODG", &(mefinfo->sysbodge), (char *) NULL, &status);
+  ffgkyj(fits, "POLYDEG", &degree, (char *) NULL, &status);
+  ffgkyl(fits, "APSEL", &(mefinfo->doapsel), (char *) NULL, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgkyj: NMEAS");
+    goto error;
+  }
+
+  mefinfo->syslim = mefinfo->zp - umlim;
+  mefinfo->degree = degree;
+
+  /* Simple test for 80-column catalogue */
+  ffgkye(fits, "APCOR7", &apcor7, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST)
+    status = 0;
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: APCOR7");
+    goto error;
+  }
+  else
+    cats_are_80 = 1;
+
+  /* Read keywords for photometry */
+  ffgkye(fits, "EXPTIME", &exptime, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "EXPOSED", &exptime, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      ffgkye(fits, "EXP_TIME", &exptime, (char *) NULL, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffgkye: EXP_TIME");
+	goto error;
+      }
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: EXPOSED");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: EXPTIME");
+    goto error;
+  }
+
+  exptime = fabsf(exptime);
+  if(exptime < 1.0)
+    exptime = 1.0;
+
+  ffgkye(fits, "SKYLEVEL", &skylev, (char *) NULL, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgkye: SKYLEVEL");
+    goto error;
+  }
+
+  ffgkye(fits, "SKYNOISE", &skynoise, (char *) NULL, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgkye: SKYNOISE");
+    goto error;
+  }
+
+  ffgkye(fits, "RCORE", &rcore, (char *) NULL, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgkye: RCORE");
+    goto error;
+  }
+
+  ffgkye(fits, "GAIN", &gain, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "HIERARCH ESO DET OUT1 GAIN", &gain, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      gain = 1.0;  /* !!! */
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: HIERARCH ESO DET OUT1 GAIN");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: GAIN");
+    goto error;
+  }
+
+  for(col = 0; col < NFLUX; col++) {
+    ffgkye(fits, cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col],
+	   &(apcor[col]), (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      apcor[col] = 1.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: %s", 
+		 cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col]);
+      goto error;
+    }
+    else {
+      apcor[col] = powf(10.0, 0.4 * apcor[col]);
+    }
+  }
+
+  ffgkye(fits, "PERCORR", &percorr, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    percorr = 1.0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: PERCORR");
+    goto error;
+  }
+  else {
+    percorr = powf(10.0, 0.4 * percorr);
+  }
+
+  /* Read number of rows */
+  ffgnrw(fits, &nrows, &status);
+  if(status) {
+    fitsio_err(errstr, status, "could not get table dimensions");
+    goto error;
+  }
+
+  /* Get column numbers */
+  ncoluse = sizeof(colnames) / sizeof(colnames[0]);
+  
+  for(col = 0; col < ncoluse; col++) {
+    ffgcno(fits, CASEINSEN, colnames[col], &(gcols[col]), &status);
+    if(status == COL_NOT_UNIQUE)
+      status = 0;  /* ignore */
+    else if(status) {
+      fitsio_err(errstr, status, "ffgcno: %s", colnames[col]);
+      goto error;
+    }
+  }
+  
+  /* Get block size for row I/O */
+  ffgrsz(fits, &rblksz, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgrsz");
+    goto error;
+  }
+  
+  /* Allocate column buffers */
+  xbuf = (float *) malloc(5 * rblksz * sizeof(float));
+  clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
+  ptrbuf = (long *) malloc(2 * rblksz * sizeof(long));
+  apmedbuf = (float *) malloc(2 * rblksz * NFLUX * sizeof(float));
+  if(!xbuf || !clsbuf || !ptrbuf || !apmedbuf) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+  
+  ybuf = xbuf + rblksz;
+  apbuf = xbuf + 2 * rblksz;
+  rabuf = xbuf + 3 * rblksz;
+  decbuf = xbuf + 4 * rblksz;
+
+  bfbuf = clsbuf + rblksz;
+
+  cfbuf = ptrbuf + rblksz;
+
+  aprmsbuf = apmedbuf + NFLUX * rblksz;
+
+  /* Allocate memory for catalogue stars */
+  stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
+  if(!stars) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+
+  /* Read catalogue */
+  roff = 0L;
+  remain = nrows;
+  
+  while(remain > 0) {
+    rread = (remain > rblksz ? rblksz : remain);
+    
+    ffgcve(fits, gcols[0], roff + 1, 1, rread, -999.0, xbuf, &anynull, &status);
+    ffgcve(fits, gcols[1], roff + 1, 1, rread, -999.0, ybuf, &anynull, &status);
+    ffgcvi(fits, gcols[2], roff + 1, 1, rread, 0, clsbuf, &anynull, &status);
+    ffgcvj(fits, gcols[3], roff + 1, 1, rread, 0, ptrbuf, &anynull, &status);
+    ffgcvi(fits, gcols[4], roff + 1, 1, rread, 0, bfbuf, &anynull, &status);
+    ffgcvj(fits, gcols[5], roff + 1, 1, rread, 0, cfbuf, &anynull, &status);
+    ffgcve(fits, gcols[6], roff + 1, 1, rread * NFLUX, -999.0, apmedbuf, &anynull,
+	   &status);
+    ffgcve(fits, gcols[7], roff + 1, 1, rread * NFLUX, -999.0, aprmsbuf, &anynull,
+	   &status);
+    ffgcve(fits, gcols[8], roff + 1, 1, rread, -999.0, apbuf, &anynull, &status);
+    ffgcve(fits, gcols[9], roff + 1, 1, rread, -999.0, rabuf, &anynull,
+	   &status);
+    ffgcve(fits, gcols[10], roff + 1, 1, rread, -999.0, decbuf, &anynull,
+	   &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgcv");
+      goto error;
+    }
+    
+    for(r = 0; r < rread; r++) {
+      rr = roff + r;
+
+      stars[rr].ptr = ptrbuf[r];
+      stars[rr].x = xbuf[r];
+      stars[rr].y = ybuf[r];
+      stars[rr].ra = rabuf[r];
+      stars[rr].dec = decbuf[r];
+      stars[rr].cls = clsbuf[r];
+      stars[rr].bflag = bfbuf[r];
+      stars[rr].cflag = cfbuf[r];
+
+      for(ap = 0; ap < NFLUX; ap++) {
+	stars[rr].medflux[ap] = (apmedbuf[r*NFLUX+ap] > 0.0 ? mefinfo->zp - apmedbuf[r*NFLUX+ap] : -999.0);
+	stars[rr].sigflux[ap] = aprmsbuf[r*NFLUX+ap];
+      }
+
+      stars[rr].apradius = apbuf[r];
+    }
+    
+    roff += rread;
+    remain -= rread;
+  }
+  
+  mefinfo->stars = stars;
+  mefinfo->nstars = nrows;
+
+  mefinfo->refexp = exptime;
+  mefinfo->refsigma = skynoise;
+  mefinfo->refgain = gain;
+  mefinfo->refrcore = rcore;
+
+  memcpy(&(mefinfo->apcor), apcor, sizeof(apcor));
+  mefinfo->percorr = percorr;
+
+  /* Free workspace */
+  free((void *) xbuf);
+  xbuf = (float *) NULL;
+  free((void *) clsbuf);
+  clsbuf = (short *) NULL;
+  free((void *) ptrbuf);
+  ptrbuf = (long *) NULL;
+  free((void *) apmedbuf);
+  apmedbuf = (float *) NULL;
+
+  return(0);
+
+ error:
+  if(xbuf)
+    free((void *) xbuf);
+  if(clsbuf)
+    free((void *) clsbuf);
+  if(ptrbuf)
+    free((void *) ptrbuf);
+  if(apmedbuf)
+    free((void *) apmedbuf);
+  if(stars)
+    free((void *) stars);
+
+  return(1);
+}
+
 int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
-	      int diffmode, float sysbodge,
+	      int diffmode,
 	      char *errstr) {
   int status = 0;
 
@@ -162,7 +461,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     { "stromgren u", 0.51 },
     { "stromgren v", 0.26 },
     { "stromgren b", 0.15 },
-    { "stromgren y", 0.10 }
+    { "stromgren y", 0.10 },
+    { "i+z",         0.10 }  /* MEarth */
   };
 
   /* Read number of rows */
@@ -578,6 +878,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       stars[rout].bflag = (a7buf[r] < 0.0 ? 1 : 0);
       stars[rout].cflag = 0;
 
+      stars[rout].apradius = 1.0;  /* default = rcore */
+
       if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev) {
 	sattmp[nsattmp] = stars[rout].ref[0].flux;
 	nsattmp++;
@@ -634,7 +936,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
-	      int diffmode, float sysbodge,
+	      int diffmode,
 	      char *errstr) {
   fitsfile *fits;
   int status = 0;
@@ -878,6 +1180,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     fitsio_err(errstr, status, "ffgkye: RCORE");
     goto error;
   }
+
+  if(verbose > 0 && rcore != mefinfo->refrcore)
+    printf("Warning: rcore does not match reference: %.3f != %.3f\n",
+	   rcore, mefinfo->refrcore);
 
   ffgkye(fits, "GAIN", &gain, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
@@ -1173,8 +1479,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  }
 
 	  /* Fudge factor */
-	  if(sysbodge > 0.0)
-	    var += sysbodge*sysbodge;
+	  if(mefinfo->sysbodge > 0.0)
+	    var += mefinfo->sysbodge*mefinfo->sysbodge;
 
 	  /* Stash result */
 	  points[r].fluxerr = sqrtf(var);
@@ -1241,10 +1547,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].offset = 0;
   mefinfo->frames[iframe].rms = 0;
   mefinfo->frames[iframe].extinc = 0;
-
-  /* Make sure rcore is correctly inserted into aperture radius */
-  for(r = 0; r < nrows; r++)
-    mefinfo->stars[r].apradius = rcore;
 
   /* Close file */
   ffclos(fits, &status);

@@ -20,11 +20,9 @@
 
 static int write_lc (fitsfile *reff, fitsfile *fits,
 		     struct buffer_info *buf, struct lc_mef *mefinfo,
-		     float sysbodge, int noapsel, char *errstr);
+		     char *errstr);
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 			   char **fnlist, char *errstr);
-
-static char **read_file_list (int argc, char **argv, long *nf_r, char *errstr);
 
 /* Getopt stuff */
 extern char *optarg;
@@ -44,6 +42,8 @@ static void usage (char *av) {
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
 	  "         -n        Do not renormalise median to reference magnitude.\n"
 	  "         -u mag    Set upper mag limit for systematics correction.\n\n"
+	  "Input:\n"
+	  "         -e file   Update existing lightcurves in 'file'.\n\n"
 	  "Output:\n"
 	  "         -g file   Writes good frames list to 'file'.\n"
 	  "         -o file   Writes lightcurves to 'file'.\n"
@@ -107,7 +107,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "ab:df:g:i:no:pqu:v")) != -1)
+  while((c = getopt(argc, argv, "ab:de:f:g:i:no:pqu:v")) != -1)
     switch(c) {
     case 'a':
       noapsel++;
@@ -283,6 +283,8 @@ int main (int argc, char *argv[]) {
     meflist[mef].nstars = 0;
 
     meflist[mef].degree = polydeg;
+    meflist[mef].sysbodge = sysbodge;
+    meflist[mef].doapsel = !noapsel;
 
     meflist[mef].avsigma = 0.0;
     meflist[mef].avapcor = 0.0;
@@ -301,7 +303,7 @@ int main (int argc, char *argv[]) {
     }
 
     /* Read it in */
-    if(read_ref(inf, &(meflist[mef]), diffmode, sysbodge, errstr))
+    if(read_ref(inf, &(meflist[mef]), diffmode, errstr))
       fatal(1, "read_ref: HDU %d: %s", mef+2, errstr);
 
     /* Get disk buffer */
@@ -319,7 +321,7 @@ int main (int argc, char *argv[]) {
 	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
-		  dointra, &(intralist[mef]), diffmode, sysbodge, errstr))
+		  dointra, &(intralist[mef]), diffmode, errstr))
 	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
     }
 
@@ -394,11 +396,11 @@ int main (int argc, char *argv[]) {
       meflist[mef].syslim = meflist[mef].zp - syslim;  /* user-supplied */
 
     /* Call into the main part of the program */
-    if(lightcurves(&buf, &(meflist[mef]), noapsel, norenorm, errstr))
+    if(lightcurves(&buf, &(meflist[mef]), norenorm, errstr))
       fatal(1, "%s", errstr);
 
     /* Calculate average extinction */
-    if(polydeg >= 0) {
+    if(meflist[mef].degree >= 0) {
       meflist[mef].avextinc = 0.0;
       
       for(f = 0; f < nf; f++)
@@ -414,7 +416,7 @@ int main (int argc, char *argv[]) {
       if(verbose)
 	printf(" Writing %s\n", outfile);
 
-      if(write_lc(inf, outf, &buf, &(meflist[mef]), sysbodge, noapsel, errstr))
+      if(write_lc(inf, outf, &buf, &(meflist[mef]), errstr))
 	fatal(1, "write_lc: %s", errstr);
     }
 
@@ -467,7 +469,7 @@ int main (int argc, char *argv[]) {
   /* Do diagnostic plots */
   if(!noplots) {
     if(do_plots(meflist, nmefs, medsat, medlim, syslim < 0.0 ? medsat : syslim,
-		sysbodge, errstr))
+		errstr))
       fatal(1, "do_plots: %s");
   }
 
@@ -500,7 +502,7 @@ int main (int argc, char *argv[]) {
 
 static int write_lc (fitsfile *reff, fitsfile *fits,
 		     struct buffer_info *buf, struct lc_mef *mefinfo,
-		     float sysbodge, int noapsel, char *errstr) {
+		     char *errstr) {
   int status = 0, col, ncols;
 
   char *ttype[] = { "x", "y", "medflux", "rms", "chisq", "nchisq",
@@ -616,8 +618,12 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	 "Zeropoint for magnitudes", &status);
   ffpkyf(fits, "UMLIM", mefinfo->zp - mefinfo->syslim, 4,
 	 "Upper mag limit for fit", &status);
-  ffpkyf(fits, "SYSBODG", sysbodge, 4,
+  ffpkyf(fits, "SYSBODG", mefinfo->sysbodge, 4,
 	 "Systematics fudge factor", &status);
+  ffpkyj(fits, "POLYDEG", mefinfo->degree,
+	 "Polynomial degree in fit", &status);
+  ffpkyl(fits, "APSEL", mefinfo->doapsel,
+	 "Multiple apertures enabled?", &status);
   if(status) {
     fitsio_err(errstr, status, "ffkpy: frame info");
     goto error;
@@ -760,7 +766,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   r = 0;
   frow = 1;
 
-  nfluxuse = (noapsel ? 1 : NFLUX);
+  nfluxuse = (mefinfo->doapsel ? NFLUX : 1);
 
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Fill in buffers */
@@ -1018,95 +1024,4 @@ static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 
  error:
   return(1);
-}
-
-static char **read_file_list (int argc, char **argv, long *nf_r, char *errstr) {
-  char **fnlist = (char **) NULL, **fnp;
-
-  FILE *fp;
-  char line[16384], *p;
-
-  long op, nf, a, f;
-
-  op = 0;
-  nf = 0;
-  for(a = 1; a < argc; a++) {
-    if(*(argv[a]) == '@') {
-      /* @list form */
-      fp = fopen(argv[a] + 1, "r");
-      if(!fp) {
-	report_syserr(errstr, "open: %s", argv[a] + 1);
-	goto error;
-      }
-      
-      /* Count number of lines */
-      while(fgets(line, sizeof(line), fp)) {
-	p = sstrip(line);
-	
-	if(*p != '\0')
-	  nf++;
-      }
-      
-      if(ferror(fp))
-	error(1, "%s: read", argv[a] + 1);
-      
-      rewind(fp);
-
-      /* Allocate buffer space */
-      fnlist = (char **) realloc(fnlist, nf * sizeof(char *));
-      if(!fnlist)
-	error(1, "realloc");
-
-      fnp = fnlist + op;
-
-      f = 0;
-      while(fgets(line, sizeof(line), fp)) {
-	p = sstrip(line);
-	
-	if(*p != '\0') {
-	  *fnp = strdup(p);
-	  if(!*fnp)
-	    error(1, "strdup");
-	  
-	  fnp++;
-	  f++;
-	}
-      }
-
-      op += f;
-
-      if(ferror(fp))
-	error(1, "%s: read", argv[a] + 1);
-
-      if(op != nf)
-	fatal(1, "unexpected number of lines in %s: expected %d, got %d", argv[a]+1, nf, f);
-
-      fclose(fp);
-    }
-    else {
-      /* Single filename */
-      nf++;
-
-      fnlist = (char **) realloc(fnlist, nf * sizeof(char *));
-      if(!fnlist)
-	error(1, "realloc");
-
-      fnp = fnlist + op;
-
-      *fnp = strdup(argv[a]);
-      if(!*fnp)
-	error(1, "strdup");
-
-      op++;
-    }
-  }
-
-  *nf_r = nf;
-
-  return(fnlist);
-
- error:
-  /* we bomb anyway do no need to worry about leaks */
-
-  return((char **) NULL);
 }
