@@ -40,6 +40,7 @@ static void usage (char *av) {
 	  "         -d        Enables difference imaging mode.\n"
 	  "         -f degree Apply polynomial of 'degree' for systematics removal.\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
+	  "         -m        Allow for meridian offset in rms and weighting.\n"
 	  "         -n        Do not renormalise median to reference magnitude.\n"
 	  "         -u mag    Set upper mag limit for systematics correction.\n\n"
 	  "Input:\n"
@@ -79,6 +80,7 @@ int main (int argc, char *argv[]) {
   int dointra = 0;
 
   int noapsel = 0;
+  int domerid = 0;
   int norenorm = 0;
   int polydeg = -1;
 
@@ -107,7 +109,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "ab:de:f:g:i:no:pqu:v")) != -1)
+  while((c = getopt(argc, argv, "ab:de:f:g:i:mno:pqu:v")) != -1)
     switch(c) {
     case 'a':
       noapsel++;
@@ -137,6 +139,9 @@ int main (int argc, char *argv[]) {
       strncpy(intrafile, optarg, sizeof(intrafile)-1);
       intrafile[sizeof(intrafile)-1] = '\0';
       dointra = 1;
+      break;
+    case 'm':
+      domerid = 1;
       break;
     case 'n':
       norenorm = 1;
@@ -285,6 +290,7 @@ int main (int argc, char *argv[]) {
     meflist[mef].degree = polydeg;
     meflist[mef].sysbodge = sysbodge;
     meflist[mef].doapsel = !noapsel;
+    meflist[mef].domerid = domerid;
 
     meflist[mef].avsigma = 0.0;
     meflist[mef].avapcor = 0.0;

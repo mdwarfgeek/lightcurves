@@ -125,6 +125,9 @@ struct lc_mef {
 
   /* Aperture selection enabled? */
   int doapsel;
+
+  /* Account for meridian offsets? */
+  int domerid;
 };
 
 /* Structure holding disk buffer information */

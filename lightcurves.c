@@ -15,14 +15,16 @@
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 		 int norenorm, char *errstr) {
   struct lc_point *ptbuf = (struct lc_point *) NULL;
-  float *medbuf = (float *) NULL;
+  float *medbuf1 = (float *) NULL, *medbuf2;
   long nmedbuf;
+
+  float med1, med2, corr;
 
   int iter, degree;
 
   struct systematic_fit *sysbuf = (struct systematic_fit *) NULL;
 
-  long star, meas, nfluxuse, pt, opt;
+  long star, meas, nfluxuse, pt, opt1, opt2;
 
   float medflux, sigflux, rmsflux, frameoff, framerms;
   float tmp, chisq;
@@ -35,11 +37,13 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   nmedbuf = MAX(mefinfo->nf, mefinfo->nstars);
 
   ptbuf = (struct lc_point *) malloc(nmedbuf * sizeof(struct lc_point));
-  medbuf = (float *) malloc(nmedbuf * sizeof(float));
-  if(!ptbuf || !medbuf) {
+  medbuf1 = (float *) malloc(2 * nmedbuf * sizeof(float));
+  if(!ptbuf || !medbuf1) {
     report_syserr(errstr, "malloc");
     goto error;
   }
+
+  medbuf2 = medbuf1 + nmedbuf;
 
   /* Allocate buffer for systematics fits */
   sysbuf = (struct systematic_fit *) malloc(mefinfo->nf * sizeof(struct systematic_fit));
@@ -81,15 +85,41 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    goto error;
 	  
 	  /* Calculate median flux */
-	  opt = 0;
+	  opt1 = 0;
+	  opt2 = 0;
 	  for(pt = 0; pt < mefinfo->nf; pt++) {
 	    if(ptbuf[pt].flux != 0.0) {
-	      medbuf[opt] = ptbuf[pt].flux;
-	      opt++;
+	      if(mefinfo->domerid && ptbuf[pt].ha > 0.0) {
+		medbuf2[opt2] = ptbuf[pt].flux;
+		opt2++;
+	      }
+	      else {
+		medbuf1[opt1] = ptbuf[pt].flux;
+		opt1++;
+	      }
 	    }
 	  }
-	  
-	  medsig(medbuf, opt, &medflux, &sigflux);
+
+	  if(mefinfo->domerid && opt1 > 0 && opt2 > 0) {
+	    medsig(medbuf1, opt1, &med1, (float *) NULL);
+	    medsig(medbuf2, opt2, &med2, (float *) NULL);
+
+	    corr = 0.5*(med2-med1);
+
+	    opt1 = 0;
+	    for(pt = 0; pt < mefinfo->nf; pt++) {
+	      if(ptbuf[pt].flux != 0.0) {
+		if(ptbuf[pt].ha > 0.0)
+		  medbuf1[opt1] = ptbuf[pt].flux - corr;
+		else
+		  medbuf1[opt1] = ptbuf[pt].flux + corr;
+
+		opt1++;
+	      }
+	    }
+	  }
+
+	  medsig(medbuf1, opt1, &medflux, &sigflux);
 	  mefinfo->stars[star].medflux[meas] = medflux;
 	  mefinfo->stars[star].sigflux[meas] = sigflux;
 	}
@@ -101,7 +131,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    goto error;
 	  
 	  /* Perform polynomial fit correction */
-	  if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf, degree, sysbuf+pt,
+	  if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf1, degree, sysbuf+pt,
 			    &frameoff, &framerms, &framenpt, errstr))
 	    goto error;
 	  
@@ -115,7 +145,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    }
 	    
 	    /* Perform polynomial fit correction */
-	    if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf, errstr))
+	    if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf1, sysbuf, errstr))
 	      goto error;
 	    
 	    /* Write out corrected fluxes */
@@ -134,15 +164,15 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  goto error;
 	
 	/* Calculate median flux */
-	opt = 0;
+	opt1 = 0;
 	for(pt = 0; pt < mefinfo->nf; pt++) {
 	  if(ptbuf[pt].flux != 0.0) {
-	    medbuf[opt] = ptbuf[pt].flux;
-	    opt++;
+	    medbuf1[opt1] = ptbuf[pt].flux;
+	    opt1++;
 	  }
 	}
 	
-	medsig(medbuf, opt, &medflux, &sigflux);
+	medsig(medbuf1, opt1, &medflux, &sigflux);
 	mefinfo->stars[star].medflux[meas] = medflux;
 	mefinfo->stars[star].sigflux[meas] = sigflux;
       }
@@ -150,15 +180,15 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
     if(!norenorm) {
       /* Compute median offset from reference system */
-      opt = 0;
+      opt1 = 0;
       for(star = 0; star < mefinfo->nstars; star++)
 	if(mefinfo->stars[star].medflux[meas] != 0.0 &&
 	   mefinfo->stars[star].sigflux[meas] != 0.0) {
-	  medbuf[opt] = mefinfo->stars[star].medflux[meas] - mefinfo->stars[star].refmag;
-	  opt++;
+	  medbuf1[opt1] = mefinfo->stars[star].medflux[meas] - mefinfo->stars[star].refmag;
+	  opt1++;
 	}
       
-      medsig(medbuf, opt, &medoff, &sigoff);
+      medsig(medbuf1, opt1, &medoff, &sigoff);
       
       /* Apply offset */
       for(pt = 0; pt < mefinfo->nf; pt++) {
@@ -185,15 +215,15 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  goto error;
 	
 	/* Calculate median flux */
-	opt = 0;
+	opt1 = 0;
 	for(pt = 0; pt < mefinfo->nf; pt++) {
 	  if(ptbuf[pt].flux != 0.0) {
-	    medbuf[opt] = ptbuf[pt].flux;
-	    opt++;
+	    medbuf1[opt1] = ptbuf[pt].flux;
+	    opt1++;
 	  }
 	}
 	
-	medsig(medbuf, opt, &medflux, &sigflux);
+	medsig(medbuf1, opt1, &medflux, &sigflux);
 	mefinfo->stars[star].medflux[meas] = medflux;
 	mefinfo->stars[star].sigflux[meas] = sigflux;
       }
@@ -205,7 +235,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   if(mefinfo->doapsel) {
     /* Combine apertures */
-    if(chooseap(buf, mefinfo, ptbuf, medbuf, errstr))
+    if(chooseap(buf, mefinfo, ptbuf, medbuf1, errstr))
       goto error;
   }
 
@@ -219,19 +249,19 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       goto error;
     
     /* Calculate median flux */
-    opt = 0;
+    opt1 = 0;
     for(pt = 0; pt < mefinfo->nf; pt++) {
       if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerr != 0.0) {
-	medbuf[opt] = ptbuf[pt].flux;
-	opt++;
+	medbuf1[opt1] = ptbuf[pt].flux;
+	opt1++;
       }
     }
     
-    if(opt > 0) {
-      medsig(medbuf, opt, &medflux, &rmsflux);
+    if(opt1 > 0) {
+      medsig(medbuf1, opt1, &medflux, &rmsflux);
       mefinfo->stars[star].med = medflux;
 
-      if(opt > 1) {
+      if(opt1 > 1) {
 	mefinfo->stars[star].rms = rmsflux;
       }
     }
@@ -270,8 +300,8 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   /* Free workspace */
   free((void *) ptbuf);
   ptbuf = (struct lc_point *) NULL;
-  free((void *) medbuf);
-  medbuf = (float *) NULL;
+  free((void *) medbuf1);
+  medbuf1 = (float *) NULL;
   free((void *) sysbuf);
   sysbuf = (struct systematic_fit *) NULL;
 
@@ -280,8 +310,8 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
  error:
   if(!ptbuf)
     free((void *) ptbuf);
-  if(!medbuf)
-    free((void *) medbuf);
+  if(!medbuf1)
+    free((void *) medbuf1);
   if(!sysbuf)
     free((void *) sysbuf);
 
