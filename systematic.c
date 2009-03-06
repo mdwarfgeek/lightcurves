@@ -67,6 +67,19 @@ static float polyeval(float dx, float dy, double coeff[50], int degree) {
   return(result);
 }
 
+static float percentile (float *list, long nn, long num, long div) {
+  long ff, ii, rem;
+
+  ff = num * nn;
+  ii = ff / div;
+  rem = ff - ii*div;
+
+  if(ii+1 < nn)
+    return((list[ii] * (div-rem) + list[ii+1] * rem) / div);
+
+  return(list[ii]);
+}
+
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f,
 		    float *med_r, float *rms_r, long *npt_r, char *errstr) {
@@ -74,7 +87,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   int ncoeff, ncoeffmax, iter;
   long star, opt;
   float fmin, fmax;
-  float medrms, sigrms, rmsclip;
+  float rmsclip;
 
   int mfirst;
 
@@ -110,8 +123,6 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     if(data[star].flux > 0.0 &&          /* Has a flux measurement */
        data[star].fluxerr > 0.0 &&       /* And a reliable error */
        !data[star].satur &&              /* Not saturated */
-       !mefinfo->stars[star].bflag &&    /* Not blended */
-       !mefinfo->stars[star].cflag &&    /* No bad pixels */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
       if(mfirst || data[star].flux > fmax) {
 	fmax = data[star].flux;
@@ -156,8 +167,6 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
        mefinfo->stars[star].sigflux[meas] > 0 &&
        data[star].flux > fmin &&
        data[star].flux < fmax &&         /* Not saturated */
-       !mefinfo->stars[star].bflag &&    /* Not blended */
-       !mefinfo->stars[star].cflag &&    /* No bad pixels */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
       medbuf[opt] = mefinfo->stars[star].sigflux[meas];
       opt++;
@@ -165,8 +174,8 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   }
 
   if(opt > 5) {
-    medsig(medbuf, opt, &medrms, &sigrms);
-    rmsclip = medrms + 5*sigrms;  /* clip out junk */
+    sortfloat(medbuf, opt);
+    rmsclip = percentile(medbuf, opt, 9, 10);
   }
   else
     rmsclip = 999.0;  /* I think this should be safe :) */
@@ -180,8 +189,6 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
        mefinfo->stars[star].sigflux[meas] < rmsclip &&
        data[star].flux > fmin &&
        data[star].flux < fmax &&         /* Not saturated */
-       !mefinfo->stars[star].bflag &&    /* Not blended */
-       !mefinfo->stars[star].cflag &&    /* No bad pixels */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
       val = data[star].flux - mefinfo->stars[star].medflux[meas];
 
@@ -242,8 +249,6 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 data[star].flux > fmin &&
 	 data[star].flux < fmax &&         /* Not saturated */
-	 !mefinfo->stars[star].bflag &&    /* Not blended */
-	 !mefinfo->stars[star].cflag &&    /* No bad pixels */
 	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
@@ -284,8 +289,6 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 data[star].flux > fmin &&
 	 data[star].flux < fmax &&         /* Not saturated */
-	 !mefinfo->stars[star].bflag &&    /* Not blended */
-	 !mefinfo->stars[star].cflag &&    /* No bad pixels */
 	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
@@ -354,8 +357,6 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 data[star].flux > fmin &&
 	 data[star].flux < fmax &&         /* Not saturated */
-	 !mefinfo->stars[star].bflag &&    /* Not blended */
-	 !mefinfo->stars[star].cflag &&    /* No bad pixels */
 	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
