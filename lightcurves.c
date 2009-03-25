@@ -32,6 +32,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   long framenpt;
 
   float medoff, sigoff;
+  float framesigm;
 
   /* Allocate temporary workspace for calculating medians */
   nmedbuf = MAX(mefinfo->nf, mefinfo->nstars);
@@ -118,6 +119,14 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      }
 	    }
 	  }
+	  else {
+	    opt1 = 0;
+	    for(pt = 0; pt < mefinfo->nf; pt++)
+	      if(ptbuf[pt].flux != 0.0) {
+		medbuf1[opt1] = ptbuf[pt].flux;
+		opt1++;
+	      }
+	    }
 
 	  medsig(medbuf1, opt1, &medflux, &sigflux);
 	  mefinfo->stars[star].medflux[meas] = medflux;
@@ -132,7 +141,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  
 	  /* Perform polynomial fit correction */
 	  if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf1, degree, sysbuf+pt,
-			    &frameoff, &framerms, &framenpt, errstr))
+			    &frameoff, &framerms, &framesigm, &framenpt, errstr))
 	    goto error;
 	  
 	  /* Trap for no points in fit - discard in this case */
@@ -143,9 +152,10 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      mefinfo->frames[pt].rms = framerms;
 	      mefinfo->frames[pt].extinc += sysbuf[pt].coeff[0];
 	    }
-	    
+
 	    /* Perform polynomial fit correction */
-	    if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf1, sysbuf, errstr))
+	    if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf1, sysbuf,
+				framesigm, errstr))
 	      goto error;
 	    
 	    /* Write out corrected fluxes */
@@ -251,7 +261,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     /* Calculate median flux */
     opt1 = 0;
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerr != 0.0) {
+      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerrcom != 0.0) {
 	medbuf1[opt1] = ptbuf[pt].flux;
 	opt1++;
       }
@@ -285,10 +295,10 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     nchisq = 0;
 
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerr != 0.0) {
+      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerrcom != 0.0) {
 	tmp = ptbuf[pt].flux - mefinfo->stars[star].med;
 
-	chisq += tmp*tmp / (ptbuf[pt].fluxerr * ptbuf[pt].fluxerr);
+	chisq += tmp*tmp / (ptbuf[pt].fluxerrcom * ptbuf[pt].fluxerrcom);
 	nchisq++;
       }
     }
@@ -336,6 +346,8 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
   int aper, useaper;
   float diff, diffmin;
 
+  float framesigm;
+
   /* Allocate temporary workspace for calculating medians */
   nmedbuf = MAX(mefinfo->nf, mefinfo->nstars);
 
@@ -371,7 +383,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	
 	/* Perform polynomial fit correction */
 	if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf, mefinfo->degree, sysbuf+pt,
-			  &frameoff, &framerms, &framenpt, errstr))
+			  &frameoff, &framerms, &framesigm, &framenpt, errstr))
 	  goto error;
 	
 	/* Trap for no points in fit - discard in this case */
@@ -384,7 +396,8 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  }
 	  
 	  /* Perform polynomial fit correction */
-	  if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf, errstr))
+	  if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf,
+			      framesigm, errstr))
 	    goto error;
 	  
 	  /* Write out corrected fluxes */
@@ -445,7 +458,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
     /* Calculate median flux */
     opt = 0;
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerr != 0.0) {
+      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerrcom != 0.0) {
 	medbuf[opt] = ptbuf[pt].flux;
 	opt++;
       }
@@ -479,10 +492,10 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
     nchisq = 0;
 
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerr != 0.0) {
+      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerrcom != 0.0) {
 	tmp = ptbuf[pt].flux - mefinfo->stars[star].med;
 
-	chisq += tmp*tmp / (ptbuf[pt].fluxerr * ptbuf[pt].fluxerr);
+	chisq += tmp*tmp / (ptbuf[pt].fluxerrcom * ptbuf[pt].fluxerrcom);
 	nchisq++;
       }
     }

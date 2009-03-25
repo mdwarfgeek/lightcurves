@@ -51,7 +51,7 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
       ncor = 0;
       for(star = 0; star < mefinfo->nstars; star++)
 	if(refbuf[star].flux > 0.0 && ptbuf[star].flux > 0.0 &&
-	   refbuf[star].fluxerr > 0.0 && ptbuf[star].fluxerr > 0.0 &&
+	   refbuf[star].fluxerrcom > 0.0 && ptbuf[star].fluxerrcom > 0.0 &&
 	   !refbuf[star].satur && !ptbuf[star].satur &&
 	   mefinfo->stars[star].sigflux[aper] > 0 &&
 	   !mefinfo->stars[star].bflag &&
@@ -118,7 +118,7 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 
       /* Apply aperture correction */
       for(pt = 0; pt < mefinfo->nf; pt++)
-	if(ptbuf[pt].flux > 0.0 && ptbuf[pt].fluxerr > 0.0)
+	if(ptbuf[pt].flux > 0.0 && ptbuf[pt].fluxerrcom > 0.0)
 	  ptbuf[pt].flux -= avapcor[useaper];
 
       /* Update aperture size */

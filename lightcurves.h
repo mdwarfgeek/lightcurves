@@ -19,6 +19,7 @@ struct lc_point {
   float y;
   float flux;
   float fluxerr;
+  float fluxerrcom;  /* combined uncertainty including fit */
   float airmass;
   float ha;
   float wt;  /* weight given in computing polynomial corr. */
@@ -213,9 +214,11 @@ int plot_corr (float *beforehist, float *beforewthist,
 /* Systematics correction: systematic.c */
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f,
-		    float *med_r, float *rms_r, long *npt_r, char *errstr);
+		    float *med_r, float *rms_r, float *sigm_r, long *npt_r,
+		    char *errstr);
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
-		      float *medbuf, struct systematic_fit *f, char *errstr);
+		      float *medbuf, struct systematic_fit *f,
+		      float sigm, char *errstr);
 
 /* Catalogue and list driven file reading: readfits.c */
 int read_lc (fitsfile *fits, struct lc_mef *mefinfo,

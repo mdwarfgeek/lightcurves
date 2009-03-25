@@ -82,7 +82,8 @@ static float percentile (float *list, long nn, long num, long div) {
 
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f,
-		    float *med_r, float *rms_r, long *npt_r, char *errstr) {
+		    float *med_r, float *rms_r, float *sigm_r, long *npt_r,
+		    char *errstr) {
   double a[50][50], b[50], coeff[50];
   int ncoeff, ncoeffmax, iter;
   long star, opt;
@@ -98,6 +99,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   int ilast;
 
   float xmin = 0.0, xmax = 0.0, ymin = 0.0, ymax = 0.0, xrange, yrange;
+  float lastsig;  /* kludge to capture sigma of last star used for npt=1 case */
 
 #ifdef DEBUG
   float tmpx[2], tmpy[2], xcord, ycord;
@@ -212,6 +214,8 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
   /* Iteratively solve for best-fitting polynomial */
   ilast = 0;
+
+  lastsig = 0;
 
   for(iter = 0; iter < NITERMAX && !ilast; iter++) {
 #ifdef DEBUG
@@ -364,7 +368,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	dy = mefinfo->stars[star].y - ybar;
 	wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
 		    mefinfo->stars[star].sigflux[meas]);
-            
+
 	pcorr = polyeval(pdx, pdy, coeff, degree);
 	corr = polyeval(dx, dy, b, degree);
 
@@ -376,6 +380,8 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	  medbuf[opt] = val - corr;
 	  opt++;
 
+	  lastsig = data[star].fluxerr;
+	
 #ifdef DEBUG
 	  tmpx[0] = mefinfo->stars[star].x;
 	  tmpy[0] = mefinfo->stars[star].y;
@@ -418,6 +424,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
   *med_r = medoff;
   *rms_r = sigoff;
+  *sigm_r = (opt > 1 ? (opt > ncoeff ? sigoff / sqrt(opt-ncoeff) : 0.0) : lastsig);
   *npt_r = opt;
 
   return(0);
@@ -427,50 +434,28 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 }
 
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
-		      float *medbuf, struct systematic_fit *sysbuf, char *errstr) {
-  long star, f;
+		      float *medbuf, struct systematic_fit *sysbuf,
+		      float sigm, char *errstr) {
+  long star;
   float dx, dy, corr;
-  float corrmin, corrmax;
 
   /* Apply fit */
   for(star = 0; star < mefinfo->nstars; star++) {
     if(data[star].flux > 0.0) {
-#if 0
-      for(f = 0; f < mefinfo->nf; f++) {
-	dx = mefinfo->stars[star].x - sysbuf[f].xbar;
-	dy = mefinfo->stars[star].y - sysbuf[f].ybar;
-
-	corr = polyeval(dx, dy, sysbuf[f].coeff, sysbuf[f].degree);
-
-	medbuf[f] = corr;
-      }
-
-      if(hanning(medbuf, mefinfo->nf, errstr))
-      	goto error;
-
-      corr = medbuf[frame];
-#else
       dx = mefinfo->stars[star].x - sysbuf[frame].xbar;
       dy = mefinfo->stars[star].y - sysbuf[frame].ybar;
 
       corr = polyeval(dx, dy, sysbuf[frame].coeff, sysbuf[frame].degree);
 
-      if(star == 0 || corr < corrmin)
-	corrmin = corr;
-      if(star == 0 || corr > corrmax)
-	corrmax = corr;
-#endif
-
-      //data[star].flux = 13 + corr;
       data[star].flux -= corr;
+
+      if(data[star].fluxerr > 0)
+	data[star].fluxerrcom = sqrt(data[star].fluxerr*data[star].fluxerr + sigm*sigm);
+      else
+	data[star].fluxerrcom = 0.0;
     }
   }
 
-  //printf("P-P %.4f Overall %.4f\n", corrmax - corrmin, sysbuf[frame].coeff[0]);
-
   return(0);
-
- error:
-  return(1);
 }
 

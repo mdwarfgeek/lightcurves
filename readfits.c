@@ -1484,10 +1484,12 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
 	  /* Stash result */
 	  points[r].fluxerr = sqrtf(var);
+	  points[r].fluxerrcom = points[r].fluxerr;
 	}
 	else {
 	  points[r].flux = 0.0;
 	  points[r].fluxerr = 0.0;
+	  points[r].fluxerrcom = 0.0;
 	}
 
 	/* Apply intrapixel correction if requested */

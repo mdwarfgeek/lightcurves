@@ -830,8 +830,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	  satflag++;
 	}
 
-	if(lcbuf[pt].fluxerr > 0.0)
-	  fluxerrbuf[soff+pt] = lcbuf[pt].fluxerr;
+	if(lcbuf[pt].fluxerrcom > 0.0)
+	  fluxerrbuf[soff+pt] = lcbuf[pt].fluxerrcom;
 	else
 	  fluxerrbuf[soff+pt] = -999.0;
       }

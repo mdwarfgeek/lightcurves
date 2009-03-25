@@ -784,8 +784,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	  satflag++;
 	}
 
-	if(lcbuf[pt].fluxerr > 0.0)
-	  fluxerrbuf[nmeasexist+pt] = lcbuf[pt].fluxerr;
+	if(lcbuf[pt].fluxerrcom > 0.0)
+	  fluxerrbuf[nmeasexist+pt] = lcbuf[pt].fluxerrcom;
 	else
 	  fluxerrbuf[nmeasexist+pt] = -999.0;
       }
