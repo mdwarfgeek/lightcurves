@@ -771,7 +771,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   skyvar = M_PI * rcore * rcore * skynoise * skynoise;
   tpi = 2.0 * M_PI;
 
-  /* ESO WFI needs a scattered light correction too */
+  /* Telescope/instrument-specific kludges */
   ffgkys(fits, "INSTRUME", inst, (char *) NULL, &status);
   ffgkys(fits, "TELESCOP", tel, (char *) NULL, &status);
   if(status == KEY_NO_EXIST)
@@ -781,8 +781,13 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     goto error;
   }
   else {
+    /* ESO WFI needs a scattered light correction too */
     if(!strcasecmp(inst, "WFI") && !strcasecmp(tel, "MPI-2.2"))
       scatcoeff = -1.5;
+    
+    /* WFCAM has incorrect gain in fits headers */
+    if(!strcasecmp(inst, "WFCAM") && !strcasecmp(tel, "UKIRT"))
+      gain /= 1.2;
   }
 
   /* Get block size for row I/O */
@@ -1330,6 +1335,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     else if(!strcasecmp(inst, "WFI") && !strcasecmp(tel, "MPI-2.2")) {
       scatcoeff = -1.5;
       diam = 2200;
+    }
+    else if(!strcasecmp(inst, "WFCAM") && !strcasecmp(tel, "UKIRT")) {
+      gain /= 1.2;
+      diam = 3803;
     }
     else if(!strcasecmp(inst, "CCDMosaThin1"))
       diam = 3934;
