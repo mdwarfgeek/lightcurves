@@ -152,7 +152,6 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   ffgkye(fits, "FLIM", &(mefinfo->refflim), (char *) NULL, &status);
   ffgkye(fits, "ZP", &(mefinfo->zp), (char *) NULL, &status);
   ffgkye(fits, "UMLIM", &umlim, (char *) NULL, &status);
-  ffgkye(fits, "SYSBODG", &(mefinfo->sysbodge), (char *) NULL, &status);
   ffgkyj(fits, "POLYDEG", &degree, (char *) NULL, &status);
   ffgkyl(fits, "APSEL", &(mefinfo->doapsel), (char *) NULL, &status);
   if(status) {
@@ -1486,10 +1485,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
 	    var += scrms*scrms;
 	  }
-
-	  /* Fudge factor */
-	  if(mefinfo->sysbodge > 0.0)
-	    var += mefinfo->sysbodge*mefinfo->sysbodge;
 
 	  /* Stash result */
 	  points[r].fluxerr = sqrtf(var);

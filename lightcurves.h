@@ -70,6 +70,9 @@ struct lc_frame {
 
   /* Delta(mag) from median - ie. zero order coefficient from fit */
   float extinc;
+
+  /* Uncertainty contribution from systematics fit */
+  float sigm;
 };
 
 struct lc_mef {
@@ -108,6 +111,9 @@ struct lc_mef {
   /* Average of extinction for theoretical curve */
   float avextinc;
 
+  /* Average of sigma_m for theoretical curve */
+  float avsigm;
+
   /* Scintillation for theoretical curve */
   float avscint;
 
@@ -120,9 +126,6 @@ struct lc_mef {
 
   /* Systematics fitting upper mag limit */
   float syslim;
-
-  /* Fudge factor */
-  float sysbodge;
 
   /* Aperture selection enabled? */
   int doapsel;

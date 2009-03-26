@@ -95,7 +95,6 @@ int main (int argc, char *argv[]) {
 
   int noplots = 0;
   int diffmode = 0;
-  float sysbodge = 0.0;
 
   /* Set the program name for error reporting */
   if(argv[0])
@@ -109,18 +108,10 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "ab:de:f:g:i:mno:pqu:v")) != -1)
+  while((c = getopt(argc, argv, "ade:f:g:i:mno:pqu:v")) != -1)
     switch(c) {
     case 'a':
       noapsel++;
-      break;
-    case 'b':
-      sysbodge = (float) strtod(optarg, &ep);
-      if(*ep != '\0' || sysbodge < 0)
-	fatal(1, "invalid systematics bodge value: %s", optarg);
-
-      sysbodge /= 1000;  /* convert to mag */
-
       break;
     case 'd':
       diffmode++;
@@ -288,7 +279,6 @@ int main (int argc, char *argv[]) {
     meflist[mef].nstars = 0;
 
     meflist[mef].degree = polydeg;
-    meflist[mef].sysbodge = sysbodge;
     meflist[mef].doapsel = !noapsel;
     meflist[mef].domerid = domerid;
 
@@ -408,14 +398,20 @@ int main (int argc, char *argv[]) {
     /* Calculate average extinction */
     if(meflist[mef].degree >= 0) {
       meflist[mef].avextinc = 0.0;
-      
-      for(f = 0; f < nf; f++)
+      meflist[mef].avsigm = 0.0;
+
+      for(f = 0; f < nf; f++) {
 	meflist[mef].avextinc += powf(10.0, -0.4 * meflist[mef].frames[f].extinc);
-      
+	meflist[mef].avsigm += meflist[mef].frames[f].sigm;
+      }      
+
       meflist[mef].avextinc /= nf;
+      meflist[mef].avsigm /= nf;
     }
-    else
+    else {
       meflist[mef].avextinc = 1.0;
+      meflist[mef].avsigm = 0.0;
+    }
 
     /* Write out lightcurves for this MEF if requested */
     if(dooutput) {
@@ -624,8 +620,6 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	 "Zeropoint for magnitudes", &status);
   ffpkyf(fits, "UMLIM", mefinfo->zp - mefinfo->syslim, 4,
 	 "Upper mag limit for fit", &status);
-  ffpkyf(fits, "SYSBODG", mefinfo->sysbodge, 4,
-	 "Systematics fudge factor", &status);
   ffpkyj(fits, "POLYDEG", mefinfo->degree,
 	 "Polynomial degree in fit", &status);
   ffpkyl(fits, "APSEL", mefinfo->doapsel,
