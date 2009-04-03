@@ -1553,6 +1553,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].offset = 0;
   mefinfo->frames[iframe].rms = 0;
   mefinfo->frames[iframe].extinc = 0;
+  mefinfo->frames[iframe].sigm = 0;
 
   /* Close file */
   ffclos(fits, &status);
