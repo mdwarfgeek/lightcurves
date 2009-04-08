@@ -645,7 +645,11 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   if(status == KEY_NO_EXIST) {
     status = 0;
     ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
-    if(status) {
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      magzpt = 25.0;
+    }
+    else if(status) {
       fitsio_err(errstr, status, "ffgkye: ZMAG");
       goto error;
     }
