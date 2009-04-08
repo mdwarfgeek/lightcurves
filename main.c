@@ -36,7 +36,6 @@ static void usage (char *av) {
   fprintf(stderr,
 	  "Lightcurve processing:\n"
 	  "         -a        Disables aperture selection code.\n"
-	  "         -b bfac   Add 'bfac' mmag in quadrature with errors.\n"
 	  "         -d        Enables difference imaging mode.\n"
 	  "         -f degree Apply polynomial of 'degree' for systematics removal.\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
