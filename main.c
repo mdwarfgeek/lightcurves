@@ -43,8 +43,6 @@ static void usage (char *av) {
 	  "         -m        Allow for meridian offset in rms and weighting.\n"
 	  "         -n        Do not renormalise median to reference magnitude.\n"
 	  "         -u mag    Set upper mag limit for systematics correction.\n\n"
-	  "Input:\n"
-	  "         -e file   Update existing lightcurves in 'file'.\n\n"
 	  "Output:\n"
 	  "         -g file   Writes good frames list to 'file'.\n"
 	  "         -o file   Writes lightcurves to 'file'.\n"
@@ -108,7 +106,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "ade:f:g:i:mno:pqu:v")) != -1)
+  while((c = getopt(argc, argv, "adf:g:i:mno:pqu:v")) != -1)
     switch(c) {
     case 'a':
       noapsel++;
