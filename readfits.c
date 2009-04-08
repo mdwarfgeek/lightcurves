@@ -648,6 +648,9 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     if(status == KEY_NO_EXIST) {
       status = 0;
       magzpt = 25.0;
+
+      if(verbose)
+	printf("Warning: using default magzpt = %.1f\n", magzpt);
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkye: ZMAG");
