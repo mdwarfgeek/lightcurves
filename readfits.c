@@ -1576,7 +1576,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].mjd = mjd;
   mefinfo->frames[iframe].seeing = seeing;
 
-  /* Initialise these (the last one is cumulative) */
+  /* Initialise these (extinc is cumulative) */
   mefinfo->frames[iframe].offset = 0;
   mefinfo->frames[iframe].rms = 0;
   mefinfo->frames[iframe].extinc = 0;
