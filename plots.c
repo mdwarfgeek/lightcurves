@@ -22,8 +22,8 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   int mef;
 
   float *medbuf1 = (float *) NULL, *medbuf2, *medbuf3, *medbuf4;
-  float *medbuf5, *medbuf6, *medbuf7, *medbuf8;
-  float gain, rcore, sigma, avzp, avapcor, avextinc, avsigm, avscint;
+  float *medbuf5, *medbuf6, *medbuf7, *medbuf8, *medbuf9;
+  float gain, rcore, sigma, skyfiterr, avzp, avapcor, avextinc, avsigm, avscint;
 
   float *theox = (float *) NULL, *theop, *theos, *theoy, *theoys;
   long t, ntheo;
@@ -40,7 +40,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   cpgsch(1.4);
 
   /* Allocate workspace for median parameters */
-  medbuf1 = (float *) malloc(8 * nmefs * sizeof(float));
+  medbuf1 = (float *) malloc(9 * nmefs * sizeof(float));
   if(!medbuf1) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -53,6 +53,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   medbuf6 = medbuf1 + 5 * nmefs;
   medbuf7 = medbuf1 + 6 * nmefs;
   medbuf8 = medbuf1 + 7 * nmefs;
+  medbuf9 = medbuf1 + 8 * nmefs;
 
   /* RMS plot */
   magmin = MIN(medsat, umlim);
@@ -91,21 +92,23 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     medbuf1[mef] = meflist[mef].refgain;
     medbuf2[mef] = meflist[mef].refrcore;
     medbuf3[mef] = meflist[mef].avsigma;
-    medbuf4[mef] = meflist[mef].zp;
-    medbuf5[mef] = meflist[mef].avapcor;
-    medbuf6[mef] = meflist[mef].avextinc;
-    medbuf7[mef] = meflist[mef].avsigm;
-    medbuf8[mef] = meflist[mef].avscint;
+    medbuf4[mef] = meflist[mef].avskyfit;
+    medbuf5[mef] = meflist[mef].zp;
+    medbuf6[mef] = meflist[mef].avapcor;
+    medbuf7[mef] = meflist[mef].avextinc;
+    medbuf8[mef] = meflist[mef].avsigm;
+    medbuf9[mef] = meflist[mef].avscint;
   }
 
   medsig(medbuf1, nmefs, &gain, (float *) NULL);
   medsig(medbuf2, nmefs, &rcore, (float *) NULL);
   medsig(medbuf3, nmefs, &sigma, (float *) NULL);
-  medsig(medbuf4, nmefs, &avzp, (float *) NULL);
-  medsig(medbuf5, nmefs, &avapcor, (float *) NULL);
-  medsig(medbuf6, nmefs, &avextinc, (float *) NULL);
-  medsig(medbuf7, nmefs, &avsigm, (float *) NULL);
-  medsig(medbuf8, nmefs, &avscint, (float *) NULL);
+  medsig(medbuf4, nmefs, &skyfiterr, (float *) NULL);
+  medsig(medbuf5, nmefs, &avzp, (float *) NULL);
+  medsig(medbuf6, nmefs, &avapcor, (float *) NULL);
+  medsig(medbuf7, nmefs, &avextinc, (float *) NULL);
+  medsig(medbuf8, nmefs, &avsigm, (float *) NULL);
+  medsig(medbuf9, nmefs, &avscint, (float *) NULL);
 
   free((void *) medbuf1);
   medbuf1 = (float *) NULL;
@@ -131,18 +134,20 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   area = M_PI * rcore * rcore;
 
   if(verbose)
-    printf("avzp=%g gain=%g sigma=%g area=%g avextinc=%g avsigm=%g avscint=%g\n",
-	   avzp, gain, sigma, area, avextinc, avsigm, avscint);
+    printf("avzp=%g gain=%g sigma=%g skyfiterr=%g area=%g avextinc=%g avsigm=%g avscint=%g\n",
+	   avzp, gain, sigma, skyfiterr, area, avextinc, avsigm, avscint);
 
   for(t = 0; t < ntheo; t++) {
     mag = t * 0.01 + magmin;
 
     photons = powf(10.0, 0.4 * (avzp - mag)) * gain;
     tmp = 2.5 * loge * sqrtf(photons +
-			     area * (gain * sigma * sigma)) / photons;
+			     area * (gain * sigma * sigma) +
+			     area * area * (gain * skyfiterr * skyfiterr)) / photons;
 
     tmpp = 2.5 * loge * sqrtf(photons) / photons;
-    tmps = 2.5 * loge * sqrtf(area * (gain * sigma * sigma)) / photons;
+    tmps = 2.5 * loge * sqrtf(area * (gain * sigma * sigma) +
+			      area * area * (gain * skyfiterr * skyfiterr)) / photons;
 
     theox[t] = mag;
     theop[t] = 3.0 + log10f(tmpp);

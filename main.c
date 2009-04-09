@@ -280,6 +280,7 @@ int main (int argc, char *argv[]) {
     meflist[mef].domerid = domerid;
 
     meflist[mef].avsigma = 0.0;
+    meflist[mef].avskyfit = 0.0;
     meflist[mef].avapcor = 0.0;
     meflist[mef].avscint = 0.0;
 
@@ -323,6 +324,7 @@ int main (int argc, char *argv[]) {
 
     /* Sort out averages */
     meflist[mef].avsigma = sqrtf(meflist[mef].avsigma / nf);
+    meflist[mef].avskyfit = sqrtf(meflist[mef].avskyfit / nf);
     meflist[mef].avapcor /= nf;
     meflist[mef].avscint /= nf;
 

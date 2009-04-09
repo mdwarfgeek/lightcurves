@@ -105,6 +105,9 @@ struct lc_mef {
   /* Average of sigma for theoretical curve */
   float avsigma;
 
+  /* Average of sky fit error for theoretical curve */
+  float avskyfit;
+
   /* Average of aperture correction for theoretical curve */
   float avapcor;
 

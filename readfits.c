@@ -427,7 +427,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
   float tpa, tpd, a, b, c, d, e, f, projp1, projp3, secd, tand;
   float skylev, skynoise, satlev, exptime, rcore, gain, magzpt, percorr;
-  float skyvar, tpi;
+  float tpi;
   float apcor[NFLUX];
 
   long nrows, rblksz, roff, rout, remain, rread, r;
@@ -774,7 +774,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   else
     mefinfo->zp = magzpt + 2.5 * log10f(exptime) - (airmass - 1.0)*extinct;
 
-  skyvar = M_PI * rcore * rcore * skynoise * skynoise;
   tpi = 2.0 * M_PI;
 
   /* Telescope/instrument-specific kludges */
@@ -858,7 +857,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
 	stars[rout].ref[col].flux = fluxbuf[r] * apcor[col] * percorr;
 	stars[rout].ref[col].fluxerr = fabsf(fluxbuf[r]) * apcor[col] / gain;
-	/* +skyvar * flux_apers[col] * flux_apers[col] ? */
+	/* sky contribution ? only affects normalisation I think but not sure */
 
 	/* Store reference magnitude for this star */
 	if(col == 0)
@@ -963,7 +962,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   float tpa, tpd, a, b, c, d, e, f, projp1, projp3, secd, tand;
   float seeing, skylev, skynoise, satlev, exptime, rcore, gain, percorr;
-  float skyvar, tpi, tmp, expfac;
+  float skyvar, area, tpi, tmp, expfac;
   double mjd;
 
   float apcor[NFLUX];
@@ -980,8 +979,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   double amprms[21], aoprms[14];
   unsigned char doairm;
 
-  float diam, rms, var, sc, scrms, avscint;
-  long navscint;
+  float diam, rms, var, sc, scrms, avskyfiterr, avscint;
+  float *skyfiterrbuf = (float *) NULL;
+  long navskyfiterr, navscint;
 
   int cats_are_80 = 0;
 
@@ -1210,7 +1210,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
-  skyvar = M_PI * rcore * rcore * skynoise * skynoise;
   tpi = 2.0 * M_PI;
 
   for(col = 0; col < NFLUX; col++) {
@@ -1393,10 +1392,19 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
+  /* Allocate memory for medians */
+  skyfiterrbuf = (float *) malloc(nrows * sizeof(float));
+  if(!skyfiterrbuf) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+
   /* Read catalogue */
   roff = 0L;
   remain = nrows;
   rout = 0L;
+
+  navskyfiterr = 0;
 
   avscint = 0;
   navscint = 0;
@@ -1447,10 +1455,18 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  points[r].ha = -999.0;
 	}
 
+	area = M_PI * rcore * rcore * flux_apers[col] * flux_apers[col];
+	skyvar = skynoise * skynoise * area +
+	         skyrmsbuf[r] * skyrmsbuf[r] * area * area;
+
+	if(col == 0) {  /* accumulate only once! */
+	  skyfiterrbuf[navskyfiterr] = skyrmsbuf[r];
+	  navskyfiterr++;
+	}
+
 	if(diffmode) {
 	  flux = fluxbuf[r] * mefinfo->apcor[col] * mefinfo->percorr;
-	  fluxerr = fabsf(fluxbuf[r]) * mefinfo->apcor[col] / gain +
-	    (skyvar + skyrmsbuf[r]*skyrmsbuf[r]) * flux_apers[col] * flux_apers[col];
+	  fluxerr = (fabsf(fluxbuf[r]) * mefinfo->apcor[col] / gain + skyvar);
 
 	  if(flux == 0.0 || mefinfo->stars[rout].ref[col].flux == 0.0)
 	    flux = 0.0;
@@ -1463,8 +1479,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	}
 	else {
 	  flux = fluxbuf[r] * apcor[col] * percorr;
-	  fluxerr = fabsf(fluxbuf[r]) * apcor[col] / gain +
-	    (skyvar + skyrmsbuf[r]*skyrmsbuf[r]) * flux_apers[col] * flux_apers[col];
+	  fluxerr = (fabsf(fluxbuf[r]) * apcor[col] / gain + skyvar);
 
 	  if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev || mefinfo->stars[rout].ref[col].satur)
 	    points[r].satur = 1;
@@ -1539,13 +1554,18 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   free((void *) points);
   points = (struct lc_point *) NULL;
 
-  /* Accumulate average sigma */
-  tmp = skynoise*skynoise * expfac;
-
+  /* Accumulate averages of noise contributions */
+  tmp = skynoise * skynoise * expfac;
+  
   if(diffmode)
     mefinfo->avsigma += tmp + mefinfo->refsigma * mefinfo->refsigma;
   else
     mefinfo->avsigma += tmp;
+
+  if(navskyfiterr > 0) {
+    medsig(skyfiterrbuf, navskyfiterr, &avskyfiterr, (float *) NULL);
+    mefinfo->avskyfit += avskyfiterr * avskyfiterr * expfac;
+  }
 
   mefinfo->avapcor += apcor[0];
 
@@ -1562,6 +1582,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].extinc = 0;
   mefinfo->frames[iframe].sigm = 0;
 
+  free((void *) skyfiterrbuf);
+  skyfiterrbuf = (float *) NULL;
+
   /* Close file */
   ffclos(fits, &status);
   if(status) {
@@ -1576,6 +1599,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     free((void *) xbuf);
   if(points)
     free((void *) points);
+  if(skyfiterrbuf)
+    free((void *) skyfiterrbuf);
 
   return(1);
 }
