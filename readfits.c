@@ -975,7 +975,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   float xexpect, yexpect;
 
-  double lat, lon, height, apra, apdec, aob, zob, hob, dob, rob;
+  char latstr[FLEN_VALUE] = { '\0' }, lonstr[FLEN_VALUE] = { '\0' };
+  char heightstr[FLEN_VALUE] = { '\0' };
+  double lat, lon, height = 0, apra, apdec, aob, zob, hob, dob, rob;
   double amprms[21], aoprms[14];
   unsigned char doairm;
 
@@ -984,6 +986,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   long navskyfiterr, navscint;
 
   int cats_are_80 = 0;
+  char *ep;
 
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
@@ -1200,7 +1203,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   if(status == KEY_NO_EXIST) {
     status = 0;
     ffgkye(fits, "HIERARCH ESO DET OUT1 GAIN", &gain, (char *) NULL, &status);
-    if(status) {
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      gain = 1.0;  /* !!! */
+    }
+    else if(status) {
       fitsio_err(errstr, status, "ffgkye: HIERARCH ESO DET OUT1 GAIN");
       goto error;
     }
@@ -1272,38 +1279,82 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   /* Get telescope location for airmass calculation */
   doairm = 1;
   
-  ffgkyd(fits, "LATITUDE", &lat, (char *) NULL, &status);
+  ffgkys(fits, "LATITUDE", latstr, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    doairm = 0;
+    ffgkys(fits, "OBSLAT", latstr, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      doairm = 0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkys: OBSLAT");
+      goto error;
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: LATITUDE");
+    fitsio_err(errstr, status, "ffgkys: LATITUDE");
     goto error;
   }
-  else
-    lat *= DEG_TO_RAD;
+
+  if(latstr[0]) {
+    lat = strtod(latstr, &ep) * DEG_TO_RAD;
+    if(*ep != '\0') {
+      if(base60_to_10(latstr, &ep, ":", UNIT_DEG, &lat, UNIT_RAD))
+	report_err(errstr, "could not understand latitude: %s", latstr);
+    }
+  }
   
-  ffgkyd(fits, "LONGITUD", &lon, (char *) NULL, &status);
+  ffgkys(fits, "LONGITUD", lonstr, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    doairm = 0;
+    ffgkys(fits, "OBSLONG", lonstr, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      doairm = 0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkys: OBSLONG");
+      goto error;
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: LONGITUD");
+    fitsio_err(errstr, status, "ffgkys: LONGITUD");
     goto error;
   }
-  else
-    lon *= DEG_TO_RAD;
+
+  if(lonstr[0]) {
+    lon = strtod(lonstr, &ep) * DEG_TO_RAD;
+    if(*ep != '\0') {
+      if(base60_to_10(lonstr, &ep, ":", UNIT_DEG, &lon, UNIT_RAD))
+	report_err(errstr, "could not understand longitude: %s", latstr);
+    }
+  }
   
-  ffgkyd(fits, "HEIGHT", &height, (char *) NULL, &status);
+  ffgkys(fits, "HEIGHT", heightstr, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    height = 0;
+    ffgkys(fits, "OBSALT", heightstr, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      height = 0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkys: OBSALT");
+      goto error;
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: HEIGHT");
+    fitsio_err(errstr, status, "ffgkys: HEIGHT");
     goto error;
+  }
+
+  if(heightstr[0]) {
+    height = strtod(heightstr, &ep);
+    if(*ep != '\0' && *ep != 'm') {
+      report_err(errstr, "could not understand height: %s", heightstr);
+      goto error;
+    }
   }
 
   if(doairm) {
