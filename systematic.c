@@ -148,6 +148,9 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   if(mefinfo->syslim >= 0.0)
     /* User override */
     fmax = mefinfo->syslim;
+  else
+    /* Store it */
+    mefinfo->syslim = fmax;
 
   mefinfo->satclip[meas] = fmax;
 
