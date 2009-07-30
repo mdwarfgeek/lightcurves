@@ -36,41 +36,43 @@ static char *apcor_keys_80[NFLUX] = { "APCOR3",
 				      "APCOR5" };
 
 
-#define RADECZP(x1, y1, ra, dec) {						\
-  float x, y, xi, xn, rv, rfac;							\
-  float aa, alpha, delta;							\
-										\
-  x = x1 - c;									\
-  y = y1 - f;									\
-										\
-  xi = a * x + b * y;								\
-  xn = d * x + e * y;								\
-  rv = sqrtf(xi * xi + xn * xn);						\
-										\
-  rfac = projp1 + projp3 * rv * rv;   /* NB this is only a 1st order approx */	\
-  rv /= rfac;									\
-										\
-  rfac = projp1 + projp3 * rv * rv;   /* now 2nd order correction		\
-                                     * accurate to few 100ths of pixel */	\
-  xi /= rfac;									\
-  xn /= rfac;									\
-										\
-  aa    = atanf(xi * secd / (1.0 - xn * tand));					\
-  alpha = aa + tpa;								\
-										\
-  if(xi != 0.0)									\
-    delta = atanf((xn + tand) * sinf(aa) / (xi * secd));			\
-  else										\
-    delta = atanf((xn + tand) / (1.0 - xn * tand));				\
-										\
-  if(alpha > tpi)								\
-    alpha -= tpi;								\
-										\
-  if(alpha < 0.0)								\
-    alpha += tpi;								\
-										\
-  (ra)  = alpha;								\
-  (dec) = delta;								\
+#define RADECZP(x1, y1, ra, dec) {					\
+  float x, y, xi, xn, rv, rfac;						\
+  float aa, alpha, delta;						\
+									\
+  x = x1 - c;								\
+  y = y1 - f;								\
+									\
+  xi = a * x + b * y;							\
+  xn = d * x + e * y;							\
+  rv = sqrtf(xi * xi + xn * xn);					\
+									\
+  /* NB this is only a 1st order approx */				\
+  rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;	\
+  rv /= rfac;								\
+									\
+  /* now 2nd order correction						\
+   * accurate to few 100ths of pixel */					\
+  rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;   	\
+  xi /= rfac;								\
+  xn /= rfac;								\
+									\
+  aa    = atanf(xi * secd / (1.0 - xn * tand));				\
+  alpha = aa + tpa;							\
+									\
+  if(xi != 0.0)								\
+    delta = atanf((xn + tand) * sinf(aa) / (xi * secd));		\
+  else									\
+    delta = atanf((xn + tand) / (1.0 - xn * tand));			\
+									\
+  if(alpha > tpi)							\
+    alpha -= tpi;							\
+									\
+  if(alpha < 0.0)							\
+    alpha += tpi;							\
+									\
+  (ra)  = alpha;							\
+  (dec) = delta;							\
 }
 
 #define XYZP(ra, dec, x, y) {							\
@@ -80,7 +82,7 @@ static char *apcor_keys_80[NFLUX] = { "APCOR3",
   xn = (tan(dec) - tand * cos(ra - tpa)) / (tand * tan(dec) + cos(ra - tpa));	\
 										\
   rp = sqrtf(xi * xi + xn * xn);						\
-  rfac = projp1 + projp3 * rp * rp;						\
+  rfac = projp1 + projp3 * rp * rp + projp5 * rp * rp * rp * rp;		\
   xi *= rfac;									\
   xn *= rfac;									\
 										\
@@ -90,26 +92,28 @@ static char *apcor_keys_80[NFLUX] = { "APCOR3",
   y = (xn * a - xi * d) / denom + f;						\
 }
 
-#define XIXNZP(x1, y1, xi, xn) {						\
-  float x, y, xit, xnt, rv, rfac;							\
-										\
-  x = x1 - c;									\
-  y = y1 - f;									\
-										\
-  xit = a * x + b * y;								\
-  xnt = d * x + e * y;								\
-  rv = sqrtf(xit * xit + xnt * xnt);						\
-										\
-  rfac = projp1 + projp3 * rv * rv;   /* NB this is only a 1st order approx */	\
-  rv /= rfac;									\
-										\
-  rfac = projp1 + projp3 * rv * rv;   /* now 2nd order correction		\
-                                       * accurate to few 100ths of pixel */	\
-  xi /= rfac;									\
-  xn /= rfac;									\
-										\
-  (xi) = xit;									\
-  (xn) = xnt;									\
+#define XIXNZP(x1, y1, xi, xn) {					\
+  float x, y, xit, xnt, rv, rfac;					\
+									\
+  x = x1 - c;								\
+  y = y1 - f;								\
+									\
+  xit = a * x + b * y;							\
+  xnt = d * x + e * y;							\
+  rv = sqrtf(xit * xit + xnt * xnt);					\
+									\
+  /* NB this is only a 1st order approx */				\
+  rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;	\
+  rv /= rfac;								\
+									\
+  /* now 2nd order correction						\
+   * accurate to few 100ths of pixel */					\
+  rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;   	\
+  xi /= rfac;								\
+  xn /= rfac;								\
+									\
+  (xi) = xit;								\
+  (xn) = xnt;								\
 }
 
 /* Reconstruct internal state from a lightcurve file.  This routine
@@ -425,7 +429,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float *sattmp = (float *) NULL;
   long nsattmp;
 
-  float tpa, tpd, a, b, c, d, e, f, projp1, projp3, secd, tand;
+  float tpa, tpd, a, b, c, d, e, f, projp1, projp3, projp5, secd, tand;
   float skylev, skynoise, satlev, exptime, rcore, gain, magzpt, percorr;
   float tpi;
   float apcor[NFLUX];
@@ -533,23 +537,57 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     goto error;
   }
 
-  ffgkye(fits, "PROJP1", &projp1, (char *) NULL, &status);
+  ffgkye(fits, "PV2_1", &projp1, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    projp1 = 1.0;
+    ffgkye(fits, "PROJP1", &projp1, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      projp1 = 1.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: PROJP1");
+      goto error;
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PROJP1");
+    fitsio_err(errstr, status, "ffgkye: PV2_1");
     goto error;
   }
 
-  ffgkye(fits, "PROJP3", &projp3, (char *) NULL, &status);
+  ffgkye(fits, "PV2_3", &projp3, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    projp3 = 220.0;
+    ffgkye(fits, "PROJP3", &projp3, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      projp3 = 220.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: PROJP3");
+      goto error;
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PROJP3");
+    fitsio_err(errstr, status, "ffgkye: PV2_3");
+    goto error;
+  }
+
+  ffgkye(fits, "PV2_5", &projp5, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "PROJP5", &projp5, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      projp5 = 0.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: PROJP5");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: PV2_5");
     goto error;
   }
 
@@ -960,7 +998,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf;
   float *locskybuf, *skyrmsbuf, *badpixbuf;
 
-  float tpa, tpd, a, b, c, d, e, f, projp1, projp3, secd, tand;
+  float tpa, tpd, a, b, c, d, e, f, projp1, projp3, projp5, secd, tand;
   float seeing, skylev, skynoise, satlev, exptime, rcore, gain, percorr;
   float skyvar, area, tpi, tmp, expfac;
   double mjd;
@@ -1097,23 +1135,57 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
-  ffgkye(fits, "PROJP1", &projp1, (char *) NULL, &status);
+  ffgkye(fits, "PV2_1", &projp1, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    projp1 = 1.0;
+    ffgkye(fits, "PROJP1", &projp1, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      projp1 = 1.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: PROJP1");
+      goto error;
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PROJP1");
+    fitsio_err(errstr, status, "ffgkye: PV2_1");
     goto error;
   }
 
-  ffgkye(fits, "PROJP3", &projp3, (char *) NULL, &status);
+  ffgkye(fits, "PV2_3", &projp3, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    projp3 = 220.0;
+    ffgkye(fits, "PROJP3", &projp3, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      projp3 = 220.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: PROJP3");
+      goto error;
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PROJP3");
+    fitsio_err(errstr, status, "ffgkye: PV2_3");
+    goto error;
+  }
+
+  ffgkye(fits, "PV2_5", &projp5, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "PROJP5", &projp5, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      projp5 = 0.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: PROJP5");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: PV2_5");
     goto error;
   }
 
