@@ -110,14 +110,29 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    opt1 = 0;
 	    for(pt = 0; pt < mefinfo->nf; pt++) {
 	      if(ptbuf[pt].flux != 0.0) {
-		if(ptbuf[pt].ha > 0.0)
-		  medbuf1[opt1] = ptbuf[pt].flux - corr;
-		else
-		  medbuf1[opt1] = ptbuf[pt].flux + corr;
+		if(mefinfo->domerid > 1) {
+		  if(ptbuf[pt].ha > 0.0)
+		    ptbuf[pt].flux -= corr;
+		  else
+		    ptbuf[pt].flux += corr;
+		  
+		  medbuf1[opt1] = ptbuf[pt].flux;
+		}
+		else {
+		  if(ptbuf[pt].ha > 0.0)
+		    medbuf1[opt1] = ptbuf[pt].flux - corr;
+		  else
+		    medbuf1[opt1] = ptbuf[pt].flux + corr;
+		}
 
 		opt1++;
 	      }
 	    }
+
+	    if(mefinfo->domerid > 1)
+	      mefinfo->stars[star].merid[meas] += corr;
+	    else
+	      mefinfo->stars[star].merid[meas] = corr;
 	  }
 	  else {
 	    opt1 = 0;
@@ -131,6 +146,11 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  medsig(medbuf1, opt1, &medflux, &sigflux);
 	  mefinfo->stars[star].medflux[meas] = medflux;
 	  mefinfo->stars[star].sigflux[meas] = sigflux;
+
+	  if(mefinfo->domerid > 1)
+	    /* Write out measurements for this star */
+	    if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
+	      goto error;
 	}
 	
 	/* Compute 2-D correction for each frame */
@@ -382,6 +402,16 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
 	  goto error;
 	
+	/* Apply any meridian flip offsets */
+	if(mefinfo->domerid > 1) 
+	  for(star = 0; star < mefinfo->nstars; star++) 
+	    if(ptbuf[star].flux != 0.0) {
+	      if(ptbuf[star].ha > 0.0)
+		ptbuf[star].flux -= mefinfo->stars[star].merid[meas];
+	      else
+		ptbuf[star].flux += mefinfo->stars[star].merid[meas];
+	    }
+
 	/* Perform polynomial fit correction */
 	if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf, mefinfo->degree, sysbuf+pt,
 			  &frameoff, &framerms, &framesigm, &framenpt, errstr))
@@ -401,7 +431,9 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf,
 			      framesigm, errstr))
 	    goto error;
-	  
+	}	  
+	
+	if(framenpt > 0 || mefinfo->domerid > 1) {
 	  /* Write out corrected fluxes */
 	  if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
 	    goto error;

@@ -126,9 +126,9 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   int status = 0, anynull;
   int ncoluse, col;
 
-  char *colnames[11] = { "x", "y", "class", "pointer", "bflag", "cflag",
-			 "apflux", "aprms", "apradius", "ra", "dec" };
-  int gcols[11];
+  char *colnames[12] = { "x", "y", "class", "pointer", "bflag", "cflag",
+			 "apflux", "aprms", "apmerid", "apradius", "ra", "dec" };
+  int gcols[12];
 
   int cats_are_80 = 0;
 
@@ -138,7 +138,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   float *xbuf = (float *) NULL, *ybuf, *apbuf, *rabuf, *decbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
   long *ptrbuf = (long *) NULL, *cfbuf;
-  float *apmedbuf = (float *) NULL, *aprmsbuf;
+  float *apmedbuf = (float *) NULL, *aprmsbuf, *apmeridbuf;
 
   struct lc_star *stars = (struct lc_star *) NULL;
   long nmeas;
@@ -158,6 +158,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   ffgkye(fits, "UMLIM", &umlim, (char *) NULL, &status);
   ffgkyj(fits, "POLYDEG", &degree, (char *) NULL, &status);
   ffgkyl(fits, "APSEL", &(mefinfo->doapsel), (char *) NULL, &status);
+  ffgkyj(fits, "DOMERID", &(mefinfo->domerid), (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkyj: NMEAS");
     goto error;
@@ -301,7 +302,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   xbuf = (float *) malloc(5 * rblksz * sizeof(float));
   clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
   ptrbuf = (long *) malloc(2 * rblksz * sizeof(long));
-  apmedbuf = (float *) malloc(2 * rblksz * NFLUX * sizeof(float));
+  apmedbuf = (float *) malloc(3 * rblksz * NFLUX * sizeof(float));
   if(!xbuf || !clsbuf || !ptrbuf || !apmedbuf) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -317,6 +318,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   cfbuf = ptrbuf + rblksz;
 
   aprmsbuf = apmedbuf + NFLUX * rblksz;
+  apmeridbuf = apmedbuf + 2 * NFLUX * rblksz;
 
   /* Allocate memory for catalogue stars */
   stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
@@ -342,10 +344,12 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 	   &status);
     ffgcve(fits, gcols[7], roff + 1, 1, rread * NFLUX, -999.0, aprmsbuf, &anynull,
 	   &status);
-    ffgcve(fits, gcols[8], roff + 1, 1, rread, -999.0, apbuf, &anynull, &status);
-    ffgcve(fits, gcols[9], roff + 1, 1, rread, -999.0, rabuf, &anynull,
+    ffgcve(fits, gcols[8], roff + 1, 1, rread * NFLUX, -999.0, apmeridbuf, &anynull,
 	   &status);
-    ffgcve(fits, gcols[10], roff + 1, 1, rread, -999.0, decbuf, &anynull,
+    ffgcve(fits, gcols[9], roff + 1, 1, rread, -999.0, apbuf, &anynull, &status);
+    ffgcve(fits, gcols[10], roff + 1, 1, rread, -999.0, rabuf, &anynull,
+	   &status);
+    ffgcve(fits, gcols[11], roff + 1, 1, rread, -999.0, decbuf, &anynull,
 	   &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
@@ -367,6 +371,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
       for(ap = 0; ap < NFLUX; ap++) {
 	stars[rr].medflux[ap] = (apmedbuf[r*NFLUX+ap] > 0.0 ? mefinfo->zp - apmedbuf[r*NFLUX+ap] : -999.0);
 	stars[rr].sigflux[ap] = aprmsbuf[r*NFLUX+ap];
+	stars[rr].merid[ap] = apmeridbuf[r*NFLUX+ap];
       }
 
       stars[rr].apradius = apbuf[r];
@@ -429,7 +434,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float *sattmp = (float *) NULL;
   long nsattmp;
 
-  float tpa, tpd, a, b, c, d, e, f, projp1, projp3, projp5, secd, tand;
+  float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand;
   float skylev, skynoise, satlev, exptime, rcore, gain, magzpt, percorr;
   float tpi;
   float apcor[NFLUX];
@@ -447,6 +452,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float scatcoeff = 0.0, xi, xn;
 
   int cats_are_80 = 0;
+  int iap;
 
   struct {
     char *filt;
@@ -532,7 +538,41 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   ffgkye(fits, "CD1_2", &b, (char *) NULL, &status);
   ffgkye(fits, "CD2_1", &d, (char *) NULL, &status);
   ffgkye(fits, "CD2_2", &e, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+
+    /* Try for obsolescent one */
+    ffgkye(fits, "CDELT1", &scl1, (char *) NULL, &status);
+    ffgkye(fits, "CDELT2", &scl2, (char *) NULL, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgkye: CDELT[12]");
+      goto error;
+    }
+
+    ffgkye(fits, "PC1_1", &a, (char *) NULL, &status);
+    ffgkye(fits, "PC1_2", &b, (char *) NULL, &status);
+    ffgkye(fits, "PC2_1", &d, (char *) NULL, &status);
+    ffgkye(fits, "PC2_2", &e, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+
+      /* Defaults */
+      a = 1.0;
+      b = 0.0;
+      d = 0.0;
+      e = 1.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: PC[12]_[12]");
+      goto error;
+    }
+
+    a *= scl1;
+    b *= scl1;
+    d *= scl2;
+    e *= scl2;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: CD[12]_[12]");
     goto error;
   }
@@ -760,7 +800,15 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkys(fits, "HIERARCH ESO INS FILT1 NAME", filter, (char *) NULL, &status);
-      if(status) {
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	ffgkys(fits, "FILTER2", filter, (char *) NULL, &status);
+	if(status) {
+	  fitsio_err(errstr, status, "ffgkye: FILTER2");
+	  goto error;
+	}
+      }
+      else if(status) {
 	fitsio_err(errstr, status, "ffgkye: HIERARCH ESO INS FILT1 NAME");
 	goto error;
       }
@@ -928,6 +976,9 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
       stars[rout].apradius = 1.0;  /* default = rcore */
 
+      for(iap = 0; iap < NFLUX; iap++)
+	stars[rout].merid[iap] = 0.0;  /* initialise this */
+
       if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev) {
 	sattmp[nsattmp] = stars[rout].ref[0].flux;
 	nsattmp++;
@@ -998,7 +1049,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf;
   float *locskybuf, *skyrmsbuf, *badpixbuf;
 
-  float tpa, tpd, a, b, c, d, e, f, projp1, projp3, projp5, secd, tand;
+  float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand;
   float seeing, skylev, skynoise, satlev, exptime, rcore, gain, percorr;
   float skyvar, area, tpi, tmp, expfac;
   double mjd;
@@ -1130,7 +1181,41 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   ffgkye(fits, "CD1_2", &b, (char *) NULL, &status);
   ffgkye(fits, "CD2_1", &d, (char *) NULL, &status);
   ffgkye(fits, "CD2_2", &e, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+
+    /* Try for obsolescent one */
+    ffgkye(fits, "CDELT1", &scl1, (char *) NULL, &status);
+    ffgkye(fits, "CDELT2", &scl2, (char *) NULL, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgkye: CDELT[12]");
+      goto error;
+    }
+
+    ffgkye(fits, "PC1_1", &a, (char *) NULL, &status);
+    ffgkye(fits, "PC1_2", &b, (char *) NULL, &status);
+    ffgkye(fits, "PC2_1", &d, (char *) NULL, &status);
+    ffgkye(fits, "PC2_2", &e, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+
+      /* Defaults */
+      a = 1.0;
+      b = 0.0;
+      d = 0.0;
+      e = 1.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: PC[12]_[12]");
+      goto error;
+    }
+
+    a *= scl1;
+    b *= scl1;
+    d *= scl2;
+    e *= scl2;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: CD[12]_[12]");
     goto error;
   }
@@ -1701,7 +1786,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   /* Initialise these (extinc is cumulative) */
   mefinfo->frames[iframe].offset = 0;
-  mefinfo->frames[iframe].rms = 0;
+  mefinfo->frames[iframe].rms = -999.0;
   mefinfo->frames[iframe].extinc = 0;
   mefinfo->frames[iframe].sigm = 0;
 

@@ -47,6 +47,9 @@ struct lc_star {
   float medflux[NFLUX];
   float sigflux[NFLUX];
 
+  /* Meridian flip correction if enabled */
+  float merid[NFLUX];
+
   /* Which aperture did we use? */
   float apradius;
 
@@ -134,7 +137,7 @@ struct lc_mef {
   int doapsel;
 
   /* Account for meridian offsets? */
-  int domerid;
+  long domerid;
 };
 
 /* Structure holding disk buffer information */
