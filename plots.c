@@ -225,14 +225,22 @@ int do_plots (struct lc_mef *meflist, int nmefs,
       /* Use only the ones classified as stars */
       if(meflist[mef].stars[star].med > 0.0 &&
 	 meflist[mef].stars[star].chisq > 0.0 &&
-	 meflist[mef].stars[star].nchisq > 1 &&
-	 meflist[mef].stars[star].cls == -1) {
+	 meflist[mef].stars[star].nchisq > 1) {
 	mag = meflist[mef].zp - meflist[mef].stars[star].med;
 	chi = log10f(meflist[mef].stars[star].chisq /
 		     (meflist[mef].stars[star].nchisq - 1));
-	
+
+
 	cpgsci(1+mef);
-	cpgpt(1, &mag, &chi, 1);
+
+	if(meflist[mef].stars[star].cls == -1)
+	  cpgpt(1, &mag, &chi, 1);
+	else if(meflist[mef].stars[star].cls == 9) {
+	  cpgpt(1, &mag, &chi, 1);
+	  cpgsci(2);
+	  cpgpt(1, &mag, &chi, 22);
+	}
+
 	cpgsci(1);
       }
     }
