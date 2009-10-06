@@ -1787,7 +1787,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   /* Initialise these (extinc is cumulative) */
   mefinfo->frames[iframe].offset = 0;
   mefinfo->frames[iframe].rms = -999.0;
-  mefinfo->frames[iframe].extinc = 0;
+  mefinfo->frames[iframe].extinc = -2.5*log10(exptime/mefinfo->refexp);
   mefinfo->frames[iframe].sigm = 0;
 
   free((void *) skyfiterrbuf);
