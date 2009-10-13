@@ -420,7 +420,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 }
 
 int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
-	      int diffmode,
+	      int diffmode, float satlev,
 	      char *errstr) {
   int status = 0;
 
@@ -435,7 +435,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   long nsattmp;
 
   float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand;
-  float skylev, skynoise, satlev, exptime, rcore, gain, magzpt, percorr;
+  float skylev, skynoise, exptime, rcore, gain, magzpt, percorr;
   float tpi;
   float apcor[NFLUX];
 
@@ -642,18 +642,20 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   secd = 1.0 / cosf(tpd);
   tand = tanf(tpd);
 
-  /* Get saturation level */
-  ffgkye(fits, "SATURATE", &satlev, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    satlev = 65535;
-
-    if(verbose > 1)
-      printf("Warning: using default satlev = %.1f\n", satlev);
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkye: SATURATE");
-    goto error;
+  if(satlev < 0) {
+    /* Get saturation level */
+    ffgkye(fits, "SATURATE", &satlev, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      satlev = 65535;
+      
+      if(verbose > 1)
+	printf("Warning: using default satlev = %.1f\n", satlev);
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: SATURATE");
+      goto error;
+    }
   }
 
   /* Read keywords for photometry */
@@ -1035,7 +1037,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
-	      int diffmode,
+	      int diffmode, float satlev,
 	      char *errstr) {
   fitsfile *fits;
   int status = 0;
@@ -1050,7 +1052,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float *locskybuf, *skyrmsbuf, *badpixbuf;
 
   float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand;
-  float seeing, skylev, skynoise, satlev, exptime, rcore, gain, percorr;
+  float seeing, skylev, skynoise, exptime, rcore, gain, percorr;
   float skyvar, area, tpi, tmp, expfac;
   double mjd;
 
@@ -1076,6 +1078,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   int cats_are_80 = 0;
   char *ep;
+
+  long split_iexp = 0, split_nexp = -1;
 
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
@@ -1285,18 +1289,20 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   secd = 1.0 / cosf(tpd);
   tand = tanf(tpd);
 
-  /* Get saturation level */
-  ffgkye(fits, "SATURATE", &satlev, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    satlev = 65535;
-
-    if(verbose > 1 && !diffmode)
-      printf("Warning: using default satlev = %.1f\n", satlev);
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkye: SATURATE");
-    goto error;
+  if(satlev < 0) {
+    /* Get saturation level */
+    ffgkye(fits, "SATURATE", &satlev, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      satlev = 65535;
+      
+      if(verbose > 1 && !diffmode)
+	printf("Warning: using default satlev = %.1f\n", satlev);
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: SATURATE");
+      goto error;
+    }
   }
 
   /* Read keywords for photometry */
@@ -1572,6 +1578,19 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
+  /* MEarth-specific: exposure grouping */
+  ffgkyj(fits, "IEXP", &split_iexp, (char *) NULL, &status);
+  ffgkyj(fits, "NEXP", &split_nexp, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    split_iexp = 0;
+    split_nexp = -1;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkyj: IEXP/NEXP");
+    goto error;
+  }
+
   /* Get block size for row I/O */
   ffgrsz(fits, &rblksz, &status);
   if(status) {
@@ -1783,6 +1802,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   /* Store this frame MJD and seeing */
   mefinfo->frames[iframe].mjd = mjd;
   mefinfo->frames[iframe].seeing = seeing;
+
+  mefinfo->frames[iframe].split_iexp = split_iexp;
+  mefinfo->frames[iframe].split_nexp = split_nexp;
 
   /* Initialise these (extinc is cumulative) */
   mefinfo->frames[iframe].offset = 0;

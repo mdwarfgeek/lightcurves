@@ -76,6 +76,10 @@ struct lc_frame {
 
   /* Uncertainty contribution from systematics fit */
   float sigm;
+
+  /* MEarth-specific: frame grouping information */
+  long split_iexp;
+  long split_nexp;
 };
 
 struct lc_mef {
@@ -233,12 +237,12 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
 int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 	     char *errstr);
 int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
-	      int diffmode,
+	      int diffmode, float satlev,
 	      char *errstr);
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
-	      int diffmode,
+	      int diffmode, float satlev,
 	      char *errstr);
 
 /* Utility functions: dsolve.c, linear.c, medsig.c, sortfloat.c */

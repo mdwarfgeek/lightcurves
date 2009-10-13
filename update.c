@@ -40,6 +40,7 @@ static void usage (char *av) {
   fprintf(stderr,
 	  "Lightcurve processing:\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
+	  "         -s level  Override saturation level to 'level'.\n"
 	  "Output:\n"
 	  "         -o file   Writes updated lightcurves to 'file'.\n"
 	  "         -u        Updates lightcurves in-place.\n"
@@ -50,7 +51,7 @@ static void usage (char *av) {
 }  
 
 int main (int argc, char *argv[]) {
-  char *pn = (char *) NULL, *avzero;
+  char *pn = (char *) NULL, *avzero, *ep;
   int c;
 
   char errstr[ERRSTR_LEN];
@@ -80,6 +81,7 @@ int main (int argc, char *argv[]) {
   int diffmode = 0;
   int noplots = 0;
 
+  float satlev = -1.0;
   float syslim = -1.0;
 
   /* Set the program name for error reporting */
@@ -94,7 +96,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "i:o:upqv")) != -1)
+  while((c = getopt(argc, argv, "i:o:s:upqv")) != -1)
     switch(c) {
     case 'i':
       strncpy(intrafile, optarg, sizeof(intrafile)-1);
@@ -105,6 +107,11 @@ int main (int argc, char *argv[]) {
       strncpy(outfile, optarg, sizeof(outfile)-1);
       outfile[sizeof(outfile)-1] = '\0';
       dooutput = 1;
+      break;
+    case 's':
+      satlev = (float) strtod(optarg, &ep);
+      if(*ep != '\0' || satlev < 0)
+	fatal(1, "invalid satlev value: %s", optarg);
       break;
     case 'u':
       doreplace = 1;
@@ -296,7 +303,7 @@ int main (int argc, char *argv[]) {
 	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
-		  dointra, &(intralist[mef]), diffmode, errstr))
+		  dointra, &(intralist[mef]), diffmode, satlev, errstr))
 	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
     }
 
@@ -625,6 +632,24 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     if(status) {
       fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
       goto error;
+    }
+
+    if(mefinfo->frames[pt].split_nexp >= 0) {
+      snprintf(kbuf, sizeof(kbuf), "IEXP%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Exposure index for datapoint %ld", nmeasexist+pt+1);
+      ffpkyj(fits, kbuf, mefinfo->frames[pt].split_iexp, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
+
+      snprintf(kbuf, sizeof(kbuf), "NEXP%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Exposure count for datapoint %ld", nmeasexist+pt+1);
+      ffpkyj(fits, kbuf, mefinfo->frames[pt].split_nexp, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
     }
 
     /* Calculate Earth's heliocentric position at this MJD */
