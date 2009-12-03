@@ -299,7 +299,7 @@ int main (int argc, char *argv[]) {
 
     /* Read frames */
     for(f = 0; f < nf; f++) {
-      if(verbose)
+      if(verbose && isatty(1))
 	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
@@ -307,7 +307,7 @@ int main (int argc, char *argv[]) {
 	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
     }
 
-    if(verbose)
+    if(verbose && isatty(1))
       printf("\n");
 
     /* Sort out averages */
