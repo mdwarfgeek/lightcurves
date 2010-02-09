@@ -80,6 +80,12 @@ struct lc_frame {
   /* MEarth-specific: frame grouping information */
   long split_iexp;
   long split_nexp;
+
+  /* MEarth-specific: weather information */
+  float tamb;
+  float humid;
+  float press;
+  float skytemp;
 };
 
 struct lc_mef {

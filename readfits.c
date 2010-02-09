@@ -1080,6 +1080,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   char *ep;
 
   long split_iexp = 0, split_nexp = -1;
+  float tamb = -999, humid = -999, press = -999, skytemp = -999;
 
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
@@ -1591,6 +1592,36 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
+  /* MEarth-specific: weather parameters */
+  ffgkye(fits, "TEMPERAT", &tamb, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    tamb = -999;
+  }
+
+  ffgkye(fits, "HUMIDITY", &humid, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    humid = -999;
+  }
+
+  ffgkye(fits, "PRESSURE", &press, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    press = -999;
+  }
+
+  ffgkye(fits, "SKYTEMP", &skytemp, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    skytemp = -999;
+  }
+
+  if(status) {
+    fitsio_err(errstr, status, "ffgkye: TEMPERAT/HUMIDITY/PRESSURE/SKYTEMP");
+    goto error;
+  }
+
   /* Get block size for row I/O */
   ffgrsz(fits, &rblksz, &status);
   if(status) {
@@ -1805,6 +1836,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   mefinfo->frames[iframe].split_iexp = split_iexp;
   mefinfo->frames[iframe].split_nexp = split_nexp;
+
+  mefinfo->frames[iframe].tamb = tamb;
+  mefinfo->frames[iframe].humid = humid;
+  mefinfo->frames[iframe].press = press;
+  mefinfo->frames[iframe].skytemp = skytemp;
 
   /* Initialise these (extinc is cumulative) */
   mefinfo->frames[iframe].offset = 0;

@@ -679,6 +679,46 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       goto error;
     }
 
+    if(mefinfo->frames[pt].tamb != -999) {
+      snprintf(kbuf, sizeof(kbuf), "TAMB%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "[degC] Ambient temp for datapoint %ld", pt+1);
+      ffpkyf(fits, kbuf, mefinfo->frames[pt].tamb, 1, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+	goto error;
+      }
+    }
+
+    if(mefinfo->frames[pt].humid != -999) {
+      snprintf(kbuf, sizeof(kbuf), "HUM%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "[%%] Humidity for datapoint %ld", pt+1);
+      ffpkyf(fits, kbuf, mefinfo->frames[pt].humid, 1, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+	goto error;
+      }
+    }
+
+    if(mefinfo->frames[pt].press != -999) {
+      snprintf(kbuf, sizeof(kbuf), "PRES%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "[hPa] Pressure for datapoint %ld", pt+1);
+      ffpkyf(fits, kbuf, mefinfo->frames[pt].press, 1, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+	goto error;
+      }
+    }
+
+    if(mefinfo->frames[pt].skytemp != -999) {
+      snprintf(kbuf, sizeof(kbuf), "TSKY%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "[degC] Sky temp for datapoint %ld", pt+1);
+      ffpkyf(fits, kbuf, mefinfo->frames[pt].skytemp, 1, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+	goto error;
+      }
+    }
+
     if(mefinfo->frames[pt].split_nexp >= 0) {
       snprintf(kbuf, sizeof(kbuf), "IEXP%ld", pt+1);
       snprintf(cbuf, sizeof(cbuf), "Exposure index for datapoint %ld", pt+1);
