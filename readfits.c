@@ -1521,15 +1521,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     }
   }
 
-  if(doairm) {
-    /* Pre-compute mean-to-apt parameters for frame */
-    slaMappa(2000.0, mjd+slaDtt(mjd)/86400.0, amprms);
-
-    /* Pre-compute apt-to-obs parameters for frame */
-    slaAoppa(mjd, 0.0, lon, lat, height, 0.0, 0.0,
-	     273.0, 1013.25, 0.5, 0.80, 0.0065, aoprms);
-  }
-
   /* Check for telescope-specific things */
   ffgkys(fits, "INSTRUME", inst, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
@@ -1553,19 +1544,19 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     if(!strcasecmp(inst, "WFC") && !strcasecmp(tel, "INT"))
       diam = 2540;
     else if(!strcasecmp(inst, "WFI") && !strcasecmp(tel, "MPI-2.2")) {
-      scatcoeff = -1.5;
+      scatcoeff = -1.5;  /* ESO WFI needs a scattered light correction too */
       diam = 2200;
     }
     else if(!strcasecmp(inst, "WFCAM") && !strcasecmp(tel, "UKIRT")) {
-      gain /= 1.2;
+      gain /= 1.2;  /* WFCAM has incorrect gain in fits headers */
       diam = 3803;
     }
     else if(!strcasecmp(inst, "CCDMosaThin1"))
-      diam = 3934;
+      diam = 3934;  /* KPNO Mosaic */
     else if(!strcasecmp(inst, "Mosaic2"))
-      diam = 3934;
+      diam = 3934;  /* CTIO Mosaic II */
     else if(!strcasecmp(inst, "Apogee Alta"))
-      diam = 400;
+      diam = 400;  /* default for MEarth - it has the actual value in APTDIA */
   }
 
   /* Try to read telescope aperture diameter */
@@ -1620,6 +1611,18 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   if(status) {
     fitsio_err(errstr, status, "ffgkye: TEMPERAT/HUMIDITY/PRESSURE/SKYTEMP");
     goto error;
+  }
+
+  if(doairm) {
+    /* Pre-compute mean-to-apt parameters for frame */
+    slaMappa(2000.0, mjd+slaDtt(mjd)/86400.0, amprms);
+
+    /* Pre-compute apt-to-obs parameters for frame */
+    slaAoppa(mjd, 0.0, lon, lat, height, 0.0, 0.0,
+	     tamb != -999 ? 273.16+tamb : 283.0,
+	     press != -999 ? press : 1013.25*expf(-height/(29.3*273.0)),
+	     humid != -999 ? humid/100 : 0.5,
+	     0.80, 0.0065, aoprms);
   }
 
   /* Get block size for row I/O */
