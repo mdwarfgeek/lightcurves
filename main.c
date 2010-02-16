@@ -737,6 +737,14 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
+    snprintf(kbuf, sizeof(kbuf), "IUPD%ld", pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Update number when datapoint %ld was added", pt+1);
+    ffpkyj(fits, kbuf, 0, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+      goto error;
+    }
+
     /* Calculate Earth's heliocentric position at this MJD */
     getearth(mefinfo->mjdref + mefinfo->frames[pt].mjd, epos + 3*pt);
   }

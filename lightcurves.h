@@ -148,6 +148,9 @@ struct lc_mef {
 
   /* Account for meridian offsets? */
   long domerid;
+
+  /* Number of updates made so far - for setting update count flags */
+  long nupdate;
 };
 
 /* Structure holding disk buffer information */

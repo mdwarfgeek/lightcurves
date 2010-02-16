@@ -462,8 +462,8 @@ int main (int argc, char *argv[]) {
 }
 
 static int update_lc (fitsfile *reff, fitsfile *fits,
-		     struct buffer_info *buf, struct lc_mef *mefinfo,
-		     char *errstr) {
+		      struct buffer_info *buf, struct lc_mef *mefinfo,
+		      char *errstr) {
   int status = 0, col, ncoluse, anynull;
 
   char *colnames[13] = { "medflux", "rms", "chisq", "nchisq",
@@ -582,11 +582,13 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     goto error;
   }
 
-  /* Update number of measurements */
+  /* Update number of measurements and number of updates */
   nmeasout = nmeasexist+mefinfo->nf;
 
   ffukyj(fits, "NMEAS", nmeasout,
 	 "Number of points in each lightcurve", &status);
+  ffukyj(fits, "NUPDATE", mefinfo->nupdate+1,
+	 "Number of times file has been appended to", &status);
   if(status) {
     fitsio_err(errstr, status, "ffkpy: frame info");
     goto error;
@@ -690,6 +692,14 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
 	goto error;
       }
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "IUPD%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Update number when datapoint %ld was added", nmeasexist+pt+1);
+    ffpkyj(fits, kbuf, mefinfo->nupdate+1, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+      goto error;
     }
 
     /* Calculate Earth's heliocentric position at this MJD */
