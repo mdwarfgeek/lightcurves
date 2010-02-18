@@ -159,6 +159,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   ffgkyj(fits, "POLYDEG", &degree, (char *) NULL, &status);
   ffgkyl(fits, "APSEL", &(mefinfo->doapsel), (char *) NULL, &status);
   ffgkyj(fits, "DOMERID", &(mefinfo->domerid), (char *) NULL, &status);
+  ffgkye(fits, "REFFANG", &(mefinfo->reffang), (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkyj: NMEAS");
     goto error;
@@ -445,7 +446,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float *sattmp = (float *) NULL;
   long nsattmp;
 
-  float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand;
+  float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand, fang;
   float skylev, skynoise, exptime, rcore, gain, magzpt, percorr;
   float tpi;
   float apcor[NFLUX];
@@ -652,6 +653,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
   secd = 1.0 / cosf(tpd);
   tand = tanf(tpd);
+
+  fang = atan2f(b, a);
 
   if(satlev < 0) {
     /* Get saturation level */
@@ -1018,6 +1021,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     mefinfo->satmag = mefinfo->zp - 2.5 * log10f(satflux);
   else
     mefinfo->satmag = -999.0;
+  mefinfo->reffang = fang;
   mefinfo->refexp = exptime;
   mefinfo->refsigma = skynoise;
   mefinfo->refflim = mefinfo->zp - 2.5 * log10f(5.0 * sqrtf(M_PI * rcore * rcore) *
@@ -1062,7 +1066,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf;
   float *locskybuf, *skyrmsbuf, *badpixbuf;
 
-  float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand;
+  float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand, fang;
   float seeing, skylev, skynoise, exptime, rcore, gain, percorr;
   float skyvar, area, tpi, tmp, expfac;
   double mjd;
@@ -1300,6 +1304,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   secd = 1.0 / cosf(tpd);
   tand = tanf(tpd);
+
+  fang = atan2f(b, a);
 
   if(satlev < 0) {
     /* Get saturation level */
@@ -1847,6 +1853,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   /* Store this frame MJD and seeing */
   mefinfo->frames[iframe].mjd = mjd;
   mefinfo->frames[iframe].seeing = seeing;
+  mefinfo->frames[iframe].fang = fang;
+  mefinfo->frames[iframe].iang = NINT(slaRanorm(fang - mefinfo->reffang)/M_PI) % 2;
 
   mefinfo->frames[iframe].split_iexp = split_iexp;
   mefinfo->frames[iframe].split_nexp = split_nexp;

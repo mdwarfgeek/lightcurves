@@ -31,6 +31,8 @@ void slaMapqkz (double rm, double dm, double amprms[21], double *ra, double *da)
 void slaPm (double r0, double d0, double pr, double pd, double px, double rv,
 	    double ep0, double ep1, double *r1, double *d1);
 void slaPreces (char *system, double ep0, double ep1, double *ra, double *dc);
+float slaRange (float a);
+float slaRanorm (float a);
 void slaRdplan (double date, int np, double elong, double phi, double *ra, double *dec,
 		double *diam);
 void slaSubet (double rc, double dc, double eq, double *rm, double *dm);

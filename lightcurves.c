@@ -90,7 +90,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  opt2 = 0;
 	  for(pt = 0; pt < mefinfo->nf; pt++) {
 	    if(ptbuf[pt].flux != 0.0) {
-	      if(mefinfo->domerid && ptbuf[pt].ha > 0.0) {
+	      if(mefinfo->domerid && mefinfo->frames[pt].iang) {
 		medbuf2[opt2] = ptbuf[pt].flux;
 		opt2++;
 	      }
@@ -111,7 +111,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    for(pt = 0; pt < mefinfo->nf; pt++) {
 	      if(ptbuf[pt].flux != 0.0) {
 		if(mefinfo->domerid > 1) {
-		  if(ptbuf[pt].ha > 0.0)
+		  if(mefinfo->frames[pt].iang)
 		    ptbuf[pt].flux -= corr;
 		  else
 		    ptbuf[pt].flux += corr;
@@ -119,7 +119,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 		  medbuf1[opt1] = ptbuf[pt].flux;
 		}
 		else {
-		  if(ptbuf[pt].ha > 0.0)
+		  if(mefinfo->frames[pt].iang)
 		    medbuf1[opt1] = ptbuf[pt].flux - corr;
 		  else
 		    medbuf1[opt1] = ptbuf[pt].flux + corr;
@@ -406,7 +406,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	if(mefinfo->domerid > 1) 
 	  for(star = 0; star < mefinfo->nstars; star++) 
 	    if(ptbuf[star].flux != 0.0) {
-	      if(ptbuf[star].ha > 0.0)
+	      if(mefinfo->frames[pt].iang)
 		ptbuf[star].flux -= mefinfo->stars[star].merid[meas];
 	      else
 		ptbuf[star].flux += mefinfo->stars[star].merid[meas];

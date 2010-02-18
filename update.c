@@ -636,6 +636,22 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       goto error;
     }
 
+    snprintf(kbuf, sizeof(kbuf), "FANG%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Field angle for datapoint %ld", nmeasexist+pt+1);
+    ffpkyf(fits, kbuf, mefinfo->frames[pt].fang, 6, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "IANG%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Field angle modulo pi for datapoint %ld", nmeasexist+pt+1);
+    ffpkyj(fits, kbuf, mefinfo->frames[pt].iang, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+      goto error;
+    }
+
     if(mefinfo->frames[pt].tamb != -999) {
       snprintf(kbuf, sizeof(kbuf), "TAMB%ld", nmeasexist+pt+1);
       snprintf(cbuf, sizeof(cbuf), "[degC] Ambient temp for datapoint %ld", nmeasexist+pt+1);

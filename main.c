@@ -633,6 +633,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	 "Multiple apertures enabled?", &status);
   ffpkyj(fits, "DOMERID", mefinfo->domerid,
 	 "Meridian flip removal?", &status);
+  ffpkyf(fits, "REFFANG", mefinfo->reffang, 6,
+	 "Reference file field angle", &status);
   if(status) {
     fitsio_err(errstr, status, "ffkpy: frame info");
     goto error;
@@ -674,6 +676,22 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     snprintf(kbuf, sizeof(kbuf), "SEE%ld", pt+1);
     snprintf(cbuf, sizeof(cbuf), "Seeing for datapoint %ld", pt+1);
     ffpkyf(fits, kbuf, mefinfo->frames[pt].seeing, 3, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "FANG%ld", pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Field angle for datapoint %ld", pt+1);
+    ffpkyf(fits, kbuf, mefinfo->frames[pt].fang, 6, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "IANG%ld", pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Field angle modulo pi for datapoint %ld", pt+1);
+    ffpkyj(fits, kbuf, mefinfo->frames[pt].iang, cbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
       goto error;

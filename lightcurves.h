@@ -67,6 +67,10 @@ struct lc_frame {
   /* Seeing */
   float seeing;
 
+  /* Field angle */
+  float fang;
+  long iang;
+
   /* Frame offset and RMS after correction */
   float offset;
   float rms;
@@ -99,6 +103,7 @@ struct lc_mef {
   /* Overall reference frame info */
   float zp;
   float satmag;
+  float reffang;
   float refexp;
   float refsigma;
   float refflim;

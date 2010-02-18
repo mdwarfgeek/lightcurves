@@ -37,6 +37,8 @@ void sla_mapqkz_ (double *, double *, double *, double *, double *);
 void sla_pm_ (double *, double *, double *, double *, double *,
 	      double *, double *, double *, double *, double *);
 void sla_preces_ (char *, double *, double *, double *, double *, ftnlen);
+float sla_range_ (float *);
+float sla_ranorm_ (float *);
 void sla_rdplan_ (double *, int *, double *, double *,  double *, double *, double *);
 void sla_subet_ (double *, double *, double *, double *, double *);
 
@@ -128,6 +130,14 @@ void slaPm (double r0, double d0, double pr, double pd, double px, double rv,
 
 void slaPreces (char *system, double ep0, double ep1, double *ra, double *dc) {
   sla_preces_ (system, &ep0, &ep1, ra, dc, strlen(system));
+}
+
+float slaRange (float a) {
+  return sla_range_ (&a);
+}
+
+float slaRanorm (float a) {
+  return sla_ranorm_ (&a);
 }
 
 void slaRdplan (double date, int np, double elong, double phi, double *ra, double *dec,
