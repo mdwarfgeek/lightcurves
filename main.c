@@ -40,6 +40,7 @@ static void usage (char *av) {
 	  "         -f degree Apply polynomial of 'degree' for systematics removal.\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
 	  "         -m        Allow for meridian offset in rms and weighting.\n"
+	  "         -mm       Same, only also removes it.\n"
 	  "         -n        Do not renormalise median to reference magnitude.\n"
 	  "         -s level  Override saturation level to 'level'.\n"
 	  "         -u mag    Set upper mag limit for systematics correction.\n\n"
