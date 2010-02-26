@@ -159,11 +159,24 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   ffgkyj(fits, "POLYDEG", &degree, (char *) NULL, &status);
   ffgkyl(fits, "APSEL", &(mefinfo->doapsel), (char *) NULL, &status);
   ffgkyj(fits, "DOMERID", &(mefinfo->domerid), (char *) NULL, &status);
-  ffgkye(fits, "REFFANG", &(mefinfo->reffang), (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkyj: NMEAS");
     goto error;
   }
+
+  /* Try for field angle - old files will not have it, in which case
+   * fallback to the old, incorrect, HA-based method */
+  ffgkye(fits, "REFFANG", &(mefinfo->reffang), (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    mefinfo->havefang = 0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: REFFANG");
+    goto error;
+  }
+  else
+    mefinfo->havefang = 1;
 
   /* This one is optional */
   ffgkyj(fits, "NUPDATE", &(mefinfo->nupdate), (char *) NULL, &status);
@@ -1022,6 +1035,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   else
     mefinfo->satmag = -999.0;
   mefinfo->reffang = fang;
+  mefinfo->havefang = 1;
   mefinfo->refexp = exptime;
   mefinfo->refsigma = skynoise;
   mefinfo->refflim = mefinfo->zp - 2.5 * log10f(5.0 * sqrtf(M_PI * rcore * rcore) *
@@ -1096,6 +1110,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   long split_iexp = 0, split_nexp = -1;
   float tamb = -999, humid = -999, press = -999, skytemp = -999;
+  int iha = 0;
 
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
@@ -1727,6 +1742,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  slaAopqk(apra, apdec, aoprms, &aob, &zob, &hob, &dob, &rob);
 	  points[r].airmass = slaAirmas(zob);
 	  points[r].ha = hob;
+
+	  if(hob > 0)
+	    iha = 1;  /* "average" HA in some sense - will NOT work for wide-field */
 	}
 	else {
 	  points[r].airmass = -999.0;  /* flag unusability */
@@ -1854,7 +1872,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].mjd = mjd;
   mefinfo->frames[iframe].seeing = seeing;
   mefinfo->frames[iframe].fang = fang;
-  mefinfo->frames[iframe].iang = NINT(slaRanorm(fang - mefinfo->reffang)/M_PI) % 2;
+
+  if(mefinfo->havefang)
+    mefinfo->frames[iframe].iang = NINT(slaRanorm(fang - mefinfo->reffang)/M_PI) % 2;
+  else
+    mefinfo->frames[iframe].iang = iha;  /* old, incorrect, method */
 
   mefinfo->frames[iframe].split_iexp = split_iexp;
   mefinfo->frames[iframe].split_nexp = split_nexp;

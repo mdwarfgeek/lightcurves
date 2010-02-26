@@ -104,6 +104,7 @@ struct lc_mef {
   float zp;
   float satmag;
   float reffang;
+  int havefang;
   float refexp;
   float refsigma;
   float refflim;
