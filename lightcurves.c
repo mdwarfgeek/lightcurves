@@ -1,8 +1,11 @@
+#include <sys/types.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 #include <ctype.h>
+#include <unistd.h>
 
 #include "lightcurves.h"
 
@@ -59,7 +62,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   for(meas = 0; meas < nfluxuse; meas++) {
     /* Apply polynomial correction if requested */
     if(mefinfo->degree >= 0) {
-      if(verbose)
+      if(verbose && isatty(1))
 	printf("\r Processing aperture %ld of %d",
 	       meas+1, NFLUX);
       
@@ -261,7 +264,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     }
   }
 
-  if(verbose)
+  if(verbose && isatty(1))
     printf("\n");
 
   if(mefinfo->doapsel) {
@@ -392,7 +395,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
   for(meas = 0; meas < nfluxuse; meas++) {
     /* Apply polynomial correction if requested */
     if(mefinfo->degree >= 0) {
-      if(verbose)
+      if(verbose && isatty(1))
 	printf("\r Processing aperture %ld of %d",
 	       meas+1, NFLUX);
       
@@ -442,7 +445,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
     }
   }
 
-  if(verbose)
+  if(verbose && isatty(1))
     printf("\n");
 
   /* Apply old aperture selections */
