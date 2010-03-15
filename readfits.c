@@ -134,6 +134,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   float exptime, skylev, skynoise, rcore, gain;
   float apcor[NFLUX], percorr;
+  char filter[FLEN_VALUE];
 
   float *xbuf = (float *) NULL, *ybuf, *apbuf, *rabuf, *decbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
@@ -295,6 +296,41 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   else {
     percorr = powf(10.0, 0.4 * percorr);
   }
+
+  /* Get filter name for plots */
+  ffgkys(fits, "WFFBAND", filter, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      ffgkys(fits, "HIERARCH ESO INS FILT1 NAME", filter, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	ffgkys(fits, "FILTER2", filter, (char *) NULL, &status);
+	if(status) {
+	  fitsio_err(errstr, status, "ffgkye: FILTER2");
+	  goto error;
+	}
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkye: HIERARCH ESO INS FILT1 NAME");
+	goto error;
+      }
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: FILTER");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: WFFBAND");
+    goto error;
+  }
+
+  /* Copy */
+  strncpy(mefinfo->filter, filter, sizeof(mefinfo->filter)-1);
+  mefinfo->filter[sizeof(mefinfo->filter)-1] = '\0';
 
   /* Read number of rows */
   ffgnrw(fits, &nrows, &status);
