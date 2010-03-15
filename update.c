@@ -26,6 +26,7 @@ struct table_section {
 
 static int update_lc (fitsfile *reff, fitsfile *fits,
 		      struct buffer_info *buf, struct lc_mef *mefinfo,
+		      int outcls, int wantoutcls,
 		      char *errstr);
 
 /* Getopt stuff */
@@ -42,6 +43,7 @@ static void usage (char *av) {
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
 	  "         -s level  Override saturation level to 'level'.\n"
 	  "Output:\n"
+	  "         -c cls    Write out only class==cls (e.g. to select just targets).\n"
 	  "         -o file   Writes updated lightcurves to 'file'.\n"
 	  "         -u        Updates lightcurves in-place.\n"
 	  "         -p        Disables plots.\n"
@@ -69,6 +71,8 @@ int main (int argc, char *argv[]) {
   char outfile[FLEN_FILENAME-1], fnbuf[FLEN_FILENAME];
   int dooutput = 0;
   int doreplace = 0;
+  int outcls = 0;
+  int wantoutcls = 0;
   int fd = -1, rv;
 
   char intrafile[FLEN_FILENAME];
@@ -96,8 +100,14 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "i:o:s:upqv")) != -1)
+  while((c = getopt(argc, argv, "c:i:o:s:upqv")) != -1)
     switch(c) {
+    case 'c':
+      outcls = (int) strtol(optarg, &ep, 0);
+      if(*ep != '\0')
+	fatal(1, "invalid class flag: %s", optarg);
+      wantoutcls = 1;
+      break;
     case 'i':
       strncpy(intrafile, optarg, sizeof(intrafile)-1);
       intrafile[sizeof(intrafile)-1] = '\0';
@@ -369,7 +379,7 @@ int main (int argc, char *argv[]) {
 	fatal(1, "%s", errstr);
       }
 
-      if(update_lc(inf, outf, &buf, &(meflist[mef]), errstr))
+      if(update_lc(inf, outf, &buf, &(meflist[mef]), outcls, wantoutcls, errstr))
 	fatal(1, "write_lc: %s", errstr);
     }
 
@@ -463,6 +473,7 @@ int main (int argc, char *argv[]) {
 
 static int update_lc (fitsfile *reff, fitsfile *fits,
 		      struct buffer_info *buf, struct lc_mef *mefinfo,
+		      int outcls, int wantoutcls, 
 		      char *errstr) {
   int status = 0, col, ncoluse, anynull;
 
@@ -509,6 +520,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   float *medlist, tmp;
   float medflux, sigflux, chisq;
   long nchisq, nmed;
+
+  long starout, nstarout = 0;
 
   /* Get existing number of measurements */
   ffgkyj(reff, "NMEAS", &nmeasexist, (char *) NULL, &status);
@@ -791,8 +804,19 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   copysect[ncopysect].ncopy = previnpos-previnstart;
   ncopysect++;
 
+  /* If we're filtering, figure out the correct size */
+  if(wantoutcls) {
+    nstarout = 0;
+
+    for(star = 0; star < mefinfo->nstars; star++)
+      if(mefinfo->stars[star].cls == outcls)
+	nstarout++;
+  }
+  else
+    nstarout = mefinfo->nstars;
+
   /* Expand the table to the correct size */
-  ffukyj(fits, "NAXIS2", mefinfo->nstars, (char *) NULL, &status);
+  ffukyj(fits, "NAXIS2", nstarout, (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffpkyj: NAXIS2");
     goto error;
@@ -833,8 +857,13 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   /* Loop through all stars */
   nfluxuse = (mefinfo->doapsel ? NFLUX : 1);
+  starout = 0;
 
   for(star = 0; star < mefinfo->nstars; star++) {
+    /* Skip the ones without the correct class if we're doing that */
+    if(wantoutcls && mefinfo->stars[star].cls != outcls)
+      continue;  /* I'm too lazy to reindent the rest of the loop */
+
     /* Read existing lightcurve info */
     ffgcvd(reff, gcols[4], star + 1, 1, nmeasexist, -999.0, hjdbuf, &anynull, &status);
     ffgcve(reff, gcols[5], star + 1, 1, nmeasexist, -999.0, fluxbuf, &anynull, &status);
@@ -912,7 +941,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	goto error;
       }
 
-      ffptbb(fits, star+1, copysect[sect].outstart, copysect[sect].ncopy, rawbuf, &status);
+      ffptbb(fits, starout+1, copysect[sect].outstart, copysect[sect].ncopy, rawbuf, &status);
       if(status) {
 	fitsio_err(errstr, status, "ffptbb");
 	goto error;
@@ -956,24 +985,26 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     }
 
     /* Write in modified data */
-    ffpcne(fits, gcols[0], star+1, 1, 1, &medflux, -999.0, &status);
-    ffpcne(fits, gcols[1], star+1, 1, 1, &sigflux, -999.0, &status);
-    ffpcne(fits, gcols[2], star+1, 1, 1, &chisq, -999.0, &status);
-    ffpcnj(fits, gcols[3], star+1, 1, 1, &nchisq, -999, &status);
+    ffpcne(fits, gcols[0], starout+1, 1, 1, &medflux, -999.0, &status);
+    ffpcne(fits, gcols[1], starout+1, 1, 1, &sigflux, -999.0, &status);
+    ffpcne(fits, gcols[2], starout+1, 1, 1, &chisq, -999.0, &status);
+    ffpcnj(fits, gcols[3], starout+1, 1, 1, &nchisq, -999, &status);
 
-    ffpcnd(fits, gcols[4], star+1, 1, nmeasout, hjdbuf, -999.0, &status);
-    ffpcne(fits, gcols[5], star+1, 1, nmeasout, fluxbuf, -999.0, &status);
-    ffpcne(fits, gcols[6], star+1, 1, nmeasout, fluxerrbuf, -999.0, &status);
-    ffpcne(fits, gcols[7], star+1, 1, nmeasout, xlcbuf, -999.0, &status);
-    ffpcne(fits, gcols[8], star+1, 1, nmeasout, ylcbuf, -999.0, &status);
-    ffpcne(fits, gcols[9], star+1, 1, nmeasout, airbuf, -999.0, &status);
-    ffpcne(fits, gcols[10], star+1, 1, nmeasout, habuf, -999.0, &status);
-    ffpcne(fits, gcols[11], star+1, 1, nmeasout, wtbuf, -999.0, &status);
-    ffpclb(fits, gcols[12], star+1, 1, nmeasout, flagbuf, &status);
+    ffpcnd(fits, gcols[4], starout+1, 1, nmeasout, hjdbuf, -999.0, &status);
+    ffpcne(fits, gcols[5], starout+1, 1, nmeasout, fluxbuf, -999.0, &status);
+    ffpcne(fits, gcols[6], starout+1, 1, nmeasout, fluxerrbuf, -999.0, &status);
+    ffpcne(fits, gcols[7], starout+1, 1, nmeasout, xlcbuf, -999.0, &status);
+    ffpcne(fits, gcols[8], starout+1, 1, nmeasout, ylcbuf, -999.0, &status);
+    ffpcne(fits, gcols[9], starout+1, 1, nmeasout, airbuf, -999.0, &status);
+    ffpcne(fits, gcols[10], starout+1, 1, nmeasout, habuf, -999.0, &status);
+    ffpcne(fits, gcols[11], starout+1, 1, nmeasout, wtbuf, -999.0, &status);
+    ffpclb(fits, gcols[12], starout+1, 1, nmeasout, flagbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpcl");
       goto error;
     }
+
+    starout++;
   }
 
   free((void *) lcbuf);
