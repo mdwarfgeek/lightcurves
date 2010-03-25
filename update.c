@@ -65,10 +65,10 @@ int main (int argc, char *argv[]) {
 
   long f, nf = 0;
 
-  fitsfile *inf, *outf;
+  fitsfile *inf, *outf, *tmplf;
   int status = 0, ext, mef, nmefs;
 
-  char outfile[FLEN_FILENAME-1], fnbuf[FLEN_FILENAME];
+  char outfile[FLEN_FILENAME-1], tmpfile[FLEN_FILENAME-1], fnbuf[FLEN_FILENAME];
   int dooutput = 0;
   int doreplace = 0;
   int outcls = 0;
@@ -125,7 +125,6 @@ int main (int argc, char *argv[]) {
       break;
     case 'u':
       doreplace = 1;
-      dooutput = 1;
       break;
     case 'p':
       noplots++;
@@ -199,26 +198,50 @@ int main (int argc, char *argv[]) {
   else
     nmefs = 1;
 
-  /* Create temporary file for in-place edit */
-  if(doreplace) {
-    snprintf(outfile, sizeof(outfile), "%s_XXXXXX", progname);
+  /* Special case when updates of separate output file are requested */
+  tmplf = inf;
 
-    fd = mkstemp(outfile);
-    if(fd == -1)
-      error(1, "mkstemp: %s", outfile);
+  if(doreplace && dooutput) {
+    /* First, check if it exists, if not it's just the normal output case */
+    rv = access(outfile, F_OK);
+    if(rv != 0)
+      doreplace = 0;
+    else {
+      /* It's there, better open it then */
+      ffopen(&tmplf, outfile, READONLY, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffopen: %s", refname);
+	fatal(1, "%s", errstr);
+      }
+    }
   }
 
-  /* Create output file */
-  if(dooutput) {
+  if(doreplace) {
+    /* Create temporary file for in-place edit */
+    snprintf(tmpfile, sizeof(tmpfile), "%s_XXXXXX", progname);
+
+    fd = mkstemp(tmpfile);
+    if(fd == -1)
+      error(1, "mkstemp: %s", tmpfile);
+
     /* Form output name */
+    fnbuf[0] = '!';
+    strncpy(&(fnbuf[1]), tmpfile, sizeof(fnbuf)-1);
+    fnbuf[sizeof(fnbuf)-1] = '\0';
+  }
+  else {
+    /* Form normal output name */
     fnbuf[0] = '!';
     strncpy(&(fnbuf[1]), outfile, sizeof(fnbuf)-1);
     fnbuf[sizeof(fnbuf)-1] = '\0';
+  }
 
+  /* Create output file */
+  if(dooutput || doreplace) {
     /* Create file */
     ffinit(&outf, fnbuf, &status);
     if(status) {
-      fitsio_err(errstr, status, "ffinit: %s", outfile);
+      fitsio_err(errstr, status, "ffinit: %s", &(fnbuf[1]));
       fatal(1, "%s", errstr);
     }
 
@@ -288,6 +311,8 @@ int main (int argc, char *argv[]) {
     if(ext == -99) {
       /* Move there */
       ffmahd(inf, mef+2, (int *) NULL, &status);
+      if(tmplf != inf)
+	ffmahd(tmplf, mef+2, (int *) NULL, &status);
       if(status) {
 	fitsio_err(errstr, status, "ffmahd: %s: HDU %d", refname, mef+2);
 	fatal(1, "%s", errstr);
@@ -368,9 +393,9 @@ int main (int argc, char *argv[]) {
       meflist[mef].avextinc = 1.0;
 
     /* Write out lightcurves for this MEF if requested */
-    if(dooutput) {
+    if(dooutput || doreplace) {
       if(verbose)
-	printf(" Writing %s\n", outfile);
+	printf(" Writing %s\n", doreplace ? tmpfile : outfile);
 
       /* Append a new HDU */
       ffcrhd(outf, &status);
@@ -379,12 +404,10 @@ int main (int argc, char *argv[]) {
 	fatal(1, "%s", errstr);
       }
 
-      if(update_lc(inf, outf, &buf, &(meflist[mef]), outcls, wantoutcls, errstr))
+      if(update_lc(tmplf, outf, &buf, &(meflist[mef]), outcls, wantoutcls, errstr))
 	fatal(1, "write_lc: %s", errstr);
-    }
 
-    /* Flush */
-    if(dooutput) {
+      /* Flush */
       ffflus(outf, &status);
       if(status) {
 	fitsio_err(errstr, status, "ffflus");
@@ -403,6 +426,8 @@ int main (int argc, char *argv[]) {
   buffer_close(&buf);
 
   /* Close reference */
+  if(tmplf != inf)
+    ffclos(tmplf, &status);
   ffclos(inf, &status);
   if(status) {
     fitsio_err(errstr, status, "ffclos");
@@ -410,7 +435,7 @@ int main (int argc, char *argv[]) {
   }
 
   /* Close output file */
-  if(dooutput) {
+  if(dooutput || doreplace) {
     ffclos(outf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffclos");
@@ -418,14 +443,26 @@ int main (int argc, char *argv[]) {
     }
 
     if(doreplace) {
-      /* Overwrite original with temporary file */
-      rv = unlink(refname);
-      if(rv == -1)
-	error(1, "unlink: %s", refname);
-
-      rv = rename(outfile, refname);
-      if(rv == -1)
-	error(1, "rename: %s to %s", outfile, refname);
+      if(dooutput) {
+	/* Overwrite original output with temporary file */
+	rv = unlink(outfile);
+	if(rv == -1)
+	  error(1, "unlink: %s", outfile);
+	
+	rv = rename(tmpfile, outfile);
+	if(rv == -1)
+	  error(1, "rename: %s to %s", tmpfile, outfile);
+      }
+      else {
+	/* Overwrite original input with temporary file */
+	rv = unlink(refname);
+	if(rv == -1)
+	  error(1, "unlink: %s", refname);
+	
+	rv = rename(tmpfile, refname);
+	if(rv == -1)
+	  error(1, "rename: %s to %s", tmpfile, refname);
+      }
     }
   }
 
@@ -477,10 +514,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 		      char *errstr) {
   int status = 0, col, ncoluse, anynull;
 
-  char *colnames[13] = { "medflux", "rms", "chisq", "nchisq",
+  char *colnames[14] = { "medflux", "rms", "chisq", "nchisq", "pointer",
 			 "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
                          "weight", "flags" };
-  int gcols[13];
+  int gcols[14];
 
   char kbuf[FLEN_KEYWORD];
   char cbuf[FLEN_COMMENT];
@@ -521,7 +558,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   float medflux, sigflux, chisq;
   long nchisq, nmed;
 
-  long starout, nstarout = 0;
+  long starin, starout, nstarin, nstarout = 0, pointer;
 
   /* Get existing number of measurements */
   ffgkyj(reff, "NMEAS", &nmeasexist, (char *) NULL, &status);
@@ -530,7 +567,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     goto error;
   }
 
-  /* Get number of columns */
+  /* Get number of rows and columns */
+  ffgnrw(reff, &nstarin, &status);
   ffgncl(reff, &ncols, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgncl");
@@ -736,7 +774,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   }
 
   /* Expand vectors */
-  for(col = 4; col < ncoluse; col++) {
+  for(col = 5; col < ncoluse; col++) {
     ffmvec(fits, gcols[col], nmeasout, &status);
     if(status) {
       fitsio_err(errstr, status, "ffmvec");
@@ -808,12 +846,22 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   if(wantoutcls) {
     nstarout = 0;
 
-    for(star = 0; star < mefinfo->nstars; star++)
+    for(starin = 0; starin < nstarin; starin++) {
+      /* Read pointer to figure out original star number */
+      ffgcvj(reff, gcols[4], starin + 1, 1, 1, 0, &star, &anynull, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffgcv");
+	goto error;
+      }
+      
+      star--;  /* 1-base to zero-base */
+
       if(mefinfo->stars[star].cls == outcls)
 	nstarout++;
+    }
   }
   else
-    nstarout = mefinfo->nstars;
+    nstarout = nstarin;
 
   /* Expand the table to the correct size */
   ffukyj(fits, "NAXIS2", nstarout, (char *) NULL, &status);
@@ -859,21 +907,30 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   nfluxuse = (mefinfo->doapsel ? NFLUX : 1);
   starout = 0;
 
-  for(star = 0; star < mefinfo->nstars; star++) {
+  for(starin = 0; starin < nstarin; starin++) {
+    /* Read pointer to figure out original star number */
+    ffgcvj(reff, gcols[4], starin + 1, 1, 1, 0, &pointer, &anynull, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgcv");
+      goto error;
+    }
+
+    star = pointer-1;
+
     /* Skip the ones without the correct class if we're doing that */
     if(wantoutcls && mefinfo->stars[star].cls != outcls)
       continue;  /* I'm too lazy to reindent the rest of the loop */
 
     /* Read existing lightcurve info */
-    ffgcvd(reff, gcols[4], star + 1, 1, nmeasexist, -999.0, hjdbuf, &anynull, &status);
-    ffgcve(reff, gcols[5], star + 1, 1, nmeasexist, -999.0, fluxbuf, &anynull, &status);
-    ffgcve(reff, gcols[6], star + 1, 1, nmeasexist, -999.0, fluxerrbuf, &anynull, &status);
-    ffgcve(reff, gcols[7], star + 1, 1, nmeasexist, -999.0, xlcbuf, &anynull, &status);
-    ffgcve(reff, gcols[8], star + 1, 1, nmeasexist, -999.0, ylcbuf, &anynull, &status);
-    ffgcve(reff, gcols[9], star + 1, 1, nmeasexist, -999.0, airbuf, &anynull, &status);
-    ffgcve(reff, gcols[10], star + 1, 1, nmeasexist, -999.0, habuf, &anynull, &status);
-    ffgcve(reff, gcols[11], star + 1, 1, nmeasexist, -999.0, wtbuf, &anynull, &status);
-    ffgcvb(reff, gcols[12], star + 1, 1, nmeasexist, 0, flagbuf, &anynull, &status);
+    ffgcvd(reff, gcols[5], starin + 1, 1, nmeasexist, -999.0, hjdbuf, &anynull, &status);
+    ffgcve(reff, gcols[6], starin + 1, 1, nmeasexist, -999.0, fluxbuf, &anynull, &status);
+    ffgcve(reff, gcols[7], starin + 1, 1, nmeasexist, -999.0, fluxerrbuf, &anynull, &status);
+    ffgcve(reff, gcols[8], starin + 1, 1, nmeasexist, -999.0, xlcbuf, &anynull, &status);
+    ffgcve(reff, gcols[9], starin + 1, 1, nmeasexist, -999.0, ylcbuf, &anynull, &status);
+    ffgcve(reff, gcols[10], starin + 1, 1, nmeasexist, -999.0, airbuf, &anynull, &status);
+    ffgcve(reff, gcols[11], starin + 1, 1, nmeasexist, -999.0, habuf, &anynull, &status);
+    ffgcve(reff, gcols[12], starin + 1, 1, nmeasexist, -999.0, wtbuf, &anynull, &status);
+    ffgcvb(reff, gcols[13], starin + 1, 1, nmeasexist, 0, flagbuf, &anynull, &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
       goto error;
@@ -935,7 +992,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       if(copysect[sect].ncopy <= 0)
 	continue;
 
-      ffgtbb(reff, star+1, copysect[sect].instart, copysect[sect].ncopy, rawbuf, &status);
+      ffgtbb(reff, starin+1, copysect[sect].instart, copysect[sect].ncopy, rawbuf, &status);
       if(status) {
 	fitsio_err(errstr, status, "ffgtbb");
 	goto error;
@@ -989,16 +1046,16 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffpcne(fits, gcols[1], starout+1, 1, 1, &sigflux, -999.0, &status);
     ffpcne(fits, gcols[2], starout+1, 1, 1, &chisq, -999.0, &status);
     ffpcnj(fits, gcols[3], starout+1, 1, 1, &nchisq, -999, &status);
-
-    ffpcnd(fits, gcols[4], starout+1, 1, nmeasout, hjdbuf, -999.0, &status);
-    ffpcne(fits, gcols[5], starout+1, 1, nmeasout, fluxbuf, -999.0, &status);
-    ffpcne(fits, gcols[6], starout+1, 1, nmeasout, fluxerrbuf, -999.0, &status);
-    ffpcne(fits, gcols[7], starout+1, 1, nmeasout, xlcbuf, -999.0, &status);
-    ffpcne(fits, gcols[8], starout+1, 1, nmeasout, ylcbuf, -999.0, &status);
-    ffpcne(fits, gcols[9], starout+1, 1, nmeasout, airbuf, -999.0, &status);
-    ffpcne(fits, gcols[10], starout+1, 1, nmeasout, habuf, -999.0, &status);
-    ffpcne(fits, gcols[11], starout+1, 1, nmeasout, wtbuf, -999.0, &status);
-    ffpclb(fits, gcols[12], starout+1, 1, nmeasout, flagbuf, &status);
+    ffpclj(fits, gcols[4], starout+1, 1, 1, &pointer, &status);
+    ffpcnd(fits, gcols[5], starout+1, 1, nmeasout, hjdbuf, -999.0, &status);
+    ffpcne(fits, gcols[6], starout+1, 1, nmeasout, fluxbuf, -999.0, &status);
+    ffpcne(fits, gcols[7], starout+1, 1, nmeasout, fluxerrbuf, -999.0, &status);
+    ffpcne(fits, gcols[8], starout+1, 1, nmeasout, xlcbuf, -999.0, &status);
+    ffpcne(fits, gcols[9], starout+1, 1, nmeasout, ylcbuf, -999.0, &status);
+    ffpcne(fits, gcols[10], starout+1, 1, nmeasout, airbuf, -999.0, &status);
+    ffpcne(fits, gcols[11], starout+1, 1, nmeasout, habuf, -999.0, &status);
+    ffpcne(fits, gcols[12], starout+1, 1, nmeasout, wtbuf, -999.0, &status);
+    ffpclb(fits, gcols[13], starout+1, 1, nmeasout, flagbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpcl");
       goto error;
