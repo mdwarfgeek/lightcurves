@@ -144,7 +144,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   struct lc_star *stars = (struct lc_star *) NULL;
   long nmeas;
 
-  float umlim, apcor7;
+  float umlim, lmlim, apcor7;
   long degree;
 
   long nrows, r, rr, roff, remain, rread, rblksz;
@@ -158,10 +158,21 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   ffgkye(fits, "ZP", &(mefinfo->zp), (char *) NULL, &status);
   ffgkye(fits, "UMLIM", &umlim, (char *) NULL, &status);
   ffgkyj(fits, "POLYDEG", &degree, (char *) NULL, &status);
-  ffgkyl(fits, "APSEL", &(mefinfo->doapsel), (char *) NULL, &status);
+  ffgkyl(fits, "APSEL", &(mefinfo->aperture), (char *) NULL, &status);
   ffgkyj(fits, "DOMERID", &(mefinfo->domerid), (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkyj: NMEAS");
+    goto error;
+  }
+
+  /* New and thus optional */
+  ffgkye(fits, "LMLIM", &lmlim, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    lmlim = umlim+USEMAG;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: LMLIM");
     goto error;
   }
 
@@ -190,7 +201,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     goto error;
   }
 
-  mefinfo->syslim = mefinfo->zp - umlim;
+  mefinfo->sysulim = mefinfo->zp - umlim;
+  mefinfo->sysllim = mefinfo->zp - lmlim;
   mefinfo->degree = degree;
 
   /* Simple test for 80-column catalogue */

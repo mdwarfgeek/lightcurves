@@ -27,7 +27,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   struct systematic_fit *sysbuf = (struct systematic_fit *) NULL;
 
-  long star, meas, nfluxuse, pt, opt1, opt2;
+  long star, meas, meas1, meas2, pt, opt1, opt2;
 
   float medflux, sigflux, rmsflux, frameoff, framerms;
   float tmp, chisq;
@@ -57,9 +57,10 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   }
 
   /* Loop through the various flux measures */
-  nfluxuse = (mefinfo->doapsel ? NFLUX : 1);
+  meas1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
+  meas2 = (mefinfo->aperture ? mefinfo->aperture : NFLUX);
 
-  for(meas = 0; meas < nfluxuse; meas++) {
+  for(meas = meas1; meas < meas2; meas++) {
     /* Apply polynomial correction if requested */
     if(mefinfo->degree >= 0) {
       if(verbose && isatty(1))
@@ -169,8 +170,8 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  
 	  /* Trap for no points in fit - discard in this case */
 	  if(framenpt > 0) {
-	    /* Store frame RMS for normal aperture (meas = 0) */
-	    if(meas == 0) {
+	    /* Store frame RMS for normal aperture */
+	    if(meas == meas1) {
 	      mefinfo->frames[pt].offset = frameoff;
 	      mefinfo->frames[pt].rms = framerms;
 	      mefinfo->frames[pt].extinc += sysbuf[pt].coeff[0];
@@ -190,7 +191,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       }
     }
 
-    if(mefinfo->doapsel || !norenorm) {
+    if(mefinfo->aperture != 1 || !norenorm) {
       /* Compute final per-object median flux */
       for(star = 0; star < mefinfo->nstars; star++) {
 	/* Read in measurements for this star */
@@ -238,7 +239,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
 	  goto error;
       
-	if(meas == 0)
+	if(meas == meas1)
 	  mefinfo->frames[pt].extinc += medoff;
       }
 
@@ -267,7 +268,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   if(verbose && isatty(1))
     printf("\n");
 
-  if(mefinfo->doapsel) {
+  if(mefinfo->aperture != 1) {
     /* Combine apertures */
     if(chooseap(buf, mefinfo, ptbuf, medbuf1, errstr))
       goto error;
@@ -360,7 +361,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   struct systematic_fit *sysbuf = (struct systematic_fit *) NULL;
 
-  long star, meas, nfluxuse, pt, opt;
+  long star, meas, meas1, meas2, pt, opt;
   float medflux, rmsflux, chisq, tmp;
   long nchisq;
   long framenpt;
@@ -390,9 +391,10 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
   }
 
   /* Loop through the various flux measures */
-  nfluxuse = (mefinfo->doapsel ? NFLUX : 1);
+  meas1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
+  meas2 = (mefinfo->aperture ? mefinfo->aperture : NFLUX);
 
-  for(meas = 0; meas < nfluxuse; meas++) {
+  for(meas = meas1; meas < meas2; meas++) {
     /* Apply polynomial correction if requested */
     if(mefinfo->degree >= 0) {
       if(verbose && isatty(1))
@@ -423,7 +425,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	/* Trap for no points in fit - discard in this case */
 	if(framenpt > 0) {
 	  /* Store frame RMS for normal aperture (meas = 0) */
-	  if(meas == 0) {
+	  if(meas == meas1) {
 	    mefinfo->frames[pt].offset = frameoff;
 	    mefinfo->frames[pt].rms = framerms;
 	    mefinfo->frames[pt].extinc += sysbuf[pt].coeff[0];
@@ -448,9 +450,8 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
   if(verbose && isatty(1))
     printf("\n");
 
-  /* Apply old aperture selections */
-  if(mefinfo->doapsel) {
-    /* Loop through all stars */
+  if(mefinfo->aperture == 0) {
+    /* Apply old aperture selections */
     for(star = 0; star < mefinfo->nstars; star++) {
       /* Which one was it? */
       useaper = -1;
@@ -480,6 +481,18 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
 	  goto error;
       }
+    }
+  }
+  else if(mefinfo->aperture > 1) {
+    /* Reshuffle */
+    for(star = 0; star < mefinfo->nstars; star++) {
+      /* Read in measurements for this star in chosen aperture */
+      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, mefinfo->aperture-1, errstr))
+	goto error;
+      
+      /* Write out into aperture 0 */
+      if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
+	goto error;
     }
   }
 

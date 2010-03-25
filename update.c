@@ -86,7 +86,7 @@ int main (int argc, char *argv[]) {
   int noplots = 0;
 
   float satlev = -1.0;
-  float syslim = -1.0;
+  float sysulim = -1.0, sysllim = -1.0;
 
   /* Set the program name for error reporting */
   if(argv[0])
@@ -415,7 +415,8 @@ int main (int argc, char *argv[]) {
       }
     }
 
-    syslim = meflist[mef].syslim;  /* kludge */
+    sysulim = meflist[mef].sysulim;  /* kludge */
+    sysllim = meflist[mef].sysllim;  /* kludge */
   }
 
 #ifdef DEBUG
@@ -481,7 +482,9 @@ int main (int argc, char *argv[]) {
 
   /* Do diagnostic plots */
   if(!noplots) {
-    if(do_plots(meflist, nmefs, medsat, medlim, syslim < 0.0 ? medsat : syslim,
+    if(do_plots(meflist, nmefs, medsat, medlim,
+		sysulim < 0.0 ? medsat : sysulim,
+		sysllim < 0.0 ? (sysulim < 0.0 ? medsat : sysulim)+USEMAG : sysllim,
 		errstr))
       fatal(1, "do_plots: %s");
   }
@@ -539,8 +542,6 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   long satflag;
   unsigned char flags;
-
-  int nfluxuse;
 
   int ncols, tcol;
   long previnstart, prevoutstart, previnpos, prevoutpos;
@@ -904,7 +905,6 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   medlist = fluxbuf + 7 * nmeasout;
 
   /* Loop through all stars */
-  nfluxuse = (mefinfo->doapsel ? NFLUX : 1);
   starout = 0;
 
   for(starin = 0; starin < nstarin; starin++) {

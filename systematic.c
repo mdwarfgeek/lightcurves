@@ -145,12 +145,12 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   /* Allow SATCLIP more mags */
   fmax -= SATCLIP;
 
-  if(mefinfo->syslim >= 0.0)
+  if(mefinfo->sysulim >= 0.0)
     /* User override */
-    fmax = mefinfo->syslim;
+    fmax = mefinfo->sysulim;
   else
     /* Store it */
-    mefinfo->syslim = fmax;
+    mefinfo->sysulim = fmax;
 
   mefinfo->satclip[meas] = fmax;
 
@@ -160,6 +160,13 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
    */
   fmin = fmax - USEMAG;
 
+  if(mefinfo->sysllim >= 0.0)
+    /* User override */
+    fmin = mefinfo->sysllim;
+  else
+    /* Store it */
+    mefinfo->sysllim = fmin;
+  
 #ifdef DEBUG
   printf("Flux range %.1f %.1f\n", fmin, fmax);
 #endif

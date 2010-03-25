@@ -16,7 +16,7 @@
 #define THEOSTEP  0.01  /* mag */
 
 int do_plots (struct lc_mef *meflist, int nmefs,
-	      float medsat, float medlim, float umlim, char *errstr) {
+	      float medsat, float medlim, float umlim, float lmlim, char *errstr) {
   float magmin, magmax, mag, rms, chi, photons, loge, area, tmp, tmpp, tmps;
   long star, pt;
   int mef;
@@ -202,8 +202,8 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   tmpy[1] = 2.9;
   cpgline(2, tmpx, tmpy);
 
-  tmpx[0] = umlim+USEMAG;
-  tmpx[1] = umlim+USEMAG;
+  tmpx[0] = lmlim;
+  tmpx[1] = lmlim;
   tmpy[0] = -0.1;
   tmpy[1] = 2.9;
   cpgline(2, tmpx, tmpy);

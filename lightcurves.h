@@ -11,7 +11,7 @@
 #define FLAG_CONF  0x02  /* Aperture contains bad pixels */
 #define FLAG_SATUR 0x04  /* Saturated */
 
-/* Use all objects within 4 mags below saturation for fit */
+/* Default to use all objects within 4 mags below saturation for fit */
 #define USEMAG  4
 
 struct lc_point {
@@ -147,10 +147,11 @@ struct lc_mef {
   long nf;
 
   /* Systematics fitting upper mag limit */
-  float syslim;
+  float sysulim;
+  float sysllim;
 
-  /* Aperture selection enabled? */
-  int doapsel;
+  /* Use this aperture in output (0 to select automatically) */
+  int aperture;
 
   /* Account for meridian offsets? */
   long domerid;
@@ -230,7 +231,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 
 /* Diagnostic plots: plots.c */
 int do_plots (struct lc_mef *meflist, int nmefs,
-	      float medsat, float medlim, float umlim, char *errstr);
+	      float medsat, float medlim, float umlim, float lmlim, char *errstr);
 
 int plot_corr (float *beforehist, float *beforewthist,
 	       float *corrhist, float *corrwthist,

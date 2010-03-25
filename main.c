@@ -43,7 +43,7 @@ static void usage (char *av) {
 	  "         -mm       Same, only also removes it.\n"
 	  "         -n        Do not renormalise median to reference magnitude.\n"
 	  "         -s level  Override saturation level to 'level'.\n"
-	  "         -u mag    Set upper mag limit for systematics correction.\n\n"
+	  "         -u mag    Set upper(,lower) mag limit for systematics correction.\n\n"
 	  "Output:\n"
 	  "         -g file   Writes good frames list to 'file'.\n"
 	  "         -o file   Writes lightcurves to 'file'.\n"
@@ -54,7 +54,7 @@ static void usage (char *av) {
 }  
 
 int main (int argc, char *argv[]) {
-  char *pn = (char *) NULL, *avzero, *ep;
+  char *pn = (char *) NULL, *avzero, *p, *ep;
   int c;
 
   char errstr[ERRSTR_LEN];
@@ -78,7 +78,7 @@ int main (int argc, char *argv[]) {
   char intrafile[FLEN_FILENAME];
   int dointra = 0;
 
-  int noapsel = 0;
+  int aperture = 0;
   int domerid = 0;
   int norenorm = 0;
   int polydeg = -1;
@@ -91,7 +91,7 @@ int main (int argc, char *argv[]) {
   long *tmpmed = (long *) NULL;
 
   float satlev = -1.0;
-  float syslim = -1.0;
+  float sysulim = -1.0, sysllim = -1.0;
 
   int noplots = 0;
   int diffmode = 0;
@@ -108,10 +108,12 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "adf:g:i:mno:pqs:u:v")) != -1)
+  while((c = getopt(argc, argv, "a:df:g:i:mno:pqs:u:v")) != -1)
     switch(c) {
     case 'a':
-      noapsel++;
+      aperture = (int) strtol(optarg, &ep, 0);
+      if(*ep != '\0' || aperture < 0)
+	fatal(1, "invalid aperture: %s", optarg);
       break;
     case 'd':
       diffmode++;
@@ -154,9 +156,22 @@ int main (int argc, char *argv[]) {
 	fatal(1, "invalid satlev value: %s", optarg);
       break;
     case 'u':
-      syslim = (float) strtod(optarg, &ep);
-      if(*ep != '\0' || syslim < 0)
+      sysulim = (float) strtod(optarg, &ep);
+      if(ep == optarg || sysulim < 0)
 	fatal(1, "invalid syslim value: %s", optarg);
+
+      while(*ep && isspace((unsigned char) *ep))
+	ep++;
+
+      p = ep;
+      if(*p == ',') {
+	p++;
+	
+	sysllim = (float) strtod(p, &ep);
+	if(ep == p || sysllim <= sysulim)
+	  fatal(1, "invalid syslim value: %s", optarg);
+      }
+
       break;
     case 'v':
       verbose++;
@@ -284,7 +299,7 @@ int main (int argc, char *argv[]) {
     meflist[mef].nstars = 0;
 
     meflist[mef].degree = polydeg;
-    meflist[mef].doapsel = !noapsel;
+    meflist[mef].aperture = aperture;
     meflist[mef].domerid = domerid;
 
     meflist[mef].avsigma = 0.0;
@@ -393,10 +408,15 @@ int main (int argc, char *argv[]) {
     nstartot += meflist[mef].nstars;
 
     /* Calculate syslim for this frame */
-    if(syslim < 0)
-      meflist[mef].syslim = -1.0;  /* calculate it later */
+    if(sysulim < 0)
+      meflist[mef].sysulim = -1.0;  /* calculate it later */
     else 
-      meflist[mef].syslim = meflist[mef].zp - syslim;  /* user-supplied */
+      meflist[mef].sysulim = meflist[mef].zp - sysulim;  /* user-supplied */
+
+    if(sysllim < 0)
+      meflist[mef].sysllim = -1.0;  /* calculate it later */
+    else 
+      meflist[mef].sysllim = meflist[mef].zp - sysllim;  /* user-supplied */
 
     /* Call into the main part of the program */
     if(lightcurves(&buf, &(meflist[mef]), norenorm, errstr))
@@ -477,7 +497,9 @@ int main (int argc, char *argv[]) {
 
   /* Do diagnostic plots */
   if(!noplots) {
-    if(do_plots(meflist, nmefs, medsat, medlim, syslim < 0.0 ? medsat : syslim,
+    if(do_plots(meflist, nmefs, medsat, medlim,
+		sysulim < 0.0 ? medsat : sysulim,
+		sysllim < 0.0 ? (sysulim < 0.0 ? medsat : sysulim)+USEMAG : sysllim,
 		errstr))
       fatal(1, "do_plots: %s");
   }
@@ -563,7 +585,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   long satflag;
   unsigned char flags;
 
-  int ap, nfluxuse;
+  int ap, ap1, ap2;
 
   /* Generate tform specifier for fluxes and errors */
   snprintf(tabuf, sizeof(tabuf), "%dE", NFLUX);
@@ -626,12 +648,14 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	 "Flux limit of reference catalogue", &status);
   ffpkyf(fits, "ZP", mefinfo->zp, 4,
 	 "Zeropoint for magnitudes", &status);
-  ffpkyf(fits, "UMLIM", mefinfo->zp - mefinfo->syslim, 4,
+  ffpkyf(fits, "UMLIM", mefinfo->zp - mefinfo->sysulim, 4,
 	 "Upper mag limit for fit", &status);
+  ffpkyf(fits, "LMLIM", mefinfo->zp - mefinfo->sysllim, 4,
+	 "Lower mag limit for fit", &status);
   ffpkyj(fits, "POLYDEG", mefinfo->degree,
 	 "Polynomial degree in fit", &status);
-  ffpkyl(fits, "APSEL", mefinfo->doapsel,
-	 "Multiple apertures enabled?", &status);
+  ffpkyl(fits, "APSEL", mefinfo->aperture,
+	 "Aperture used (0 = automatic)", &status);
   ffpkyj(fits, "DOMERID", mefinfo->domerid,
 	 "Meridian flip removal?", &status);
   ffpkyf(fits, "REFFANG", mefinfo->reffang, 6,
@@ -861,7 +885,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   r = 0;
   frow = 1;
 
-  nfluxuse = (mefinfo->doapsel ? NFLUX : 1);
+  ap1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
+  ap2 = (mefinfo->aperture ? mefinfo->aperture : NFLUX);
 
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Fill in buffers */
@@ -877,17 +902,17 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     cfbuf[r] = mefinfo->stars[star].cflag;
     ptrbuf[r] = mefinfo->stars[star].ptr;
 
-    for(ap = 0; ap < nfluxuse; ap++) {
+    for(ap = 0; ap < NFLUX; ap++) {
+      apmedbuf[r*NFLUX+ap] = -999.0;
+      aprmsbuf[r*NFLUX+ap] = -999.0;
+      apmeridbuf[r*NFLUX+ap] = -999.0;
+    }
+
+    for(ap = ap1; ap < ap2; ap++) {
       apmedbuf[r*NFLUX+ap] = (mefinfo->stars[star].medflux[ap] > 0.0 ?
 			      mefinfo->zp - mefinfo->stars[star].medflux[ap] : -999.0);
       aprmsbuf[r*NFLUX+ap] = mefinfo->stars[star].sigflux[ap];
       apmeridbuf[r*NFLUX+ap] = mefinfo->stars[star].merid[ap];
-    }
-
-    for(ap = nfluxuse; ap < NFLUX; ap++) {
-      apmedbuf[r*NFLUX+ap] = -999.0;
-      aprmsbuf[r*NFLUX+ap] = -999.0;
-      apmeridbuf[r*NFLUX+ap] = -999.0;
     }
 
     apbuf[r] = mefinfo->stars[star].apradius;
