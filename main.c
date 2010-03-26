@@ -965,8 +965,9 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
       flagbuf[soff+pt] = flags;
 
-      /* Calculate HJD */
+      /* Calculate HJD as TT */
       hjdbuf[soff+pt] = mefinfo->mjdref + mefinfo->frames[pt].mjd +
+ 	slaDtt(mefinfo->mjdref + mefinfo->frames[pt].mjd)/86400.0 +
 	                hjdcorr(epos + 3*pt,
 				mefinfo->stars[star].ra,
 				mefinfo->stars[star].dec);
