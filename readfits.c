@@ -158,7 +158,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   ffgkye(fits, "ZP", &(mefinfo->zp), (char *) NULL, &status);
   ffgkye(fits, "UMLIM", &umlim, (char *) NULL, &status);
   ffgkyj(fits, "POLYDEG", &degree, (char *) NULL, &status);
-  ffgkyl(fits, "APSEL", &(mefinfo->aperture), (char *) NULL, &status);
+  ffgkyj(fits, "APSEL", &(mefinfo->aperture), (char *) NULL, &status);
   ffgkyj(fits, "DOMERID", &(mefinfo->domerid), (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkyj: NMEAS");

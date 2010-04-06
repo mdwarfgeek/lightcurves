@@ -151,7 +151,7 @@ struct lc_mef {
   float sysllim;
 
   /* Use this aperture in output (0 to select automatically) */
-  int aperture;
+  long aperture;
 
   /* Account for meridian offsets? */
   long domerid;

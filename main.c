@@ -654,7 +654,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	 "Lower mag limit for fit", &status);
   ffpkyj(fits, "POLYDEG", mefinfo->degree,
 	 "Polynomial degree in fit", &status);
-  ffpkyl(fits, "APSEL", mefinfo->aperture,
+  ffpkyj(fits, "APSEL", mefinfo->aperture,
 	 "Aperture used (0 = automatic)", &status);
   ffpkyj(fits, "DOMERID", mefinfo->domerid,
 	 "Meridian flip removal?", &status);
