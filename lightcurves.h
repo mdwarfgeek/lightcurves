@@ -90,6 +90,9 @@ struct lc_frame {
   float humid;
   float press;
   float skytemp;
+
+  /* MEarth-specific: realtime status information */
+  long rtstat;
 };
 
 struct lc_mef {

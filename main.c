@@ -780,6 +780,16 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
+    if(mefinfo->frames[pt].rtstat >= 0) {
+      snprintf(kbuf, sizeof(kbuf), "RTST%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Trigger status for datapoint %ld", pt+1);
+      ffpkyj(fits, kbuf, mefinfo->frames[pt].rtstat, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
+    }
+
     snprintf(kbuf, sizeof(kbuf), "IUPD%ld", pt+1);
     snprintf(cbuf, sizeof(cbuf), "Update number when datapoint %ld was added", pt+1);
     ffpkyj(fits, kbuf, 0, cbuf, &status);

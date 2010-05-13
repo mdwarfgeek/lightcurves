@@ -1156,7 +1156,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   int cats_are_80 = 0;
   char *ep;
 
-  long split_iexp = 0, split_nexp = -1;
+  long split_iexp = 0, split_nexp = -1, rtstat = -1;
   float tamb = -999, humid = -999, press = -999, skytemp = -999;
   int iha = 0;
 
@@ -1693,6 +1693,17 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
+  /* MEarth-specific: realtime status */
+  ffgkyj(fits, "RTSTAT", &rtstat, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    rtstat = -1;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkyj: RTSTAT");
+    goto error;
+  }
+
   if(doairm) {
     /* Pre-compute mean-to-apt parameters for frame */
     slaMappa(2000.0, mjd+slaDtt(mjd)/86400.0, amprms);
@@ -1933,6 +1944,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].humid = humid;
   mefinfo->frames[iframe].press = press;
   mefinfo->frames[iframe].skytemp = skytemp;
+
+  mefinfo->frames[iframe].rtstat = rtstat;
 
   /* Initialise these (extinc is cumulative) */
   mefinfo->frames[iframe].offset = 0;
