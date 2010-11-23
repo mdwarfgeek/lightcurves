@@ -4,7 +4,7 @@
 #include <fitsio.h>
 
 /* Number of flux measures */
-#define NFLUX  3
+#define NFLUX  4
 
 /* Flags column in lightcurve file */
 #define FLAG_NODP  0x01  /* No data point (off chip) */
