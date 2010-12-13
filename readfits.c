@@ -1031,7 +1031,9 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	if(col == 0)
 	  stars[rout].refmag = 2.5 * log10f(MAX(1.0, stars[rout].ref[col].flux));
 
-	if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev)
+	stars[rout].ref[col].peak = pkhtbuf[r]+locskybuf[r];
+
+	if(stars[rout].ref[col].peak > 0.99*satlev)
 	  stars[rout].ref[col].satur = 1;
 	else
 	  stars[rout].ref[col].satur = 0;
@@ -1134,14 +1136,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float *locskybuf, *skyrmsbuf, *badpixbuf;
 
   float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand, fang;
-  float seeing, skylev, skynoise, exptime, rcore, gain, percorr;
+  float seeing, ellipt, skylev, skynoise, exptime, rcore, gain, percorr;
   float skyvar, area, tpi, tmp, expfac;
   double mjd;
 
   float apcor[NFLUX];
 
   long nrows, rblksz, roff, remain, rout, rread, r;
-  float flux, fluxerr;
+  float flux, fluxerr, peak;
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
   float scatcoeff = 0.0, xi, xn;
@@ -1423,6 +1425,16 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   ffgkye(fits, "SEEING", &seeing, (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkye: SEEING");
+    goto error;
+  }
+
+  ffgkye(fits, "ELLIPTIC", &ellipt, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ellipt = -999.0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: ELLIPTIC");
     goto error;
   }
 
@@ -1828,6 +1840,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  flux = fluxbuf[r] * mefinfo->apcor[col] * mefinfo->percorr;
 	  fluxerr = (fabsf(fluxbuf[r]) * mefinfo->apcor[col] / gain + skyvar);
 
+	  peak = mefinfo->stars[rout].ref[col].peak + pkhtbuf[r]+locskybuf[r]; /* ?? */
+
 	  if(flux == 0.0 || mefinfo->stars[rout].ref[col].flux == 0.0)
 	    flux = 0.0;
 	  else
@@ -1841,7 +1855,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  flux = fluxbuf[r] * apcor[col] * percorr;
 	  fluxerr = (fabsf(fluxbuf[r]) * apcor[col] / gain + skyvar);
 
-	  if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev || mefinfo->stars[rout].ref[col].satur)
+	  peak = pkhtbuf[r]+locskybuf[r];
+
+	  if(peak > 0.99*satlev || mefinfo->stars[rout].ref[col].satur)
 	    points[r].satur = 1;
 	  else
 	    points[r].satur = 0;
@@ -1871,11 +1887,13 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  /* Stash result */
 	  points[r].fluxerr = sqrtf(var);
 	  points[r].fluxerrcom = points[r].fluxerr;
+	  points[r].peak = peak;
 	}
 	else {
 	  points[r].flux = 0.0;
 	  points[r].fluxerr = 0.0;
 	  points[r].fluxerrcom = 0.0;
+	  points[r].peak = 0.0;
 	}
 
 	/* Apply intrapixel correction if requested */
@@ -1935,6 +1953,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   /* Store this frame MJD and seeing */
   mefinfo->frames[iframe].mjd = mjd;
   mefinfo->frames[iframe].seeing = seeing;
+  mefinfo->frames[iframe].ellipt = ellipt;
+  mefinfo->frames[iframe].skylev = skylev;
+  mefinfo->frames[iframe].skynoise = skynoise;
   mefinfo->frames[iframe].fang = fang;
 
   if(mefinfo->havefang)

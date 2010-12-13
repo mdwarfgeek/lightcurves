@@ -23,6 +23,7 @@ struct lc_point {
   float airmass;
   float ha;
   float wt;  /* weight given in computing polynomial corr. */
+  float peak;  /* peak counts including sky */
   unsigned char satur : 1;
   unsigned char conf : 1;
 };
@@ -64,8 +65,11 @@ struct lc_frame {
   /* Frame MJD */
   double mjd;
 
-  /* Seeing */
+  /* Seeing, ellipticity, sky */
   float seeing;
+  float ellipt;
+  float skylev;
+  float skynoise;
 
   /* Field angle */
   float fang;

@@ -517,10 +517,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 		      char *errstr) {
   int status = 0, col, ncoluse, anynull;
 
-  char *colnames[14] = { "medflux", "rms", "chisq", "nchisq", "pointer",
+  char *colnames[15] = { "medflux", "rms", "chisq", "nchisq", "pointer",
 			 "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
-                         "weight", "flags" };
-  int gcols[14];
+                         "weight", "peak", "flags" };
+  int gcols[15];
 
   char kbuf[FLEN_KEYWORD];
   char cbuf[FLEN_COMMENT];
@@ -534,6 +534,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   double *epos = (double *) NULL;
 
   float *fluxbuf = (float *) NULL, *fluxerrbuf, *xlcbuf, *ylcbuf, *airbuf, *habuf, *wtbuf;
+  float *peakbuf;
   double *hjdbuf = (double *) NULL;
   unsigned char *flagbuf = (unsigned char *) NULL;
 
@@ -683,6 +684,30 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     snprintf(kbuf, sizeof(kbuf), "SEE%ld", nmeasexist+pt+1);
     snprintf(cbuf, sizeof(cbuf), "Seeing for datapoint %ld", nmeasexist+pt+1);
     ffpkyf(fits, kbuf, mefinfo->frames[pt].seeing, 3, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "ELL%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Ellipticity for datapoint %ld", nmeasexist+pt+1);
+    ffpkyf(fits, kbuf, mefinfo->frames[pt].ellipt, 3, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "SKY%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Sky level for datapoint %ld", nmeasexist+pt+1);
+    ffpkyf(fits, kbuf, mefinfo->frames[pt].skylev, 2, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "NOIS%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Sky noise for datapoint %ld", nmeasexist+pt+1);
+    ffpkyf(fits, kbuf, mefinfo->frames[pt].skynoise, 2, cbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpkyf: %s", kbuf);
       goto error;
@@ -896,7 +921,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   }
 
   /* Allocate output buffers */
-  fluxbuf = (float *) malloc(8 * nmeasout * sizeof(float));
+  fluxbuf = (float *) malloc(9 * nmeasout * sizeof(float));
   hjdbuf = (double *) malloc(nmeasout * sizeof(double));
   flagbuf = (unsigned char *) malloc(nmeasout * sizeof(unsigned char));
   rawbuf = (unsigned char *) malloc(rowsize * sizeof(unsigned char));
@@ -911,8 +936,9 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   airbuf = fluxbuf + 4 * nmeasout;
   habuf = fluxbuf + 5 * nmeasout;
   wtbuf = fluxbuf + 6 * nmeasout;
+  peakbuf = fluxbuf + 7 * nmeasout;
 
-  medlist = fluxbuf + 7 * nmeasout;
+  medlist = fluxbuf + 8 * nmeasout;
 
   /* Loop through all stars */
   starout = 0;
@@ -940,7 +966,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffgcve(reff, gcols[10], starin + 1, 1, nmeasexist, -999.0, airbuf, &anynull, &status);
     ffgcve(reff, gcols[11], starin + 1, 1, nmeasexist, -999.0, habuf, &anynull, &status);
     ffgcve(reff, gcols[12], starin + 1, 1, nmeasexist, -999.0, wtbuf, &anynull, &status);
-    ffgcvb(reff, gcols[13], starin + 1, 1, nmeasexist, 0, flagbuf, &anynull, &status);
+    ffgcve(reff, gcols[13], starin + 1, 1, nmeasexist, -999.0, peakbuf, &anynull, &status);
+    ffgcvb(reff, gcols[14], starin + 1, 1, nmeasexist, 0, flagbuf, &anynull, &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
       goto error;
@@ -987,6 +1014,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       airbuf[nmeasexist+pt] = lcbuf[pt].airmass;
       habuf[nmeasexist+pt] = lcbuf[pt].ha;
       wtbuf[nmeasexist+pt] = lcbuf[pt].wt;
+      peakbuf[nmeasexist+pt] = lcbuf[pt].peak;
 
       flagbuf[nmeasexist+pt] = flags;
 
@@ -1065,7 +1093,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffpcne(fits, gcols[10], starout+1, 1, nmeasout, airbuf, -999.0, &status);
     ffpcne(fits, gcols[11], starout+1, 1, nmeasout, habuf, -999.0, &status);
     ffpcne(fits, gcols[12], starout+1, 1, nmeasout, wtbuf, -999.0, &status);
-    ffpclb(fits, gcols[13], starout+1, 1, nmeasout, flagbuf, &status);
+    ffpcne(fits, gcols[13], starout+1, 1, nmeasout, peakbuf, -999.0, &status);
+    ffpclb(fits, gcols[14], starout+1, 1, nmeasout, flagbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpcl");
       goto error;
