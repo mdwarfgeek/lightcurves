@@ -676,6 +676,14 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       goto error;
     }
 
+    snprintf(kbuf, sizeof(kbuf), "TEXP%ld", pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Exposure time for datapoint %ld", pt+1);
+    ffpkyf(fits, kbuf, mefinfo->frames[pt].exptime, 3, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyg: %s", kbuf);
+      goto error;
+    }
+
     snprintf(kbuf, sizeof(kbuf), "OFF%ld", pt+1);
     snprintf(cbuf, sizeof(cbuf), "Frame offset for datapoint %ld", pt+1);
     ffpkyf(fits, kbuf, mefinfo->frames[pt].offset, 4, cbuf, &status);

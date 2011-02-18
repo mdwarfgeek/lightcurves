@@ -62,8 +62,9 @@ struct lc_star {
 };
 
 struct lc_frame {
-  /* Frame MJD */
+  /* Frame MJD and exposure time */
   double mjd;
+  float exptime;
 
   /* Seeing, ellipticity, sky */
   float seeing;

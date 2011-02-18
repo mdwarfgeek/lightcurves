@@ -106,10 +106,10 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  }
 
 	  if(mefinfo->domerid && opt1 > 0 && opt2 > 0) {
-	    medsig(medbuf1, opt1, &med1, (float *) NULL);
+	    medsig(medbuf1, opt1, &med1, (float *) NULL);  /* same as ref. */
 	    medsig(medbuf2, opt2, &med2, (float *) NULL);
 
-	    corr = 0.5*(med2-med1);
+	    corr = med2-med1;
 
 	    opt1 = 0;
 	    for(pt = 0; pt < mefinfo->nf; pt++) {
@@ -117,16 +117,12 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 		if(mefinfo->domerid > 1) {
 		  if(mefinfo->frames[pt].iang)
 		    ptbuf[pt].flux -= corr;
-		  else
-		    ptbuf[pt].flux += corr;
 		  
 		  medbuf1[opt1] = ptbuf[pt].flux;
 		}
 		else {
 		  if(mefinfo->frames[pt].iang)
 		    medbuf1[opt1] = ptbuf[pt].flux - corr;
-		  else
-		    medbuf1[opt1] = ptbuf[pt].flux + corr;
 		}
 
 		opt1++;
@@ -218,13 +214,18 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       opt1 = 0;
       for(star = 0; star < mefinfo->nstars; star++)
 	if(mefinfo->stars[star].medflux[meas] != 0.0 &&
-	   mefinfo->stars[star].sigflux[meas] != 0.0) {
+	   mefinfo->stars[star].sigflux[meas] != 0.0 &&
+	   mefinfo->stars[star].medflux[meas] >= mefinfo->sysllim &&
+	   mefinfo->stars[star].medflux[meas] <= mefinfo->sysulim) {
 	  medbuf1[opt1] = mefinfo->stars[star].medflux[meas] - mefinfo->stars[star].refmag;
 	  opt1++;
 	}
       
       medsig(medbuf1, opt1, &medoff, &sigoff);
       
+      if(verbose)
+	printf("  Calibration offset: %.3f %.3f\n", medoff, sigoff);
+
       /* Apply offset */
       for(pt = 0; pt < mefinfo->nf; pt++) {
 	/* Read in measurements for this frame */
@@ -413,8 +414,6 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    if(ptbuf[star].flux != 0.0) {
 	      if(mefinfo->frames[pt].iang)
 		ptbuf[star].flux -= mefinfo->stars[star].merid[meas];
-	      else
-		ptbuf[star].flux += mefinfo->stars[star].merid[meas];
 	    }
 
 	/* Perform polynomial fit correction */

@@ -271,8 +271,15 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     status = 0;
     ffgkye(fits, "HIERARCH ESO DET OUT1 GAIN", &gain, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
-      status = 0;
-      gain = 1.0;  /* !!! */
+      ffgkye(fits, "EGAIN", &gain, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	gain = 1.0;  /* !!! */
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkye: EGAIN");
+	goto error;
+      }
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkye: HIERARCH ESO DET OUT1 GAIN");
@@ -545,11 +552,13 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     { "V ",          0.12 },
     { "R ",          0.08 },
     { "I ",          0.04 },
+    { "Ic",          0.05 },
     { "stromgren u", 0.51 },
     { "stromgren v", 0.26 },
     { "stromgren b", 0.15 },
     { "stromgren y", 0.10 },
-    { "i+z",         0.10 }  /* MEarth */
+    { "i+z",         0.10 },  /* MEarth */
+    { "I_Burke",     0.05 }
   };
 
   /* Read number of rows */
@@ -723,17 +732,27 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   fang = atan2f(b, a);
 
   if(satlev < 0) {
-    /* Get saturation level */
-    ffgkye(fits, "SATURATE", &satlev, (char *) NULL, &status);
+    /* Get saturation level - tries SATLEV first, on MEarth this
+     * is a better estimate, based on the non-linearity curve.
+     */
+    ffgkye(fits, "SATLEV", &satlev, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      satlev = 65535;
-      
-      if(verbose > 1)
-	printf("Warning: using default satlev = %.1f\n", satlev);
+      ffgkye(fits, "SATURATE", &satlev, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	satlev = 65535;
+	
+	if(verbose > 1)
+	  printf("Warning: using default satlev = %.1f\n", satlev);
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkye: SATURATE");
+	goto error;
+      }
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: SATURATE");
+      fitsio_err(errstr, status, "ffgkye: SATLEV");
       goto error;
     }
   }
@@ -789,7 +808,15 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     ffgkye(fits, "HIERARCH ESO DET OUT1 GAIN", &gain, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      gain = 1.0;  /* !!! */
+      ffgkye(fits, "EGAIN", &gain, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	gain = 1.0;  /* !!! */
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkye: EGAIN");
+	goto error;
+      }
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkye: HIERARCH ESO DET OUT1 GAIN");
@@ -1033,7 +1060,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
 	stars[rout].ref[col].peak = pkhtbuf[r]+locskybuf[r];
 
-	if(stars[rout].ref[col].peak > 0.99*satlev)
+	if(stars[rout].ref[col].peak > 0.95*satlev)
 	  stars[rout].ref[col].satur = 1;
 	else
 	  stars[rout].ref[col].satur = 0;
@@ -1063,7 +1090,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       for(iap = 0; iap < NFLUX; iap++)
 	stars[rout].merid[iap] = 0.0;  /* initialise this */
 
-      if(pkhtbuf[r]+locskybuf[r] > 0.99*satlev) {
+      if(pkhtbuf[r]+locskybuf[r] > 0.95*satlev) {
 	sattmp[nsattmp] = stars[rout].ref[0].flux;
 	nsattmp++;
       }
@@ -1378,17 +1405,27 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   fang = atan2f(b, a);
 
   if(satlev < 0) {
-    /* Get saturation level */
-    ffgkye(fits, "SATURATE", &satlev, (char *) NULL, &status);
+    /* Get saturation level - tries SATLEV first.  On MEarth this
+     * is a better estimate, based on the non-linearity curve.
+     */
+    ffgkye(fits, "SATLEV", &satlev, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      satlev = 65535;
-      
-      if(verbose > 1 && !diffmode)
-	printf("Warning: using default satlev = %.1f\n", satlev);
+      ffgkye(fits, "SATURATE", &satlev, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	satlev = 65535;
+
+	if(verbose > 1 && !diffmode)
+	  printf("Warning: using default satlev = %.1f\n", satlev);
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkye: SATURATE");
+	goto error;
+      }
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: SATURATE");
+      fitsio_err(errstr, status, "ffgkye: SATLEV");
       goto error;
     }
   }
@@ -1466,7 +1503,15 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     ffgkye(fits, "HIERARCH ESO DET OUT1 GAIN", &gain, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      gain = 1.0;  /* !!! */
+      ffgkye(fits, "EGAIN", &gain, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	gain = 1.0;  /* !!! */
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkye: EGAIN");
+	goto error;
+      }
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkye: HIERARCH ESO DET OUT1 GAIN");
@@ -1546,7 +1591,15 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     ffgkys(fits, "OBSLAT", latstr, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      doairm = 0;
+      ffgkys(fits, "LAT-OBS", latstr, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	doairm = 0;
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkys: LAT-OBS");
+	goto error;
+      }
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkys: OBSLAT");
@@ -1572,7 +1625,15 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     ffgkys(fits, "OBSLONG", lonstr, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      doairm = 0;
+      ffgkys(fits, "LONG-OBS", lonstr, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	doairm = 0;
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkys: LONG-OBS");
+	goto error;
+      }
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkys: OBSLONG");
@@ -1598,7 +1659,15 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     ffgkys(fits, "OBSALT", heightstr, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      height = 0;
+      ffgkys(fits, "ALT-OBS", heightstr, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	height = 0;
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkys: ALT-OBS");
+	goto error;
+      }
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkys: OBSALT");
@@ -1857,7 +1926,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
 	  peak = pkhtbuf[r]+locskybuf[r];
 
-	  if(peak > 0.99*satlev || mefinfo->stars[rout].ref[col].satur)
+	  if(peak > 0.95*satlev || mefinfo->stars[rout].ref[col].satur)
 	    points[r].satur = 1;
 	  else
 	    points[r].satur = 0;
@@ -1952,6 +2021,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   /* Store this frame MJD and seeing */
   mefinfo->frames[iframe].mjd = mjd;
+  mefinfo->frames[iframe].exptime = exptime;
   mefinfo->frames[iframe].seeing = seeing;
   mefinfo->frames[iframe].ellipt = ellipt;
   mefinfo->frames[iframe].skylev = skylev;
