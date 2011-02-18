@@ -29,13 +29,11 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   long star, meas, meas1, meas2, pt, opt1, opt2;
 
-  float medflux, sigflux, rmsflux, frameoff, framerms;
+  float medflux, sigflux, rmsflux;
   float tmp, chisq;
   long nchisq;
-  long framenpt;
 
   float medoff, sigoff;
-  float framesigm;
 
   /* Allocate temporary workspace for calculating medians */
   nmedbuf = MAX(mefinfo->nf, mefinfo->nstars);
@@ -160,23 +158,22 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    goto error;
 	  
 	  /* Perform polynomial fit correction */
-	  if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf1, degree, sysbuf+pt,
-			    &frameoff, &framerms, &framesigm, &framenpt, errstr))
+	  if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf1, degree,
+			    sysbuf+pt, errstr))
 	    goto error;
 	  
 	  /* Trap for no points in fit - discard in this case */
-	  if(framenpt > 0) {
+	  if(sysbuf[pt].npt > 0) {
 	    /* Store frame RMS for normal aperture */
 	    if(meas == meas1) {
-	      mefinfo->frames[pt].offset = frameoff;
-	      mefinfo->frames[pt].rms = framerms;
+	      mefinfo->frames[pt].offset = sysbuf[pt].medoff;
+	      mefinfo->frames[pt].rms = sysbuf[pt].sigoff;
 	      mefinfo->frames[pt].extinc += sysbuf[pt].coeff[0];
-	      mefinfo->frames[pt].sigm = framesigm;
+	      mefinfo->frames[pt].sigm = sysbuf[pt].sigm;
 	    }
 
 	    /* Perform polynomial fit correction */
-	    if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf1, sysbuf,
-				framesigm, errstr))
+	    if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf1, sysbuf, errstr))
 	      goto error;
 	    
 	    /* Write out corrected fluxes */
@@ -365,14 +362,9 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
   long star, meas, meas1, meas2, pt, opt;
   float medflux, rmsflux, chisq, tmp;
   long nchisq;
-  long framenpt;
-
-  float frameoff, framerms;
 
   int aper, useaper;
   float diff, diffmin;
-
-  float framesigm;
 
   /* Allocate temporary workspace for calculating medians */
   nmedbuf = MAX(mefinfo->nf, mefinfo->nstars);
@@ -417,27 +409,26 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    }
 
 	/* Perform polynomial fit correction */
-	if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf, mefinfo->degree, sysbuf+pt,
-			  &frameoff, &framerms, &framesigm, &framenpt, errstr))
+	if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf, mefinfo->degree,
+			  sysbuf+pt, errstr))
 	  goto error;
 	
 	/* Trap for no points in fit - discard in this case */
-	if(framenpt > 0) {
+	if(sysbuf[pt].npt > 0) {
 	  /* Store frame RMS for normal aperture (meas = 0) */
 	  if(meas == meas1) {
-	    mefinfo->frames[pt].offset = frameoff;
-	    mefinfo->frames[pt].rms = framerms;
+	    mefinfo->frames[pt].offset = sysbuf[pt].medoff;
+	    mefinfo->frames[pt].rms = sysbuf[pt].sigoff;
 	    mefinfo->frames[pt].extinc += sysbuf[pt].coeff[0];
-	    mefinfo->frames[pt].sigm = framesigm;
+	    mefinfo->frames[pt].sigm = sysbuf[pt].sigm;
 	  }
 	  
 	  /* Perform polynomial fit correction */
-	  if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf,
-			      framesigm, errstr))
+	  if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf, errstr))
 	    goto error;
 	}	  
 	
-	if(framenpt > 0 || mefinfo->domerid > 1) {
+	if(sysbuf[pt].npt > 0 || mefinfo->domerid > 1) {
 	  /* Write out corrected fluxes */
 	  if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
 	    goto error;

@@ -82,7 +82,6 @@ static float percentile (float *list, long nn, long num, long div) {
 
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f,
-		    float *med_r, float *rms_r, float *sigm_r, long *npt_r,
 		    char *errstr) {
   double a[50][50], b[50], coeff[50];
   int ncoeff, ncoeffmax, iter;
@@ -428,14 +427,13 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   f->ybar = cybar;
   memcpy(f->coeff, coeff, sizeof(f->coeff));
   f->degree = degree;
+  f->medoff = medoff;
+  f->sigoff = sigoff;
+  f->sigm = (opt > 1 ? (opt > ncoeff ? sigoff / sqrt(opt-ncoeff) : 0.0) : lastsig);
+  f->npt = opt;
 
   /* Print coeffs */
   //printf("Coefficients %9.5f %9.5f x %9.5f y %9.5f x**2 %9.5f y**2 %9.5f x*y\n", coeff[0]*1000, coeff[1]*1000, coeff[3]*1000, coeff[2]*1000000, coeff[5]*1000000, coeff[4]*1000000);
-
-  *med_r = medoff;
-  *rms_r = sigoff;
-  *sigm_r = (opt > 1 ? (opt > ncoeff ? sigoff / sqrt(opt-ncoeff) : 0.0) : lastsig);
-  *npt_r = opt;
 
   return(0);
 
@@ -444,8 +442,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 }
 
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
-		      float *medbuf, struct systematic_fit *sysbuf,
-		      float sigm, char *errstr) {
+		      float *medbuf, struct systematic_fit *sysbuf, char *errstr) {
   long star;
   float dx, dy, corr;
 
@@ -460,7 +457,8 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
       data[star].flux -= corr;
 
       if(data[star].fluxerr > 0)
-	data[star].fluxerrcom = sqrt(data[star].fluxerr*data[star].fluxerr + sigm*sigm);
+	data[star].fluxerrcom = sqrt(data[star].fluxerr*data[star].fluxerr +
+				     sysbuf[frame].sigm*sysbuf[frame].sigm);
       else
 	data[star].fluxerrcom = 0.0;
     }

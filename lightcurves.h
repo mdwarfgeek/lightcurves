@@ -66,6 +66,9 @@ struct lc_frame {
   double mjd;
   float exptime;
 
+  /* Magnitude zeropoint difference from reference (for absolute cal.) */
+  float zpdiff;
+
   /* Seeing, ellipticity, sky */
   float seeing;
   float ellipt;
@@ -114,6 +117,9 @@ struct lc_mef {
   float reffang;
   int havefang;
   float refexp;
+  float refextinct;
+  float refairmass;
+  float refmagzpt;
   float refsigma;
   float refflim;
 
@@ -189,6 +195,11 @@ struct systematic_fit {
   float ybar;
   double coeff[50];
   int degree;
+
+  float medoff;
+  float sigoff;
+  float sigm;
+  long npt;
 };
 
 /* Intrapixel sensitivity map */
@@ -250,12 +261,9 @@ int plot_corr (float *beforehist, float *beforewthist,
 
 /* Systematics correction: systematic.c */
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
-		    float *medbuf, int degree, struct systematic_fit *f,
-		    float *med_r, float *rms_r, float *sigm_r, long *npt_r,
-		    char *errstr);
+		    float *medbuf, int degree, struct systematic_fit *f, char *errstr);
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
-		      float *medbuf, struct systematic_fit *f,
-		      float sigm, char *errstr);
+		      float *medbuf, struct systematic_fit *f, char *errstr);
 
 /* Catalogue and list driven file reading: readfits.c */
 int read_lc (fitsfile *fits, struct lc_mef *mefinfo,

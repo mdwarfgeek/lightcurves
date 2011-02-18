@@ -40,6 +40,27 @@ static char *apcor_keys_80[NFLUX] = { "APCOR3",
 				      "APCOR5",
                                       "APCOR6" };
 
+static struct {
+  char *filt;
+  float extinct;
+} default_extinct_tab[] = {
+  { "r ",          0.09 },
+  { "g ",          0.19 },
+  { "U ",          0.46 },
+  { "i ",          0.05 },
+  { "z ",          0.05 },
+  { "B ",          0.22 },
+  { "V ",          0.12 },
+  { "R ",          0.08 },
+  { "I ",          0.04 },
+  { "Ic",          0.05 },
+  { "stromgren u", 0.51 },
+  { "stromgren v", 0.26 },
+  { "stromgren b", 0.15 },
+  { "stromgren y", 0.10 },
+  { "i+z",         0.10 },  /* MEarth */
+  { "I_Burke",     0.05 }
+};
 
 #define RADECZP(x1, y1, ra, dec) {					\
   float x, y, xi, xn, rv, rfac;						\
@@ -538,28 +559,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
   int cats_are_80 = 0;
   int iap;
-
-  struct {
-    char *filt;
-    float extinct;
-  } default_extinct_tab[] = {
-    { "r ",          0.09 },
-    { "g ",          0.19 },
-    { "U ",          0.46 },
-    { "i ",          0.05 },
-    { "z ",          0.05 },
-    { "B ",          0.22 },
-    { "V ",          0.12 },
-    { "R ",          0.08 },
-    { "I ",          0.04 },
-    { "Ic",          0.05 },
-    { "stromgren u", 0.51 },
-    { "stromgren v", 0.26 },
-    { "stromgren b", 0.15 },
-    { "stromgren y", 0.10 },
-    { "i+z",         0.10 },  /* MEarth */
-    { "I_Burke",     0.05 }
-  };
 
   /* Read number of rows */
   ffgnrw(fits, &nrows, &status);
@@ -1119,6 +1118,9 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   mefinfo->reffang = fang;
   mefinfo->havefang = 1;
   mefinfo->refexp = exptime;
+  mefinfo->refextinct = noexp ? 0.0 : extinct;
+  mefinfo->refairmass = airmass;
+  mefinfo->refmagzpt = magzpt;
   mefinfo->refsigma = skynoise;
   mefinfo->refflim = mefinfo->zp - 2.5 * log10f(5.0 * sqrtf(M_PI * rcore * rcore) *
 						skynoise * apcor[0]);
@@ -1193,6 +1195,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   long split_iexp = 0, split_nexp = -1, rtstat = -1;
   float tamb = -999, humid = -999, press = -999, skytemp = -999;
   int iha = 0;
+
+  char filter[FLEN_VALUE];
+  float magzpt, zpcorr, airmass = 1.0, extinct = 0.0;
+  int l1, l2, i, ilim, noexp = 0;
 
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
@@ -1523,7 +1529,29 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
-  tpi = 2.0 * M_PI;
+  ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      magzpt = 25.0;
+
+      if(verbose)
+	printf("Warning: using default magzpt = %.1f\n", magzpt);
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: ZMAG");
+      goto error;
+    }
+    else {
+      noexp = 1;  /* don't add in 2.5log10(exptime) */
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: MAGZPT");
+    goto error;
+  }
 
   for(col = 0; col < NFLUX; col++) {
     ffgkye(fits, cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col],
@@ -1554,6 +1582,96 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   else {
     percorr = powf(10.0, 0.4 * percorr);
   }
+
+  /* Get airmass */
+  ffgkye(fits, "AIRMASS", &airmass, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "AMSTART", &airmass, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      airmass = 1.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: AMSTART");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: AIRMASS");
+    goto error;
+  }
+
+  /* Get filter name in case we can't get extinction */
+  ffgkys(fits, "WFFBAND", filter, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      ffgkys(fits, "HIERARCH ESO INS FILT1 NAME", filter, (char *) NULL, &status);
+      if(status == KEY_NO_EXIST) {
+	status = 0;
+	ffgkys(fits, "FILTER2", filter, (char *) NULL, &status);
+	if(status) {
+	  fitsio_err(errstr, status, "ffgkye: FILTER2");
+	  goto error;
+	}
+      }
+      else if(status) {
+	fitsio_err(errstr, status, "ffgkye: HIERARCH ESO INS FILT1 NAME");
+	goto error;
+      }
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: FILTER");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: WFFBAND");
+    goto error;
+  }
+
+  /* Copy */
+  strncpy(mefinfo->filter, filter, sizeof(mefinfo->filter)-1);
+  mefinfo->filter[sizeof(mefinfo->filter)-1] = '\0';
+
+  /* Append a space */
+  l1 = strlen(filter);
+  if(l1+1 < sizeof(filter)) {
+    filter[l1] = ' ';
+    filter[l1+1] = '\0';
+    l1++;
+  }
+
+  /* Attempt to get extinction */
+  ffgkye(fits, "EXTINCT", &extinct, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    extinct = 0.0;
+
+    /* Attempt to find it in the table of defaults */
+    ilim = sizeof(default_extinct_tab) / sizeof(default_extinct_tab[0]);
+
+    for(i = 0; i < ilim; i++) {
+      l2 = strlen(default_extinct_tab[i].filt);
+
+      if(l1 >= l2 && !strncmp(filter, default_extinct_tab[i].filt, l2)) {
+	/* Found it */
+	extinct = default_extinct_tab[i].extinct;
+	break;
+      }
+    }
+  }
+
+  /* Correction required to account for differences in exposure and extinction */
+  if(noexp)
+    zpcorr = 0.0;
+  else
+    zpcorr = 2.5 * log10f(exptime/mefinfo->refexp) - (airmass - 1.0)*extinct + (mefinfo->refairmass - 1.0)*mefinfo->refextinct;
+
+  tpi = 2.0 * M_PI;
 
   ffgkyd(fits, "MJD-OBS", &mjd, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
@@ -1935,6 +2053,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	if(flux > 0.0) {
 	  points[r].flux = 2.5 * log10f(MAX(1.0, flux));
 
+	  if(!diffmode)
+	    points[r].flux -= zpcorr;
+
 	  /* Compute uncertainty */
 	  rms = 2.5 * log10f(1.0 + sqrtf(fluxerr) / flux);
 	  var = rms*rms;
@@ -2043,10 +2164,12 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   mefinfo->frames[iframe].rtstat = rtstat;
 
+  mefinfo->frames[iframe].zpdiff = magzpt - mefinfo->refmagzpt;
+
   /* Initialise these (extinc is cumulative) */
   mefinfo->frames[iframe].offset = 0;
   mefinfo->frames[iframe].rms = -999.0;
-  mefinfo->frames[iframe].extinc = -2.5*log10(exptime/mefinfo->refexp);
+  mefinfo->frames[iframe].extinc = 0;
   mefinfo->frames[iframe].sigm = 0;
 
   free((void *) skyfiterrbuf);
