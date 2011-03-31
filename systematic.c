@@ -67,6 +67,36 @@ static float polyeval(float dx, float dy, double coeff[50], int degree) {
   return(result);
 }
 
+static float polyvar(float dx, float dy, double cov[50][50], int degree) {
+  int ox1, oy1, mx1, i1;
+  int ox2, oy2, mx2, i2;
+  float xp1, yp1, xp2, yp2, tmp, result;
+
+  result = 0;
+
+  i1 = 0;
+  for(oy1 = 0, yp1 = 1.0; oy1 <= degree; oy1++, yp1 *= dy) {
+    mx1 = degree - oy1;
+    for(ox1 = 0, xp1 = 1.0; ox1 <= mx1; ox1++, xp1 *= dx) {
+      tmp = xp1 * yp1;
+
+      i2 = 0;
+      for(oy2 = 0, yp2 = 1.0; oy2 <= degree; oy2++, yp2 *= dy) {
+	mx2 = degree - oy2;
+	for(ox2 = 0, xp2 = 1.0; ox2 <= mx2; ox2++, xp2 *= dx) {
+	  result += cov[i1][i2] * tmp * xp2 * yp2;
+
+	  i2++;
+	}
+      }
+
+      i1++;
+    }
+  }
+  
+  return(result);
+}
+
 static float percentile (float *list, long nn, long num, long div) {
   long ff, ii, rem;
 
@@ -83,7 +113,7 @@ static float percentile (float *list, long nn, long num, long div) {
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f,
 		    char *errstr) {
-  double a[50][50], b[50], coeff[50];
+  double a[50][50], ainv[50][50], b[50], coeff[50], cov[50][50];
   int ncoeff, ncoeffmax, iter;
   long star, opt;
   float fmin, fmax;
@@ -99,6 +129,8 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
   float xmin = 0.0, xmax = 0.0, ymin = 0.0, ymax = 0.0, xrange, yrange;
   float lastsig;  /* kludge to capture sigma of last star used for npt=1 case */
+
+  float chisq = 0.0, newchisq, varscale;
 
 #ifdef DEBUG
   float tmpx[2], tmpy[2], xcord, ycord;
@@ -214,9 +246,13 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   xrange = xmax - xmin;
   yrange = ymax - ymin;
 
-  /* Initialise master set of coefficients */
-  for(k = 0; k < ncoeff; k++)
+  /* Initialise master set of coefficients and covariance */
+  for(k = 0; k < ncoeff; k++) {
     coeff[k] = 0.0;
+
+    for(j = 0; j < ncoeff; j++)
+      cov[k][j] = 0.0;
+  }
 
   cxbar = 0.0;
   cybar = 0.0;
@@ -327,8 +363,14 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	data[star].wt = 0;
     }
 
+    /* Make a copy first */
+    memcpy(ainv, a, sizeof(ainv));
+
     /* Solve for coefficients */
     dsolve(a, b, ncoeff);
+
+    /* Invert to covariance matrix */
+    dmatinv(ainv, ncoeff);
 
 #ifdef DEBUG
     /* Plot polynomial surface */
@@ -362,6 +404,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 #endif
 
     /* Calculate new median and sigma */
+    newchisq = 0;
     opt = 0;
     for(star = 0; star < mefinfo->nstars; star++) {
       if(data[star].flux > 0.0 &&          /* Has a flux measurement */
@@ -387,6 +430,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	/* Use the ones within SIGCLIP of the (old) median */
 	if(sigoff == 0.0 || fabsf(pval - medoff) < SIGCLIP * sigoff) {
 	  medbuf[opt] = val - corr;
+	  newchisq += (val - corr)*(val - corr) * wt;
 	  opt++;
 
 	  lastsig = data[star].fluxerr;
@@ -414,18 +458,28 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     medoff = newmed;
     sigoff = newsig;
     memcpy(coeff, b, sizeof(coeff));
+    memcpy(cov, ainv, sizeof(cov));
     cxbar = xbar;
     cybar = ybar;
+    chisq = newchisq;
   }
 
 #ifdef DEBUG
   printf("Final: median %.4f sigma %.4f using %ld objects\n", medoff, sigoff, opt);
 #endif
 
+  /* Correct covariance using chi^2/dof */
+  varscale = (opt > ncoeff ? chisq/(opt-ncoeff) : 1.0);
+
+  for(k = 0; k < ncoeff; k++)
+    for(j = 0; j < ncoeff; j++)
+      cov[k][j] *= varscale;
+
   /* Copy out result */
   f->xbar = cxbar;
   f->ybar = cybar;
   memcpy(f->coeff, coeff, sizeof(f->coeff));
+  memcpy(f->cov, cov, sizeof(f->cov));
   f->degree = degree;
   f->medoff = medoff;
   f->sigoff = sigoff;
@@ -444,7 +498,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		      float *medbuf, struct systematic_fit *sysbuf, char *errstr) {
   long star;
-  float dx, dy, corr;
+  float dx, dy, corr, var;
 
   /* Apply fit */
   for(star = 0; star < mefinfo->nstars; star++) {
@@ -453,12 +507,14 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
       dy = mefinfo->stars[star].y - sysbuf[frame].ybar;
 
       corr = polyeval(dx, dy, sysbuf[frame].coeff, sysbuf[frame].degree);
+      var = polyvar(dx, dy, sysbuf[frame].cov, sysbuf[frame].degree);
+
+      //printf("%f %f %f %f\n", corr, sqrt(var), sysbuf[frame].sigoff, sysbuf[frame].sigm);
 
       data[star].flux -= corr;
 
       if(data[star].fluxerr > 0)
-	data[star].fluxerrcom = sqrt(data[star].fluxerr*data[star].fluxerr +
-				     sysbuf[frame].sigm*sysbuf[frame].sigm);
+	data[star].fluxerrcom = sqrt(data[star].fluxerr*data[star].fluxerr + var);
       else
 	data[star].fluxerrcom = 0.0;
     }

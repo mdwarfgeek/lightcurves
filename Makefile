@@ -31,12 +31,12 @@ LIBS=-L$(CFITSIO_LIB) -lcfitsio -L$(PGPLOT_LIB) -lcpgplot -lpgplot -L$(SLA_LIB) 
 
 LIGHTCURVES_SRCS=main.c buffer.c chooseap.c intra.c lightcurves.c plots.c systematic.c \
 	readfits.c hjd.c sla.c \
-	dsolve.c hanning.c medsig.c sortfloat.c sortlong.c cvtunit.c util.c
+	dsolve.c dmatinv.c hanning.c medsig.c sortfloat.c sortlong.c cvtunit.c util.c
 LIGHTCURVES_OBJS=${LIGHTCURVES_SRCS:%.c=%.o}
 
 UPDATE_SRCS=update.c buffer.c chooseap.c intra.c lightcurves.c plots.c systematic.c \
 	readfits.c hjd.c sla.c \
-	dsolve.c hanning.c medsig.c sortfloat.c sortlong.c cvtunit.c util.c
+	dsolve.c dmatinv.c hanning.c medsig.c sortfloat.c sortlong.c cvtunit.c util.c
 UPDATE_OBJS=${UPDATE_SRCS:%.c=%.o}
 
 TESTBUF_SRCS=testbuf.c buffer.c cvtunit.c util.c
