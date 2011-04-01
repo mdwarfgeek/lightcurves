@@ -158,9 +158,13 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   int cats_are_80 = 0;
 
-  float exptime, skylev, skynoise, rcore, gain;
+  float exptime, skylev, skynoise, rcore, gain, magzpt;
   float apcor[NFLUX], percorr;
   char filter[FLEN_VALUE];
+  float airmass = 1.0, extinct = 0.0;
+  int l1, l2, i, ilim;
+
+  int noexp = 0;
 
   float *xbuf = (float *) NULL, *ybuf, *apbuf, *rabuf, *decbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
@@ -312,6 +316,30 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     goto error;
   }
 
+  ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      magzpt = 25.0;
+
+      if(verbose)
+	printf("Warning: using default magzpt = %.1f\n", magzpt);
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: ZMAG");
+      goto error;
+    }
+    else {
+      noexp = 1;  /* don't add in 2.5log10(exptime) */
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: MAGZPT");
+    goto error;
+  }
+
   for(col = 0; col < NFLUX; col++) {
     ffgkye(fits, cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col],
 	   &(apcor[col]), (char *) NULL, &status);
@@ -340,6 +368,25 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
   else {
     percorr = powf(10.0, 0.4 * percorr);
+  }
+
+  /* Get airmass */
+  ffgkye(fits, "AIRMASS", &airmass, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkye(fits, "AMSTART", &airmass, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      airmass = 1.0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: AMSTART");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: AIRMASS");
+    goto error;
   }
 
   /* Get filter name for plots */
@@ -376,6 +423,34 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   /* Copy */
   strncpy(mefinfo->filter, filter, sizeof(mefinfo->filter)-1);
   mefinfo->filter[sizeof(mefinfo->filter)-1] = '\0';
+
+  /* Append a space */
+  l1 = strlen(filter);
+  if(l1+1 < sizeof(filter)) {
+    filter[l1] = ' ';
+    filter[l1+1] = '\0';
+    l1++;
+  }
+
+  /* Attempt to get extinction */
+  ffgkye(fits, "EXTINCT", &extinct, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    extinct = 0.0;
+
+    /* Attempt to find it in the table of defaults */
+    ilim = sizeof(default_extinct_tab) / sizeof(default_extinct_tab[0]);
+
+    for(i = 0; i < ilim; i++) {
+      l2 = strlen(default_extinct_tab[i].filt);
+
+      if(l1 >= l2 && !strncmp(filter, default_extinct_tab[i].filt, l2)) {
+	/* Found it */
+	extinct = default_extinct_tab[i].extinct;
+	break;
+      }
+    }
+  }
 
   /* Read number of rows */
   ffgnrw(fits, &nrows, &status);
@@ -492,6 +567,9 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   mefinfo->refexp = exptime;
   mefinfo->refsigma = skynoise;
+  mefinfo->refextinct = noexp ? 0.0 : extinct;
+  mefinfo->refairmass = airmass;
+  mefinfo->refmagzpt = magzpt;
   mefinfo->refgain = gain;
   mefinfo->refrcore = rcore;
 
