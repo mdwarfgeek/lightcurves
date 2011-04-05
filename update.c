@@ -68,7 +68,8 @@ int main (int argc, char *argv[]) {
   fitsfile *inf, *outf, *tmplf;
   int status = 0, ext, mef, nmefs;
 
-  char outfile[FLEN_FILENAME-1], tmpfile[FLEN_FILENAME-1], fnbuf[FLEN_FILENAME];
+  char outfile[FLEN_FILENAME-1], fnbuf[FLEN_FILENAME];
+  char tmpbasebuf[FLEN_FILENAME-1], *tmpbase, tmpfile[FLEN_FILENAME-1];
   int dooutput = 0;
   int doreplace = 0;
   int outcls = 0;
@@ -217,8 +218,16 @@ int main (int argc, char *argv[]) {
   }
 
   if(doreplace) {
+    /* First figure out where to create it - must be same device as output
+     * for rename().  Copy first because dirname may modify its argument.
+     */
+    strncpy(tmpbasebuf, outfile, sizeof(tmpbasebuf)-1);
+    tmpbasebuf[sizeof(tmpbasebuf)-1] = '\0';
+
+    tmpbase = dirname(tmpbasebuf);
+
     /* Create temporary file for in-place edit */
-    snprintf(tmpfile, sizeof(tmpfile), "%s_XXXXXX", progname);
+    snprintf(tmpfile, sizeof(tmpfile), "%s/%s_XXXXXX", tmpbase, progname);
 
     fd = mkstemp(tmpfile);
     if(fd == -1)

@@ -50,5 +50,6 @@ char **read_file_list (int argc, char **argv, long *nf_r, char *errstr);
 /* In libc, but not the headers */
 
 char *basename (const char *);
+char *dirname (const char *);
 
 #endif /* __UTIL_H__ */
