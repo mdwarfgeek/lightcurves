@@ -536,7 +536,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   long pt, star;
 
-  long nmeasexist, nmeasout;
+  long nmeasexist, nupdate, nmeasout;
 
   struct lc_point *lcbuf = (struct lc_point *) NULL;
 
@@ -571,10 +571,20 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   long starin, starout, nstarin, nstarout = 0, pointer;
 
-  /* Get existing number of measurements */
+  /* Get existing number of measurements and number of updates */
   ffgkyj(reff, "NMEAS", &nmeasexist, (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkyj: NMEAS");
+    goto error;
+  }
+
+  ffgkyj(reff, "NUPDATE", &nupdate, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    nupdate = 0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkyj: NUPDATE");
     goto error;
   }
 
@@ -649,7 +659,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   ffukyj(fits, "NMEAS", nmeasout,
 	 "Number of points in each lightcurve", &status);
-  ffukyj(fits, "NUPDATE", mefinfo->nupdate+1,
+  ffukyj(fits, "NUPDATE", nupdate+1,
 	 "Number of times file has been appended to", &status);
   if(status) {
     fitsio_err(errstr, status, "ffkpy: frame info");
@@ -816,7 +826,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
     snprintf(kbuf, sizeof(kbuf), "IUPD%ld", nmeasexist+pt+1);
     snprintf(cbuf, sizeof(cbuf), "Update number when datapoint %ld was added", nmeasexist+pt+1);
-    ffpkyj(fits, kbuf, mefinfo->nupdate+1, cbuf, &status);
+    ffpkyj(fits, kbuf, nupdate+1, cbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
       goto error;

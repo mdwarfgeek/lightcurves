@@ -220,17 +220,6 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   else
     mefinfo->havefang = 1;
 
-  /* This one is optional */
-  ffgkyj(fits, "NUPDATE", &(mefinfo->nupdate), (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    mefinfo->nupdate = 0;
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkyj: NUPDATE");
-    goto error;
-  }
-
   mefinfo->sysulim = mefinfo->zp - umlim;
   mefinfo->sysllim = mefinfo->zp - lmlim;
   mefinfo->degree = degree;
