@@ -51,6 +51,12 @@ struct lc_star {
   /* Meridian flip correction if enabled */
   float merid[NFLUX];
 
+  /* Median x and y position on both sides of the meridian */
+  float medx[2];
+  float sigx[2];
+  float medy[2];
+  float sigy[2];
+
   /* Which aperture did we use? */
   float apradius;
 
@@ -88,6 +94,12 @@ struct lc_frame {
 
   /* Uncertainty contribution from systematics fit */
   float sigm;
+
+  /* Median x,y offsets and uncertainties */
+  float xoff;
+  float xsig;
+  float yoff;
+  float ysig;
 
   /* MEarth-specific: frame grouping information */
   long split_iexp;
@@ -169,6 +181,12 @@ struct lc_mef {
 
   /* Account for meridian offsets? */
   long domerid;
+
+  /* Median and rms x,y position offsets for this MEF */
+  float medxoff[2];
+  float sigxoff[2];
+  float medyoff[2];
+  float sigyoff[2];
 };
 
 /* Structure holding disk buffer information */

@@ -274,7 +274,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   /* Recompute per-object median flux */
   if(verbose)
-    printf(" Computing median fluxes for combined apertures\n");
+    printf(" Computing median fluxes and chisq for combined apertures\n");
 
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Read in measurements for this star */
@@ -302,16 +302,6 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       mefinfo->stars[star].med = 0.0;
       mefinfo->stars[star].rms = 0.0;
     }
-  }
-
-  /* Compute chi-squared */
-  if(verbose)
-    printf(" Computing chisq statistic\n");
-
-  for(star = 0; star < mefinfo->nstars; star++) {
-    /* Read in measurements for this star */
-    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
-      goto error;
 
     /* Calculate chi-squared */
     chisq = 0.0;
@@ -328,6 +318,98 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
     mefinfo->stars[star].chisq = chisq;
     mefinfo->stars[star].nchisq = nchisq;
+
+    /* Calculate median x,y positions */
+    opt1 = 0;
+
+    for(pt = 0; pt < mefinfo->nf; pt++) {
+      if(ptbuf[pt].flux != 0.0 &&
+	 (!mefinfo->domerid || !mefinfo->frames[pt].iang)) {
+	medbuf1[opt1] = ptbuf[pt].x;
+	medbuf2[opt1] = ptbuf[pt].y;
+	opt1++;
+      }
+    }
+
+    if(opt1 > 0) {
+      medsig(medbuf1, opt1,
+	     &(mefinfo->stars[star].medx[0]),
+	     &(mefinfo->stars[star].sigx[0]));
+      medsig(medbuf2, opt1,
+	     &(mefinfo->stars[star].medy[0]),
+	     &(mefinfo->stars[star].sigy[0]));
+    }
+
+    if(mefinfo->domerid) {
+      opt1 = 0;
+      
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+	if(ptbuf[pt].flux != 0.0 && mefinfo->frames[pt].iang) {
+	  medbuf1[opt1] = ptbuf[pt].x;
+	  medbuf2[opt1] = ptbuf[pt].y;
+	  opt1++;
+	}
+      }
+      
+      if(opt1 > 0) {
+	medsig(medbuf1, opt1,
+	       &(mefinfo->stars[star].medx[1]),
+	       &(mefinfo->stars[star].sigx[1]));
+	medsig(medbuf2, opt1,
+	       &(mefinfo->stars[star].medy[1]),
+	       &(mefinfo->stars[star].sigy[1]));
+      }
+    }
+  }
+
+  /* Compute positioning error for each frame */
+  for(pt = 0; pt < mefinfo->nf; pt++) {
+    /* Read in measurements for this frame */
+    if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, 0, errstr))
+      goto error;
+
+    opt1 = 0;
+
+    for(star = 0; star < mefinfo->nstars; star++)
+      if(ptbuf[star].flux != 0.0) {
+	medbuf1[opt1] = ptbuf[star].x - mefinfo->stars[star].medx[mefinfo->domerid ? mefinfo->frames[pt].iang : 0];
+	medbuf2[opt1] = ptbuf[star].y - mefinfo->stars[star].medy[mefinfo->domerid ? mefinfo->frames[pt].iang : 0];
+	opt1++;
+      }
+  
+    if(opt1 > 0) {
+      medsig(medbuf1, opt1, &(mefinfo->frames[pt].xoff), &(mefinfo->frames[pt].xsig));
+      medsig(medbuf2, opt1, &(mefinfo->frames[pt].yoff), &(mefinfo->frames[pt].ysig));
+    }
+  }
+
+  /* Compute median positioning errors (should be zero) and rms */
+  opt1 = 0;
+
+  for(pt = 0; pt < mefinfo->nf; pt++) {
+    if(!mefinfo->domerid || !mefinfo->frames[pt].iang) {
+      medbuf1[opt1] = mefinfo->frames[pt].xoff;
+      medbuf2[opt1] = mefinfo->frames[pt].yoff;
+      opt1++;
+    }
+  }
+
+  medsig(medbuf1, opt1, &(mefinfo->medxoff[0]), &(mefinfo->sigxoff[0]));
+  medsig(medbuf2, opt1, &(mefinfo->medyoff[0]), &(mefinfo->sigyoff[0]));
+
+  if(mefinfo->domerid) {
+    opt1 = 0;
+
+    for(pt = 0; pt < mefinfo->nf; pt++) {
+      if(mefinfo->frames[pt].iang) {
+	medbuf1[opt1] = mefinfo->frames[pt].xoff;
+	medbuf2[opt1] = mefinfo->frames[pt].yoff;
+	opt1++;
+      }
+    }
+    
+    medsig(medbuf1, opt1, &(mefinfo->medxoff[1]), &(mefinfo->sigxoff[1]));
+    medsig(medbuf2, opt1, &(mefinfo->medyoff[1]), &(mefinfo->sigyoff[1]));
   }
 
   /* Free workspace */
