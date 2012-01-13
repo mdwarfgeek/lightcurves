@@ -43,6 +43,7 @@ static void usage (char *av) {
 	  "         -mm       Same, only also removes it.\n"
 	  "         -n        Do not renormalise median to reference magnitude.\n"
 	  "         -s level  Override saturation level to 'level'.\n"
+	  "         -V file   Use 'instrument version' table from 'file' (MEarth only).\n"
 	  "         -u mag    Set upper(,lower) mag limit for systematics correction.\n\n"
 	  "Output:\n"
 	  "         -g file   Writes good frames list to 'file'.\n"
@@ -78,6 +79,11 @@ int main (int argc, char *argv[]) {
   char intrafile[FLEN_FILENAME];
   int dointra = 0;
 
+  char instversfile[FLEN_FILENAME];
+  int doinstvers = 0;
+  struct instvers *instverslist = (struct instvers *) NULL;
+  int ninstvers = 0;
+
   int aperture = 0;
   int domerid = 0;
   int norenorm = 0;
@@ -108,7 +114,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "a:df:g:i:mno:pqs:u:v")) != -1)
+  while((c = getopt(argc, argv, "a:df:g:i:mno:pqs:u:vV:")) != -1)
     switch(c) {
     case 'a':
       aperture = (int) strtol(optarg, &ep, 0);
@@ -175,6 +181,11 @@ int main (int argc, char *argv[]) {
       break;
     case 'v':
       verbose++;
+      break;
+    case 'V':
+      strncpy(instversfile, optarg, sizeof(instversfile)-1);
+      instversfile[sizeof(instversfile)-1] = '\0';
+      doinstvers = 1;
       break;
     case '?':
     default:
@@ -273,6 +284,12 @@ int main (int argc, char *argv[]) {
       fatal(1, "read_intra: %s", errstr);
   }
 
+  /* Load "instrument version" table if requested */
+  if(doinstvers) {
+    if(read_instvers(instversfile, &instverslist, &ninstvers, errstr))
+      fatal(1, "read_instvers: %s", errstr);
+  }
+
   /* Create disk buffer */
   if(buffer_init(&buf, errstr))
     fatal(1, "buffer_init: %s", errstr);
@@ -338,7 +355,9 @@ int main (int argc, char *argv[]) {
 	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
-		  dointra, &(intralist[mef]), diffmode, satlev, errstr))
+		  dointra, &(intralist[mef]),
+		  doinstvers, instverslist, ninstvers,
+		  diffmode, satlev, errstr))
 	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
     }
 
@@ -587,6 +606,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   unsigned char flags;
 
   int ap, ap1, ap2;
+  int allast;
 
   /* Generate tform specifier for fluxes and errors */
   snprintf(tabuf, sizeof(tabuf), "%dE", NFLUX);
@@ -666,6 +686,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     fitsio_err(errstr, status, "ffkpy: frame info");
     goto error;
   }
+
+  allast = 1;
 
   for(pt = 0; pt < mefinfo->nf; pt++) {
     snprintf(kbuf, sizeof(kbuf), "TV%ld", pt+1);
@@ -824,6 +846,27 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
+    if(mefinfo->frames[pt].instvers) {
+      snprintf(kbuf, sizeof(kbuf), "IVER%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Instrument version for datapoint %ld", pt+1);
+      ffpkyj(fits, kbuf, mefinfo->frames[pt].instvers->iver, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
+
+      snprintf(kbuf, sizeof(kbuf), "IDAT%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Inst last change date for datapoint %ld", pt+1);
+      ffpkyj(fits, kbuf, mefinfo->frames[pt].instvers->date, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
+    }
+
+    if(!mefinfo->frames[pt].isast)
+      allast = 0;
+
     snprintf(kbuf, sizeof(kbuf), "IUPD%ld", pt+1);
     snprintf(cbuf, sizeof(cbuf), "Update number when datapoint %ld was added", pt+1);
     ffpkyj(fits, kbuf, 0, cbuf, &status);
@@ -834,6 +877,13 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
     /* Calculate Earth's heliocentric position at this MJD */
     getearth(mefinfo->mjdref + mefinfo->frames[pt].mjd, epos + 3*pt);
+  }
+
+  /* Write out astrometry flag for web page */
+  ffpkyl(fits, "ASTONLY", allast, "Are all observations for astrometry?", &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffpkyl: ASTONLY");
+    goto error;
   }
 
   /* Copy in reference header keywords */
@@ -1145,7 +1195,7 @@ static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 			   char **fnlist, char *errstr) {
   FILE *fp;
   long f, nf;
-  int rv, mef, isok;
+  int rv, mef, isok, ia;
 
   long nok;
 
@@ -1161,13 +1211,30 @@ static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 
   nok = 0;
   for(f = 0; f < nf; f++) {
-    /* Check each MEF for frame offset amplitude or rms > 0.05 */
+    /* Check each MEF */
     isok = 1;
 
     for(mef = 0; mef < nmefs; mef++) {
+#if 1
+      /* Old criterion: residual offset or fit rms > 0.05 */
       if(fabsf(meflist[mef].frames[f].offset) > 0.05 ||
 	 fabsf(meflist[mef].frames[f].rms) > 0.05)
 	isok = 0;
+#endif
+
+#if 1
+      ia = meflist[mef].frames[f].iang;
+
+      /* MEarth criterion: delta mag > 0.6 and position within 10 sigma */
+      if(meflist[mef].frames[f].extinc < -0.6 ||
+	 fabsf(meflist[mef].frames[f].xoff-meflist[mef].medxoff[ia]) > 10*meflist[mef].sigxoff[ia] ||
+	 fabsf(meflist[mef].frames[f].yoff-meflist[mef].medyoff[ia]) > 10*meflist[mef].sigyoff[ia]) {
+	printf("%ld %ld %f %f %f %f %f %f\n", f+1, meflist[mef].frames[f].iang,
+	       meflist[mef].frames[f].xoff, meflist[mef].medxoff[ia], meflist[mef].sigxoff[ia],
+	       meflist[mef].frames[f].yoff, meflist[mef].medyoff[ia], meflist[mef].sigyoff[ia]);
+	isok = 0;
+      }
+#endif
     }
 
     if(isok) {

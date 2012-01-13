@@ -24,6 +24,7 @@ void sla_cldj_ (int *, int *, int *, double *, int *);
 void sla_cr2af_ (int *, float *, char *, int *, ftnlen);
 void sla_cr2tf_ (int *, float *, char *, int *, ftnlen);
 void sla_ctf2d_ (int *, int *, float *, float *, int *);
+void sla_djcl_ (double *, int *, int *, int *, double *, int *);
 double sla_dtt_ (double *);
 void sla_e2h_ (float *, float *, float *, float *, float *);
 void sla_evp_ (double *, double *, double *, double *, double *, double *);
@@ -83,6 +84,10 @@ void slaCr2tf (int ndp, float angle, char *sign, int ihmsf[4]) {
 
 void slaCtf2d (int ihour, int imin, float sec, float *days, int *j) {
   sla_ctf2d_(&ihour, &imin, &sec, days, j);
+}
+
+void slaDjcl (double djm, int *iy, int *im, int *id, double *fd, int *j) {
+  sla_djcl_(&djm, iy, im, id, fd, j);
 }
 
 double slaDtt (double dju) {

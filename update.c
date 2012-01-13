@@ -79,6 +79,11 @@ int main (int argc, char *argv[]) {
   char intrafile[FLEN_FILENAME];
   int dointra = 0;
 
+  char instversfile[FLEN_FILENAME];
+  int doinstvers = 0;
+  struct instvers *instverslist = (struct instvers *) NULL;
+  int ninstvers = 0;
+
   int len, maxflen, fspc;
   float *medbuf1 = (float *) NULL, *medbuf2, medsat, medlim;
   long nmedsat, nmedlim, nstartot;
@@ -101,7 +106,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "c:i:o:s:upqv")) != -1)
+  while((c = getopt(argc, argv, "c:i:o:s:upqvV:")) != -1)
     switch(c) {
     case 'c':
       outcls = (int) strtol(optarg, &ep, 0);
@@ -135,6 +140,11 @@ int main (int argc, char *argv[]) {
       break;
     case 'v':
       verbose++;
+      break;
+    case 'V':
+      strncpy(instversfile, optarg, sizeof(instversfile)-1);
+      instversfile[sizeof(instversfile)-1] = '\0';
+      doinstvers = 1;
       break;
     case '?':
     default:
@@ -285,6 +295,12 @@ int main (int argc, char *argv[]) {
       fatal(1, "read_intra: %s", errstr);
   }
 
+  /* Load "instrument version" table if requested */
+  if(doinstvers) {
+    if(read_instvers(instversfile, &instverslist, &ninstvers, errstr))
+      fatal(1, "read_instvers: %s", errstr);
+  }
+
   /* Create disk buffer */
   if(buffer_init(&buf, errstr))
     fatal(1, "buffer_init: %s", errstr);
@@ -347,7 +363,9 @@ int main (int argc, char *argv[]) {
 	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
-		  dointra, &(intralist[mef]), diffmode, satlev, errstr))
+		  dointra, &(intralist[mef]),
+		  doinstvers, instverslist, ninstvers,
+		  diffmode, satlev, errstr))
 	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
     }
 
@@ -570,6 +588,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   long nchisq, nmed;
 
   long starin, starout, nstarin, nstarout = 0, pointer;
+  int allast;
 
   /* Get existing number of measurements and number of updates */
   ffgkyj(reff, "NMEAS", &nmeasexist, (char *) NULL, &status);
@@ -663,6 +682,17 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	 "Number of times file has been appended to", &status);
   if(status) {
     fitsio_err(errstr, status, "ffkpy: frame info");
+    goto error;
+  }
+
+  /* Read astrom flag */
+  ffgkyl(fits, "ASTONLY", &allast, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    allast = -1;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkyl: ASTONLY");
     goto error;
   }
 
@@ -824,6 +854,27 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
+        if(mefinfo->frames[pt].instvers) {
+      snprintf(kbuf, sizeof(kbuf), "IVER%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Instrument version for datapoint %ld", nmeasexist+pt+1);
+      ffpkyj(fits, kbuf, mefinfo->frames[pt].instvers->iver, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
+
+      snprintf(kbuf, sizeof(kbuf), "IDAT%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Inst last change date for datapoint %ld", nmeasexist+pt+1);
+      ffpkyj(fits, kbuf, mefinfo->frames[pt].instvers->date, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
+    }
+
+    if(allast >= 0 && !mefinfo->frames[pt].isast)
+      allast = 0;
+
     snprintf(kbuf, sizeof(kbuf), "IUPD%ld", nmeasexist+pt+1);
     snprintf(cbuf, sizeof(cbuf), "Update number when datapoint %ld was added", nmeasexist+pt+1);
     ffpkyj(fits, kbuf, nupdate+1, cbuf, &status);
@@ -834,6 +885,14 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
     /* Calculate Earth's heliocentric position at this MJD */
     getearth(mefinfo->mjdref + mefinfo->frames[pt].mjd, epos + 3*pt);
+  }
+
+  if(allast >= 0) {
+    ffukyl(fits, "ASTONLY", allast, "Are all observations for astrometry?", &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyl: ASTONLY");
+      goto error;
+    }
   }
 
   /* Expand vectors */

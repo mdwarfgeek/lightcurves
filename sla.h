@@ -17,6 +17,7 @@ void slaCldj (int iy, int im, int id, double *djm, int *j);
 void slaCr2af (int ndp, float angle, char *sign, int idmsf[4]);
 void slaCr2tf (int ndp, float angle, char *sign, int ihmsf[4]);
 void slaCtf2d (int ihour, int imin, float sec, float *days, int *j);
+void slaDjcl (double djm, int *iy, int *im, int *id, double *fd, int *j);
 double slaDtt (double dju);
 void slaE2h (float ha, float dec, float phi, float *az, float *el);
 void slaEvp (double date, double deqx,

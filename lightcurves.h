@@ -14,6 +14,19 @@
 /* Default to use all objects within 4 mags below saturation for fit */
 #define USEMAG  4
 
+/* Intrapixel sensitivity map */
+struct intra {
+  float *map;
+  long nbin;
+  float binsize;
+};
+
+/* "Instrument version" information */
+struct instvers {
+  int iver;
+  long date;
+};
+
 struct lc_point {
   float x;
   float y;
@@ -113,6 +126,12 @@ struct lc_frame {
 
   /* MEarth-specific: realtime status information */
   long rtstat;
+
+  /* MEarth-specific: is it astrometric? */
+  int isast;
+
+  /* MEarth-specific: "instrument version" */
+  struct instvers *instvers;
 };
 
 struct lc_mef {
@@ -218,13 +237,6 @@ struct systematic_fit {
   long npt;
 };
 
-/* Intrapixel sensitivity map */
-struct intra {
-  float *map;
-  long nbin;
-  float binsize;
-};
-
 /* Globals */
 extern float flux_apers[NFLUX];
 extern int verbose;
@@ -251,6 +263,10 @@ int buffer_put_object (struct buffer_info *b, struct lc_point *buf,
 /* Aperture combination: chooseap.c */
 int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      struct lc_point *ptbuf, float *medbuf, char *errstr);
+
+/* "Instrument version": instvers.c */
+int read_instvers (char *filename, struct instvers **instverslist_r, int *ninstvers_r,
+		   char *errstr);
 
 /* Intrapixel sensitivity correction: intra.c */
 int read_intra (char *filename, struct intra *intralist, int nmefs,
@@ -290,6 +306,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
+	      int doinstvers, struct instvers *instverslist, int ninstvers,
 	      int diffmode, float satlev,
 	      char *errstr);
 

@@ -1217,6 +1217,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
+	      int doinstvers, struct instvers *instverslist, int ninstvers,
 	      int diffmode, float satlev,
 	      char *errstr) {
   fitsfile *fits;
@@ -1234,7 +1235,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand, fang;
   float seeing, ellipt, skylev, skynoise, exptime, rcore, gain, percorr;
   float skyvar, area, tpi, tmp, expfac;
-  double mjd;
+  double mjd, fd;
+  int iy, im, id;
 
   float apcor[NFLUX];
 
@@ -1266,6 +1268,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   char filter[FLEN_VALUE];
   float magzpt, zpcorr, airmass = 1.0, extinct = 0.0;
   int l1, l2, i, ilim, noexp = 0;
+
+  char schtype[FLEN_VALUE];
+
+  struct instvers *instvers = (struct instvers *) NULL;
+  int rv;
 
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
@@ -1975,6 +1982,37 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
+  /* MEarth-specific: scheduling type */
+  ffgkys(fits, "SCHTYPE", schtype, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    schtype[0] = '\0';
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkys: SCHTYPE");
+    goto error;
+  }
+
+  /* MEarth-specific: figure out "instrument version" */
+  if(doinstvers) {
+    /* First, we need the "night of" date.  This is essentially the
+     * same algorithm as the observing system uses (we don't use the
+     * filename because it's not guaranteed to have been maintained)
+     * but it's not a perfect replica because we use MJD here and
+     * the observing system uses zone time.
+     */
+    slaDjcl(mjd + lon*RAD_TO_HR/24 - 0.5, &iy, &im, &id, &fd, &rv);
+    id += iy*10000 + im*100;
+
+    /* Now look for it in the table */
+    for(i = 0; i < ninstvers; i++)
+      if(id < instverslist[i].date)
+	break;
+
+    if(i > 0)
+      instvers = instverslist + i-1;
+  }
+
   if(doairm) {
     /* Pre-compute mean-to-apt parameters for frame */
     slaMappa(2000.0, mjd+slaDtt(mjd)/86400.0, amprms);
@@ -2230,6 +2268,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].skytemp = skytemp;
 
   mefinfo->frames[iframe].rtstat = rtstat;
+  mefinfo->frames[iframe].isast = !strcmp(schtype, "a");
 
   mefinfo->frames[iframe].zpdiff = magzpt - mefinfo->refmagzpt;
 
@@ -2238,6 +2277,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].rms = -999.0;
   mefinfo->frames[iframe].extinc = 0;
   mefinfo->frames[iframe].sigm = 0;
+
+  mefinfo->frames[iframe].instvers = instvers;
 
   free((void *) skyfiterrbuf);
   skyfiterrbuf = (float *) NULL;
