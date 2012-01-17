@@ -221,7 +221,7 @@ int main (int argc, char *argv[]) {
       /* It's there, better open it then */
       ffopen(&tmplf, outfile, READONLY, &status);
       if(status) {
-	fitsio_err(errstr, status, "ffopen: %s", refname);
+	fitsio_err(errstr, status, "ffopen: %s", outfile);
 	fatal(1, "%s", errstr);
       }
     }
