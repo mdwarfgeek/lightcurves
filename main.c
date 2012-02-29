@@ -557,7 +557,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   char *ttype[] = { "x", "y", "medflux", "rms", "chisq", "nchisq",
 		    "class", "bflag", "cflag", "sflag", "pointer",
-		    "apflux", "aprms", "apmerid", "apradius",
+		    "apflux", "aprms", "apoffsets", "apradius",
 		    "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
 		    "weight", "peak", "flags",
 		    "ra", "dec" };
@@ -581,7 +581,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 		    "F9.6", "F9.6" };
   char kbuf[FLEN_KEYWORD];
   char cbuf[FLEN_COMMENT];
-  char tabuf[FLEN_VALUE], tfbuf[FLEN_VALUE], tdbuf[FLEN_VALUE], tbbuf[FLEN_VALUE];
+  char tabuf[FLEN_VALUE], tsbuf[FLEN_VALUE];
+  char tfbuf[FLEN_VALUE], tdbuf[FLEN_VALUE], tbbuf[FLEN_VALUE];
 
   long pt, star;
 
@@ -592,7 +593,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   float *xbuf = (float *) NULL, *ybuf, *medbuf, *rmsbuf, *chibuf, *apbuf, *rabuf, *decbuf;
   long *nchibuf = (long *) NULL, *ptrbuf, *cfbuf, *sfbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
-  float *apmedbuf = (float *) NULL, *aprmsbuf, *apmeridbuf;
+  float *apmedbuf = (float *) NULL, *aprmsbuf, *apoffbuf;
   float *fluxbuf = (float *) NULL, *fluxerrbuf, *xlcbuf, *ylcbuf, *airbuf, *habuf, *wtbuf;
   float *peakbuf;
   double *hjdbuf = (double *) NULL;
@@ -608,15 +609,18 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   int ap, ap1, ap2;
   int allast;
 
+  int iseg;
+
   /* Generate tform specifier for fluxes and errors */
   snprintf(tabuf, sizeof(tabuf), "%dE", NFLUX);
+  snprintf(tsbuf, sizeof(tabuf), "%ldE", mefinfo->nseg*NFLUX);
   snprintf(tdbuf, sizeof(tdbuf), "%ldD", mefinfo->nf);
   snprintf(tfbuf, sizeof(tfbuf), "%ldE", mefinfo->nf);
   snprintf(tbbuf, sizeof(tbbuf), "%ldB", mefinfo->nf);
 
   tform[11] = tabuf;
   tform[12] = tabuf;
-  tform[13] = tabuf;
+  tform[13] = tsbuf;
   tform[15] = tdbuf;
   tform[16] = tfbuf;
   tform[17] = tfbuf;
@@ -682,9 +686,41 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	 "Meridian flip removal?", &status);
   ffpkyf(fits, "REFFANG", mefinfo->reffang, 6,
 	 "Reference file field angle", &status);
+  ffpkyj(fits, "NSEGME", mefinfo->nseg,
+	 "Number of segments", &status);
   if(status) {
     fitsio_err(errstr, status, "ffkpy: frame info");
     goto error;
+  }
+
+  for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
+    snprintf(kbuf, sizeof(kbuf), "SEGV%d", iseg+1);
+    snprintf(cbuf, sizeof(cbuf), "Segment %d instrument version number", iseg+1);
+    ffpkyj(fits, kbuf,
+	   mefinfo->segs[iseg].instvers ?
+	   mefinfo->segs[iseg].instvers->iver : -1, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "SEGD%d", iseg+1);
+    snprintf(cbuf, sizeof(cbuf), "Segment %d instrument change date", iseg+1);
+    ffpkyj(fits, kbuf,
+	   mefinfo->segs[iseg].instvers ?
+	   mefinfo->segs[iseg].instvers->date : -1, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "SEGA%d", iseg+1);
+    snprintf(cbuf, sizeof(cbuf), "Segment %d angle", iseg+1);
+    ffpkyj(fits, kbuf, mefinfo->segs[iseg].iang, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+      goto error;
+    }
   }
 
   allast = 1;
@@ -846,6 +882,14 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
+    snprintf(kbuf, sizeof(kbuf), "ISEG%ld", pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Segment number for datapoint %ld", pt+1);
+    ffpkyj(fits, kbuf, mefinfo->frames[pt].iseg+1, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+      goto error;
+    }
+
     if(mefinfo->frames[pt].instvers) {
       snprintf(kbuf, sizeof(kbuf), "IVER%ld", pt+1);
       snprintf(cbuf, sizeof(cbuf), "Instrument version for datapoint %ld", pt+1);
@@ -940,7 +984,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   xbuf = (float *) malloc(8 * rblksz * sizeof(float));
   nchibuf = (long *) malloc(4 * rblksz * sizeof(long));
   clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
-  apmedbuf = (float *) malloc(3 * rblksz * NFLUX * sizeof(float));
+  apmedbuf = (float *) malloc((2+mefinfo->nseg) * rblksz * NFLUX * sizeof(float));
   fluxbuf = (float *) malloc(8 * rblksz * mefinfo->nf * sizeof(float));
   hjdbuf = (double *) malloc(rblksz * mefinfo->nf * sizeof(double));
   flagbuf = (unsigned char *) malloc(rblksz * mefinfo->nf * sizeof(unsigned char));
@@ -964,7 +1008,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   sfbuf = nchibuf + 3 * rblksz;
 
   aprmsbuf = apmedbuf + rblksz * NFLUX;
-  apmeridbuf = apmedbuf + 2 * rblksz * NFLUX;
+  apoffbuf = apmedbuf + 2 * rblksz * NFLUX;
 
   fluxerrbuf = fluxbuf + rblksz * mefinfo->nf;
   xlcbuf = fluxbuf + 2 * rblksz * mefinfo->nf;
@@ -1000,14 +1044,18 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     for(ap = 0; ap < NFLUX; ap++) {
       apmedbuf[r*NFLUX+ap] = -999.0;
       aprmsbuf[r*NFLUX+ap] = -999.0;
-      apmeridbuf[r*NFLUX+ap] = -999.0;
+
+      for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+	apoffbuf[(r*NFLUX+ap)*mefinfo->nseg+iseg] = -999.0;
     }
 
     for(ap = ap1; ap < ap2; ap++) {
       apmedbuf[r*NFLUX+ap] = (mefinfo->stars[star].medflux[ap] > 0.0 ?
 			      mefinfo->zp - mefinfo->stars[star].medflux[ap] : -999.0);
       aprmsbuf[r*NFLUX+ap] = mefinfo->stars[star].sigflux[ap];
-      apmeridbuf[r*NFLUX+ap] = mefinfo->stars[star].merid[ap];
+
+      for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+	apoffbuf[(r*NFLUX+ap)*mefinfo->nseg+iseg] = mefinfo->stars[star].segs[iseg].corr[ap];
     }
 
     apbuf[r] = mefinfo->stars[star].apradius;
@@ -1087,7 +1135,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       ffpclj(fits, 11, frow, 1, r, ptrbuf, &status);
       ffpcne(fits, 12, frow, 1, r * NFLUX, apmedbuf, -999.0, &status);
       ffpcne(fits, 13, frow, 1, r * NFLUX, aprmsbuf, -999.0, &status);
-      ffpcne(fits, 14, frow, 1, r * NFLUX, apmeridbuf, -999.0, &status);
+      ffpcne(fits, 14, frow, 1, mefinfo->nseg * r * NFLUX, apoffbuf, -999.0, &status);
       ffpcle(fits, 15, frow, 1, r, apbuf, &status);
       ffpcnd(fits, 16, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
       ffpcne(fits, 17, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
@@ -1127,7 +1175,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     ffpclj(fits, 11, frow, 1, r, ptrbuf, &status);
     ffpcne(fits, 12, frow, 1, r * NFLUX, apmedbuf, -999.0, &status);
     ffpcne(fits, 13, frow, 1, r * NFLUX, aprmsbuf, -999.0, &status);
-    ffpcne(fits, 14, frow, 1, r * NFLUX, apmeridbuf, -999.0, &status);
+    ffpcne(fits, 14, frow, 1, mefinfo->nseg * r * NFLUX, apoffbuf, -999.0, &status);
     ffpcle(fits, 15, frow, 1, r, apbuf, &status);
     ffpcnd(fits, 16, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
     ffpcne(fits, 17, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
@@ -1195,7 +1243,7 @@ static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 			   char **fnlist, char *errstr) {
   FILE *fp;
   long f, nf;
-  int rv, mef, isok, ia;
+  int rv, mef, isok, iseg;
 
   long nok;
 
@@ -1223,15 +1271,15 @@ static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 #endif
 
 #if 1
-      ia = meflist[mef].frames[f].iang;
+      iseg = meflist[mef].frames[f].iseg;
 
       /* MEarth criterion: delta mag > 0.6 and position within 10 sigma */
       if(meflist[mef].frames[f].extinc < -0.6 ||
-	 fabsf(meflist[mef].frames[f].xoff-meflist[mef].medxoff[ia]) > 10*meflist[mef].sigxoff[ia] ||
-	 fabsf(meflist[mef].frames[f].yoff-meflist[mef].medyoff[ia]) > 10*meflist[mef].sigyoff[ia]) {
+	 fabsf(meflist[mef].frames[f].xoff-meflist[mef].segs[iseg].medxoff) > 10*meflist[mef].segs[iseg].sigxoff ||
+	 fabsf(meflist[mef].frames[f].yoff-meflist[mef].segs[iseg].medyoff) > 10*meflist[mef].segs[iseg].sigyoff) {
 	printf("%ld %ld %f %f %f %f %f %f\n", f+1, meflist[mef].frames[f].iang,
-	       meflist[mef].frames[f].xoff, meflist[mef].medxoff[ia], meflist[mef].sigxoff[ia],
-	       meflist[mef].frames[f].yoff, meflist[mef].medyoff[ia], meflist[mef].sigyoff[ia]);
+	       meflist[mef].frames[f].xoff, meflist[mef].segs[iseg].medxoff, meflist[mef].segs[iseg].sigxoff,
+	       meflist[mef].frames[f].yoff, meflist[mef].segs[iseg].medyoff, meflist[mef].segs[iseg].sigyoff);
 	isok = 0;
       }
 #endif

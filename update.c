@@ -854,7 +854,15 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
-        if(mefinfo->frames[pt].instvers) {
+    snprintf(kbuf, sizeof(kbuf), "ISEG%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Segment number for datapoint %ld", nmeasexist+pt+1);
+    ffpkyj(fits, kbuf, mefinfo->frames[pt].iseg+1, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+      goto error;
+    }
+
+    if(mefinfo->frames[pt].instvers) {
       snprintf(kbuf, sizeof(kbuf), "IVER%ld", nmeasexist+pt+1);
       snprintf(cbuf, sizeof(cbuf), "Instrument version for datapoint %ld", nmeasexist+pt+1);
       ffpkyj(fits, kbuf, mefinfo->frames[pt].instvers->iver, cbuf, &status);

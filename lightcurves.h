@@ -41,6 +41,14 @@ struct lc_point {
   unsigned char conf : 1;
 };
 
+struct lc_star_segment {
+  float corr[NFLUX];
+  float medx;
+  float sigx;
+  float medy;
+  float sigy;
+};
+
 struct lc_star {
   /* Reference frame info */
   long ptr;
@@ -57,18 +65,12 @@ struct lc_star {
   /* Reference magnitude to which to tie the photometry */
   float refmag;
 
-  /* Median flux and sigma in each aperture */
+  /* Information for each piece of the light curve */
+  struct lc_star_segment *segs;
+
+  /* Global median and scatter */
   float medflux[NFLUX];
   float sigflux[NFLUX];
-
-  /* Meridian flip correction if enabled */
-  float merid[NFLUX];
-
-  /* Median x and y position on both sides of the meridian */
-  float medx[2];
-  float sigx[2];
-  float medy[2];
-  float sigy[2];
 
   /* Which aperture did we use? */
   float apradius;
@@ -132,6 +134,20 @@ struct lc_frame {
 
   /* MEarth-specific: "instrument version" */
   struct instvers *instvers;
+
+  /* Segment number */
+  int iseg;
+};
+
+struct lc_segment {
+  struct instvers *instvers;
+  int iang;
+
+  /* Median and rms x,y position offsets for this MEF, segment */
+  float medxoff;
+  float sigxoff;
+  float medyoff;
+  float sigyoff;
 };
 
 struct lc_mef {
@@ -201,11 +217,9 @@ struct lc_mef {
   /* Account for meridian offsets? */
   long domerid;
 
-  /* Median and rms x,y position offsets for this MEF */
-  float medxoff[2];
-  float sigxoff[2];
-  float medyoff[2];
-  float sigyoff[2];
+  /* Segment info */
+  struct lc_segment *segs;
+  long nseg;
 };
 
 /* Structure holding disk buffer information */

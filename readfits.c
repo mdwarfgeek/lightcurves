@@ -153,7 +153,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   int ncoluse, col;
 
   char *colnames[12] = { "x", "y", "class", "pointer", "bflag", "cflag",
-			 "apflux", "aprms", "apmerid", "apradius", "ra", "dec" };
+			 "apflux", "aprms", "apoffsets", "apradius", "ra", "dec" };
   int gcols[12];
 
   int cats_are_80 = 0;
@@ -169,7 +169,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   float *xbuf = (float *) NULL, *ybuf, *apbuf, *rabuf, *decbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
   long *ptrbuf = (long *) NULL, *cfbuf;
-  float *apmedbuf = (float *) NULL, *aprmsbuf, *apmeridbuf;
+  float *apmedbuf = (float *) NULL, *aprmsbuf, *apoffbuf;
 
   struct lc_star *stars = (struct lc_star *) NULL;
   long nmeas;
@@ -179,6 +179,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   long nrows, r, rr, roff, remain, rread, rblksz;
   int ap;
+
+  int iseg;
+  long iver, jtmp;
+  char kbuf[FLEN_KEYWORD];
 
   /* Get header information */
   ffgkyj(fits, "NMEAS", &nmeas, (char *) NULL, &status);
@@ -190,9 +194,54 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   ffgkyj(fits, "POLYDEG", &degree, (char *) NULL, &status);
   ffgkyj(fits, "APSEL", &(mefinfo->aperture), (char *) NULL, &status);
   ffgkyj(fits, "DOMERID", &(mefinfo->domerid), (char *) NULL, &status);
+  ffgkyj(fits, "NSEGME", &(mefinfo->nseg), (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkyj: NMEAS");
     goto error;
+  }
+
+  /* Allocate and read segment information */
+  mefinfo->segs = (struct lc_segment *) malloc(mefinfo->nseg * sizeof(struct lc_segment));
+  if(!mefinfo->segs) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+
+  for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
+    snprintf(kbuf, sizeof(kbuf), "SEGV%d", iseg+1);
+    ffgkyj(fits, kbuf, &iver, (char *) NULL, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgkyj: %s", kbuf);
+      goto error;
+    }
+
+    if(iver > 0) {
+      mefinfo->segs[iseg].instvers = (struct instvers *) malloc(sizeof(struct instvers));
+      if(!mefinfo->segs[iseg].instvers) {
+	report_syserr(errstr, "malloc");
+	goto error;
+      }
+
+      mefinfo->segs[iseg].instvers->iver = iver;
+
+      snprintf(kbuf, sizeof(kbuf), "SEGD%d", iseg+1);
+      ffgkyj(fits, kbuf, &(mefinfo->segs[iseg].instvers->date), (char *) NULL, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffgkyj: %s", kbuf);
+	goto error;
+      }
+    }
+    else
+      mefinfo->segs[iseg].instvers = (struct instvers *) NULL;
+
+    snprintf(kbuf, sizeof(kbuf), "SEGA%d", iseg+1);
+    ffgkyj(fits, kbuf, &jtmp, (char *) NULL, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgkyj: %s", kbuf);
+      goto error;
+    }
+
+    mefinfo->segs[iseg].iang = jtmp;
   }
 
   /* New and thus optional */
@@ -472,7 +521,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   xbuf = (float *) malloc(5 * rblksz * sizeof(float));
   clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
   ptrbuf = (long *) malloc(2 * rblksz * sizeof(long));
-  apmedbuf = (float *) malloc(3 * rblksz * NFLUX * sizeof(float));
+  apmedbuf = (float *) malloc((2+mefinfo->nseg) * rblksz * NFLUX * sizeof(float));
   if(!xbuf || !clsbuf || !ptrbuf || !apmedbuf) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -488,13 +537,21 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   cfbuf = ptrbuf + rblksz;
 
   aprmsbuf = apmedbuf + NFLUX * rblksz;
-  apmeridbuf = apmedbuf + 2 * NFLUX * rblksz;
+  apoffbuf = apmedbuf + 2 * NFLUX * rblksz;
 
   /* Allocate memory for catalogue stars */
   stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
   if(!stars) {
     report_syserr(errstr, "malloc");
     goto error;
+  }
+
+  for(rr = 0; rr < nrows; rr++) {
+    stars[rr].segs = (struct lc_star_segment *) malloc(mefinfo->nseg * sizeof(struct lc_star_segment));
+    if(!stars[rr].segs) {
+      report_syserr(errstr, "malloc");
+      goto error;
+    }
   }
 
   /* Read catalogue */
@@ -514,7 +571,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 	   &status);
     ffgcve(fits, gcols[7], roff + 1, 1, rread * NFLUX, -999.0, aprmsbuf, &anynull,
 	   &status);
-    ffgcve(fits, gcols[8], roff + 1, 1, rread * NFLUX, -999.0, apmeridbuf, &anynull,
+    ffgcve(fits, gcols[8], roff + 1, 1, mefinfo->nseg * rread * NFLUX, -999.0, apoffbuf, &anynull,
 	   &status);
     ffgcve(fits, gcols[9], roff + 1, 1, rread, -999.0, apbuf, &anynull, &status);
     ffgcve(fits, gcols[10], roff + 1, 1, rread, -999.0, rabuf, &anynull,
@@ -541,7 +598,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
       for(ap = 0; ap < NFLUX; ap++) {
 	stars[rr].medflux[ap] = (apmedbuf[r*NFLUX+ap] > 0.0 ? mefinfo->zp - apmedbuf[r*NFLUX+ap] : -999.0);
 	stars[rr].sigflux[ap] = aprmsbuf[r*NFLUX+ap];
-	stars[rr].merid[ap] = apmeridbuf[r*NFLUX+ap];
+	for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+	  stars[rr].segs[iseg].corr[ap] = apoffbuf[(r*NFLUX+ap)*mefinfo->nseg+iseg];
       }
 
       stars[rr].apradius = apbuf[r];
@@ -625,7 +683,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float scatcoeff = 0.0, xi, xn;
 
   int cats_are_80 = 0;
-  int iap;
 
   /* Read number of rows */
   ffgnrw(fits, &nrows, &status);
@@ -1152,9 +1209,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       stars[rout].cflag = 0;
 
       stars[rout].apradius = 1.0;  /* default = rcore */
-
-      for(iap = 0; iap < NFLUX; iap++)
-	stars[rout].merid[iap] = 0.0;  /* initialise this */
 
       if(pkhtbuf[r]+locskybuf[r] > 0.95*satlev) {
 	sattmp[nsattmp] = stars[rout].ref[0].flux;

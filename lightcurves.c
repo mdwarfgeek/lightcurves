@@ -21,8 +21,6 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   float *medbuf1 = (float *) NULL, *medbuf2;
   long nmedbuf;
 
-  float med1, med2, corr;
-
   int iter, degree;
 
   struct systematic_fit *sysbuf = (struct systematic_fit *) NULL;
@@ -34,6 +32,69 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   long nchisq;
 
   float medoff, sigoff;
+
+  int iseg, found, haveref;
+  float medref, corr;
+
+  float *medcorr = (float *) NULL;
+  
+  /* Decide how many segments and allocate them */
+  mefinfo->segs = (struct lc_segment *) NULL;
+  mefinfo->nseg = 0;
+
+  for(pt = 0; pt < mefinfo->nf; pt++) {
+    /* Have we seen this segment before? */
+    found = -1;
+    for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+      /* This test is a bit complicated.  The first part handles version
+       * numbers, including a NULL = NULL comparison and then the numeric
+       * comparison if not null.
+       * The second bit handles meridian sides if that is enabled.
+       */
+      if(((!mefinfo->frames[pt].instvers && !mefinfo->segs[iseg].instvers) ||
+	  (mefinfo->frames[pt].instvers && mefinfo->segs[iseg].instvers &&
+	   mefinfo->frames[pt].instvers->iver == mefinfo->segs[iseg].instvers->iver)) &&
+	 (!mefinfo->domerid || (mefinfo->frames[pt].iang == mefinfo->segs[iseg].iang)))
+	found = iseg;
+
+    if(found < 0) {
+      /* Add a new one */
+      mefinfo->nseg++;
+      mefinfo->segs = (struct lc_segment *) realloc(mefinfo->segs,
+						    mefinfo->nseg * sizeof(struct lc_segment));
+      if(!mefinfo->segs) {
+	report_syserr(errstr, "realloc");
+	goto error;
+      }
+
+      mefinfo->segs[mefinfo->nseg-1].instvers = mefinfo->frames[pt].instvers;
+      mefinfo->segs[mefinfo->nseg-1].iang = mefinfo->frames[pt].iang;
+
+      mefinfo->frames[pt].iseg = mefinfo->nseg-1;
+    }
+    else
+      mefinfo->frames[pt].iseg = found;
+  }
+
+  for(star = 0; star < mefinfo->nstars; star++) {
+    mefinfo->stars[star].segs = (struct lc_star_segment *) malloc(mefinfo->nseg * sizeof(struct lc_star_segment));
+    if(!mefinfo->stars[star].segs) {
+      report_syserr(errstr, "malloc");
+      goto error;
+    }
+
+    /* Initialize correction to zero */
+    for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+      for(meas = 0; meas < NFLUX; meas++)
+	mefinfo->stars[star].segs[iseg].corr[meas] = 0;
+  }
+
+  /* Allocate temporary workspace for corrections */
+  medcorr = (float *) malloc(mefinfo->nseg * sizeof(float));
+  if(!medcorr) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
 
   /* Allocate temporary workspace for calculating medians */
   nmedbuf = MAX(mefinfo->nf, mefinfo->nstars);
@@ -81,74 +142,102 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       for(iter = 0; iter < NITER; iter++) {
 	degree = (iter == NITER-1 ? mefinfo->degree : 0);
 
-	/* Compute per-object median flux */
+	/* Compute per-object, per-segment median flux */
 	for(star = 0; star < mefinfo->nstars; star++) {
 	  /* Read in measurements for this star */
 	  if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
 	    goto error;
 	  
-	  /* Calculate median flux */
+	  /* Compute segment medians and global median */
 	  opt1 = 0;
-	  opt2 = 0;
-	  for(pt = 0; pt < mefinfo->nf; pt++) {
-	    if(ptbuf[pt].flux != 0.0) {
-	      if(mefinfo->domerid && mefinfo->frames[pt].iang) {
+	  medref = 0;
+	  haveref = 0;
+
+	  for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
+	    /* Segment median */
+	    opt2 = 0;
+
+	    for(pt = 0; pt < mefinfo->nf; pt++)
+	      if(ptbuf[pt].flux != 0.0 && mefinfo->frames[pt].iseg == iseg) {
 		medbuf2[opt2] = ptbuf[pt].flux;
 		opt2++;
 	      }
-	      else {
-		medbuf1[opt1] = ptbuf[pt].flux;
-		opt1++;
+
+	    if(opt2 > 0) {
+	      medsig(medbuf2, opt2, &medflux, &sigflux);
+	      if(iseg == 0) {
+		medref = medflux;
+		haveref = 1;
 	      }
+
+	      if(haveref)
+		corr = medflux - medref;
+	      else
+		corr = 0;
+
+	      if(mefinfo->domerid > 1)
+		mefinfo->stars[star].segs[iseg].corr[meas] += corr;
+	      else
+		mefinfo->stars[star].segs[iseg].corr[meas] = corr;
 	    }
-	  }
+	    else
+	      corr = 0;
 
-	  if(mefinfo->domerid && opt1 > 0 && opt2 > 0) {
-	    medsig(medbuf1, opt1, &med1, (float *) NULL);  /* same as ref. */
-	    medsig(medbuf2, opt2, &med2, (float *) NULL);
-
-	    corr = med2-med1;
-
-	    opt1 = 0;
-	    for(pt = 0; pt < mefinfo->nf; pt++) {
-	      if(ptbuf[pt].flux != 0.0) {
+	    /* Global median, after correction */
+	    for(pt = 0; pt < mefinfo->nf; pt++)
+	      if(ptbuf[pt].flux != 0.0 && mefinfo->frames[pt].iseg == iseg) {
 		if(mefinfo->domerid > 1) {
-		  if(mefinfo->frames[pt].iang)
-		    ptbuf[pt].flux -= corr;
-		  
+		  ptbuf[pt].flux -= corr;
+
 		  medbuf1[opt1] = ptbuf[pt].flux;
 		}
-		else {
-		  if(mefinfo->frames[pt].iang)
-		    medbuf1[opt1] = ptbuf[pt].flux - corr;
-		}
+		else
+		  medbuf1[opt1] = ptbuf[pt].flux - corr;
 
 		opt1++;
 	      }
-	    }
-
-	    if(mefinfo->domerid > 1)
-	      mefinfo->stars[star].merid[meas] += corr;
-	    else
-	      mefinfo->stars[star].merid[meas] = corr;
 	  }
-	  else {
-	    opt1 = 0;
-	    for(pt = 0; pt < mefinfo->nf; pt++)
-	      if(ptbuf[pt].flux != 0.0) {
-		medbuf1[opt1] = ptbuf[pt].flux;
-		opt1++;
-	      }
-	    }
 
 	  medsig(medbuf1, opt1, &medflux, &sigflux);
-	  mefinfo->stars[star].medflux[meas] = medflux;
-	  mefinfo->stars[star].sigflux[meas] = sigflux;
+          mefinfo->stars[star].medflux[meas] = medflux;
+          mefinfo->stars[star].sigflux[meas] = sigflux;
 
 	  if(mefinfo->domerid > 1)
-	    /* Write out measurements for this star */
-	    if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
-	      goto error;
+            /* Write out measurements for this star */
+            if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
+              goto error;
+	}
+
+	/* Compute and take off median correction in each segment - this
+	 * forces any "common-mode" components present in every object to
+	 * go into the frame corrections instead.
+	 */
+	for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
+	  /* Median correction */
+	  opt1 = 0;
+	  
+	  for(star = 0; star < mefinfo->nstars; star++)
+	    if(mefinfo->stars[star].medflux[meas] != 0.0 &&
+	       mefinfo->stars[star].sigflux[meas] != 0.0)
+	      /* Use only high s/n once we have the information */
+	      if(iter == 0 ||
+		 (mefinfo->stars[star].medflux[meas] >= mefinfo->sysllim &&
+		  mefinfo->stars[star].medflux[meas] <= mefinfo->sysulim)) {
+		medbuf1[opt1] = mefinfo->stars[star].segs[iseg].corr[meas];
+		opt1++;
+	      }
+	  
+	  if(opt1 > 0) {
+	    medsig(medbuf1, opt1, &(medcorr[iseg]), (float *) NULL);
+
+	    printf("medcorr[%d]=%.4f\n", iseg, medcorr[iseg]);
+
+	    /* Take it off */
+	    for(star = 0; star < mefinfo->nstars; star++)
+	      mefinfo->stars[star].segs[iseg].corr[meas] -= medcorr[iseg];
+	  }
+	  else
+	    medcorr[iseg] = 0;
 	}
 	
 	/* Compute 2-D correction for each frame */
@@ -156,6 +245,12 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  /* Read in measurements for this frame */
 	  if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
 	    goto error;
+
+	  /* Take off median correction from actual points if necessary */
+	  if(mefinfo->domerid > 1)
+	    for(star = 0; star < mefinfo->nstars; star++)
+	      if(ptbuf[star].flux != 0.0)
+		ptbuf[star].flux += medcorr[mefinfo->frames[pt].iseg];
 	  
 	  /* Perform polynomial fit correction */
 	  if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf1, degree,
@@ -175,7 +270,9 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    /* Perform polynomial fit correction */
 	    if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf1, sysbuf, errstr))
 	      goto error;
-	    
+	  }	    
+
+	  if(sysbuf[pt].npt > 0 || mefinfo->domerid > 1) {
 	    /* Write out corrected fluxes */
 	    if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
 	      goto error;
@@ -320,31 +417,11 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     mefinfo->stars[star].nchisq = nchisq;
 
     /* Calculate median x,y positions */
-    opt1 = 0;
-
-    for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0 &&
-	 (!mefinfo->domerid || !mefinfo->frames[pt].iang)) {
-	medbuf1[opt1] = ptbuf[pt].x;
-	medbuf2[opt1] = ptbuf[pt].y;
-	opt1++;
-      }
-    }
-
-    if(opt1 > 0) {
-      medsig(medbuf1, opt1,
-	     &(mefinfo->stars[star].medx[0]),
-	     &(mefinfo->stars[star].sigx[0]));
-      medsig(medbuf2, opt1,
-	     &(mefinfo->stars[star].medy[0]),
-	     &(mefinfo->stars[star].sigy[0]));
-    }
-
-    if(mefinfo->domerid) {
+    for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
       opt1 = 0;
-      
+
       for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(ptbuf[pt].flux != 0.0 && mefinfo->frames[pt].iang) {
+	if(ptbuf[pt].flux != 0.0 && mefinfo->frames[pt].iseg == iseg) {
 	  medbuf1[opt1] = ptbuf[pt].x;
 	  medbuf2[opt1] = ptbuf[pt].y;
 	  opt1++;
@@ -353,11 +430,11 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       
       if(opt1 > 0) {
 	medsig(medbuf1, opt1,
-	       &(mefinfo->stars[star].medx[1]),
-	       &(mefinfo->stars[star].sigx[1]));
+	       &(mefinfo->stars[star].segs[iseg].medx),
+	       &(mefinfo->stars[star].segs[iseg].sigx));
 	medsig(medbuf2, opt1,
-	       &(mefinfo->stars[star].medy[1]),
-	       &(mefinfo->stars[star].sigy[1]));
+	       &(mefinfo->stars[star].segs[iseg].medy),
+	       &(mefinfo->stars[star].segs[iseg].sigy));
       }
     }
   }
@@ -372,8 +449,8 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
     for(star = 0; star < mefinfo->nstars; star++)
       if(ptbuf[star].flux != 0.0) {
-	medbuf1[opt1] = ptbuf[star].x - mefinfo->stars[star].medx[mefinfo->domerid ? mefinfo->frames[pt].iang : 0];
-	medbuf2[opt1] = ptbuf[star].y - mefinfo->stars[star].medy[mefinfo->domerid ? mefinfo->frames[pt].iang : 0];
+	medbuf1[opt1] = ptbuf[star].x - mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].medx;
+	medbuf2[opt1] = ptbuf[star].y - mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].medy;
 	opt1++;
       }
   
@@ -384,32 +461,19 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   }
 
   /* Compute median positioning errors (should be zero) and rms */
-  opt1 = 0;
-
-  for(pt = 0; pt < mefinfo->nf; pt++) {
-    if(!mefinfo->domerid || !mefinfo->frames[pt].iang) {
-      medbuf1[opt1] = mefinfo->frames[pt].xoff;
-      medbuf2[opt1] = mefinfo->frames[pt].yoff;
-      opt1++;
-    }
-  }
-
-  medsig(medbuf1, opt1, &(mefinfo->medxoff[0]), &(mefinfo->sigxoff[0]));
-  medsig(medbuf2, opt1, &(mefinfo->medyoff[0]), &(mefinfo->sigyoff[0]));
-
-  if(mefinfo->domerid) {
+  for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
     opt1 = 0;
-
+    
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(mefinfo->frames[pt].iang) {
+      if(mefinfo->frames[pt].iseg == iseg) {
 	medbuf1[opt1] = mefinfo->frames[pt].xoff;
 	medbuf2[opt1] = mefinfo->frames[pt].yoff;
 	opt1++;
       }
     }
     
-    medsig(medbuf1, opt1, &(mefinfo->medxoff[1]), &(mefinfo->sigxoff[1]));
-    medsig(medbuf2, opt1, &(mefinfo->medyoff[1]), &(mefinfo->sigyoff[1]));
+    medsig(medbuf1, opt1, &(mefinfo->segs[iseg].medxoff), &(mefinfo->segs[iseg].sigxoff));
+    medsig(medbuf2, opt1, &(mefinfo->segs[iseg].medyoff), &(mefinfo->segs[iseg].sigyoff));
   }
 
   /* Free workspace */
@@ -419,16 +483,20 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   medbuf1 = (float *) NULL;
   free((void *) sysbuf);
   sysbuf = (struct systematic_fit *) NULL;
+  free((void *) medcorr);
+  medcorr = (float *) NULL;
 
   return(0);
 
  error:
-  if(!ptbuf)
+  if(ptbuf)
     free((void *) ptbuf);
-  if(!medbuf1)
+  if(medbuf1)
     free((void *) medbuf1);
-  if(!sysbuf)
+  if(sysbuf)
     free((void *) sysbuf);
+  if(medcorr)
+    free((void *) medcorr);
 
   return(1);
 }
@@ -447,6 +515,36 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   int aper, useaper;
   float diff, diffmin;
+
+  int iseg, found, imr;
+
+  /* Decide segments for all new points */
+  for(pt = 0; pt < mefinfo->nf; pt++) {
+    /* Have we seen this segment before? */
+    found = -1;
+    imr = mefinfo->nseg-1;
+    for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
+      /* This test is a bit complicated.  The first part handles version
+       * numbers, including a NULL = NULL comparison and then the numeric
+       * comparison if not null.
+       * The second bit handles meridian sides if that is enabled.
+       */
+      if(((!mefinfo->frames[pt].instvers && !mefinfo->segs[iseg].instvers) ||
+	  (mefinfo->frames[pt].instvers && mefinfo->segs[iseg].instvers &&
+	   mefinfo->frames[pt].instvers->iver == mefinfo->segs[iseg].instvers->iver)) &&
+	 (!mefinfo->domerid || (mefinfo->frames[pt].iang == mefinfo->segs[iseg].iang)))
+	found = iseg;
+
+      /* Accumulate most recent on correct meridian side */
+      if(!mefinfo->domerid || (mefinfo->frames[pt].iang == mefinfo->segs[iseg].iang))
+	imr = iseg;
+    }
+
+    if(found < 0)
+      found = imr;  /* assume most recent */
+
+    mefinfo->frames[pt].iseg = found;
+  }
 
   /* Allocate temporary workspace for calculating medians */
   nmedbuf = MAX(mefinfo->nf, mefinfo->nstars);
@@ -485,10 +583,8 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	/* Apply any meridian flip offsets */
 	if(mefinfo->domerid > 1) 
 	  for(star = 0; star < mefinfo->nstars; star++) 
-	    if(ptbuf[star].flux != 0.0) {
-	      if(mefinfo->frames[pt].iang)
-		ptbuf[star].flux -= mefinfo->stars[star].merid[meas];
-	    }
+	    if(ptbuf[star].flux != 0.0)
+	      ptbuf[star].flux -= mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].corr[meas];
 
 	/* Perform polynomial fit correction */
 	if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf, mefinfo->degree,
@@ -637,11 +733,11 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
   return(0);
 
  error:
-  if(!ptbuf)
+  if(ptbuf)
     free((void *) ptbuf);
-  if(!medbuf)
+  if(medbuf)
     free((void *) medbuf);
-  if(!sysbuf)
+  if(sysbuf)
     free((void *) sysbuf);
 
   return(1);
