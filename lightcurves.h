@@ -54,8 +54,8 @@ struct lc_star {
   long ptr;
   float x;
   float y;
-  float ra;
-  float dec;
+  double ra;
+  double dec;
   int cls;
   int bflag;
   long cflag;

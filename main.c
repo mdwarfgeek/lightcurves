@@ -566,7 +566,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 		    "", "", "", "1E",
 		    "", "", "", "", "", "", "",
 		    "", "", "",
-		    "1E", "1E" };
+		    "1D", "1D" };
   char *tunit[] = { "pixels", "pixels", "mag", "mag", "", "",
 		    "", "", "", "", "",
 		    "mag", "mag", "mag", "pixels",
@@ -590,7 +590,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   double *epos = (double *) NULL;
 
-  float *xbuf = (float *) NULL, *ybuf, *medbuf, *rmsbuf, *chibuf, *apbuf, *rabuf, *decbuf;
+  float *xbuf = (float *) NULL, *ybuf, *medbuf, *rmsbuf, *chibuf, *apbuf;
+  double *rabuf = (double *) NULL, *decbuf;
   long *nchibuf = (long *) NULL, *ptrbuf, *cfbuf, *sfbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
   float *apmedbuf = (float *) NULL, *aprmsbuf, *apoffbuf;
@@ -981,14 +982,15 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   }
 
   /* Allocate output buffers */
-  xbuf = (float *) malloc(8 * rblksz * sizeof(float));
+  xbuf = (float *) malloc(6 * rblksz * sizeof(float));
+  rabuf = (double *) malloc(2 * rblksz * sizeof(double));
   nchibuf = (long *) malloc(4 * rblksz * sizeof(long));
   clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
   apmedbuf = (float *) malloc((2+mefinfo->nseg) * rblksz * NFLUX * sizeof(float));
   fluxbuf = (float *) malloc(8 * rblksz * mefinfo->nf * sizeof(float));
   hjdbuf = (double *) malloc(rblksz * mefinfo->nf * sizeof(double));
   flagbuf = (unsigned char *) malloc(rblksz * mefinfo->nf * sizeof(unsigned char));
-  if(!xbuf || !nchibuf || !clsbuf || !apmedbuf || !fluxbuf || !hjdbuf || !flagbuf) {
+  if(!xbuf || !rabuf || !nchibuf || !clsbuf || !apmedbuf || !fluxbuf || !hjdbuf || !flagbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
@@ -997,9 +999,9 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   medbuf = xbuf + 2 * rblksz;
   rmsbuf = xbuf + 3 * rblksz;
   chibuf = xbuf + 4 * rblksz;
-  rabuf = xbuf + 5 * rblksz;
-  decbuf = xbuf + 6 * rblksz;
-  apbuf = xbuf + 7 * rblksz;
+  apbuf = xbuf + 5 * rblksz;
+
+  decbuf = rabuf + rblksz;
 
   bfbuf = clsbuf + rblksz;
 
@@ -1147,8 +1149,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       ffpcne(fits, 23, frow, 1, r * mefinfo->nf, wtbuf, -999.0, &status);
       ffpcne(fits, 24, frow, 1, r * mefinfo->nf, peakbuf, -999.0, &status);
       ffpclb(fits, 25, frow, 1, r * mefinfo->nf, flagbuf, &status);
-      ffpcle(fits, 26, frow, 1, r, rabuf, &status);
-      ffpcle(fits, 27, frow, 1, r, decbuf, &status);
+      ffpcld(fits, 26, frow, 1, r, rabuf, &status);
+      ffpcld(fits, 27, frow, 1, r, decbuf, &status);
       if(status) {
 	fitsio_err(errstr, status, "ffpcl");
 	goto error;
@@ -1187,8 +1189,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     ffpcne(fits, 23, frow, 1, r * mefinfo->nf, wtbuf, -999.0, &status);
     ffpcne(fits, 24, frow, 1, r * mefinfo->nf, peakbuf, -999.0, &status);
     ffpclb(fits, 25, frow, 1, r * mefinfo->nf, flagbuf, &status);
-    ffpcle(fits, 26, frow, 1, r, rabuf, &status);
-    ffpcle(fits, 27, frow, 1, r, decbuf, &status);
+    ffpcld(fits, 26, frow, 1, r, rabuf, &status);
+    ffpcld(fits, 27, frow, 1, r, decbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpcl");
       goto error;
@@ -1201,6 +1203,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   epos = (double *) NULL;
   free((void *) xbuf);
   xbuf = (float *) NULL;
+  free((void *) rabuf);
+  rabuf = (double *) NULL;
   free((void *) nchibuf);
   nchibuf = (long *) NULL;
   free((void *) clsbuf);
@@ -1223,6 +1227,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     free((void *) epos);
   if(xbuf)
     free((void *) xbuf);
+  if(rabuf)
+    free((void *) rabuf);
   if(nchibuf)
     free((void *) nchibuf);
   if(clsbuf)

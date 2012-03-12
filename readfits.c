@@ -63,15 +63,15 @@ static struct {
 };
 
 #define RADECZP(x1, y1, ra, dec) {					\
-  float x, y, xi, xn, rv, rfac;						\
-  float aa, alpha, delta;						\
+  double x, y, xi, xn, rv, rfac;					\
+  double denom, aa, alpha, delta;					\
 									\
   x = x1 - c;								\
   y = y1 - f;								\
 									\
   xi = a * x + b * y;							\
   xn = d * x + e * y;							\
-  rv = sqrtf(xi * xi + xn * xn);					\
+  rv = sqrt(xi * xi + xn * xn);						\
 									\
   /* NB this is only a 1st order approx */				\
   rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;	\
@@ -83,13 +83,11 @@ static struct {
   xi /= rfac;								\
   xn /= rfac;								\
 									\
-  aa    = atanf(xi * secd / (1.0 - xn * tand));				\
-  alpha = aa + tpa;							\
+  denom = cosd - xn * sind;						\
 									\
-  if(xi != 0.0)								\
-    delta = atanf((xn + tand) * sinf(aa) / (xi * secd));		\
-  else									\
-    delta = atanf((xn + tand) / (1.0 - xn * tand));			\
+  aa    = atan2(xi, denom);						\
+  alpha = aa + tpa;							\
+  delta = atan2(sind + xn * cosd, sqrt(xi*xi + denom*denom));		\
 									\
   if(alpha > tpi)							\
     alpha -= tpi;							\
@@ -101,32 +99,32 @@ static struct {
   (dec) = delta;							\
 }
 
-#define XYZP(ra, dec, x, y) {							\
-  float xi, xn, rfac, denom, rp;						\
-										\
-  xi = secd * sin(ra - tpa) / (tand * tan(dec) + cos(ra - tpa));		\
-  xn = (tan(dec) - tand * cos(ra - tpa)) / (tand * tan(dec) + cos(ra - tpa));	\
-										\
-  rp = sqrtf(xi * xi + xn * xn);						\
-  rfac = projp1 + projp3 * rp * rp + projp5 * rp * rp * rp * rp;		\
-  xi *= rfac;									\
-  xn *= rfac;									\
-										\
-  denom = a * e - d * b;							\
-										\
-  x = (xi * e - xn * b) / denom + c;						\
-  y = (xn * a - xi * d) / denom + f;						\
+#define XYZP(ra, dec, x, y) {						\
+  double xi, xn, rfac, denom, rp;					\
+									\
+  xi = secd * sin(ra - tpa) / (tand * tan(dec) + cos(ra - tpa));	\
+  xn = (tan(dec) - tand * cos(ra - tpa)) / (tand * tan(dec) + cos(ra - tpa)); \
+									\
+  rp = sqrt(xi * xi + xn * xn);						\
+  rfac = projp1 + projp3 * rp * rp + projp5 * rp * rp * rp * rp;	\
+  xi *= rfac;								\
+  xn *= rfac;								\
+									\
+  denom = a * e - d * b;						\
+									\
+  x = (xi * e - xn * b) / denom + c;					\
+  y = (xn * a - xi * d) / denom + f;					\
 }
 
 #define XIXNZP(x1, y1, xi, xn) {					\
-  float x, y, xit, xnt, rv, rfac;					\
+  double x, y, xit, xnt, rv, rfac;					\
 									\
   x = x1 - c;								\
   y = y1 - f;								\
 									\
   xit = a * x + b * y;							\
   xnt = d * x + e * y;							\
-  rv = sqrtf(xit * xit + xnt * xnt);					\
+  rv = sqrt(xit * xit + xnt * xnt);					\
 									\
   /* NB this is only a 1st order approx */				\
   rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;	\
@@ -166,7 +164,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   int noexp = 0;
 
-  float *xbuf = (float *) NULL, *ybuf, *apbuf, *rabuf, *decbuf;
+  float *xbuf = (float *) NULL, *ybuf, *apbuf;
+  double *rabuf = (double *) NULL, *decbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
   long *ptrbuf = (long *) NULL, *cfbuf;
   float *apmedbuf = (float *) NULL, *aprmsbuf, *apoffbuf;
@@ -518,19 +517,20 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
   
   /* Allocate column buffers */
-  xbuf = (float *) malloc(5 * rblksz * sizeof(float));
+  xbuf = (float *) malloc(3 * rblksz * sizeof(float));
+  rabuf = (double *) malloc(2 * rblksz * sizeof(double));
   clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
   ptrbuf = (long *) malloc(2 * rblksz * sizeof(long));
   apmedbuf = (float *) malloc((2+mefinfo->nseg) * rblksz * NFLUX * sizeof(float));
-  if(!xbuf || !clsbuf || !ptrbuf || !apmedbuf) {
+  if(!xbuf || !rabuf || !clsbuf || !ptrbuf || !apmedbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
   
   ybuf = xbuf + rblksz;
   apbuf = xbuf + 2 * rblksz;
-  rabuf = xbuf + 3 * rblksz;
-  decbuf = xbuf + 4 * rblksz;
+
+  decbuf = rabuf + rblksz;
 
   bfbuf = clsbuf + rblksz;
 
@@ -574,9 +574,9 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     ffgcve(fits, gcols[8], roff + 1, 1, mefinfo->nseg * rread * NFLUX, -999.0, apoffbuf, &anynull,
 	   &status);
     ffgcve(fits, gcols[9], roff + 1, 1, rread, -999.0, apbuf, &anynull, &status);
-    ffgcve(fits, gcols[10], roff + 1, 1, rread, -999.0, rabuf, &anynull,
+    ffgcvd(fits, gcols[10], roff + 1, 1, rread, -999.0, rabuf, &anynull,
 	   &status);
-    ffgcve(fits, gcols[11], roff + 1, 1, rread, -999.0, decbuf, &anynull,
+    ffgcvd(fits, gcols[11], roff + 1, 1, rread, -999.0, decbuf, &anynull,
 	   &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
@@ -626,6 +626,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   /* Free workspace */
   free((void *) xbuf);
   xbuf = (float *) NULL;
+  free((void *) rabuf);
+  rabuf = (double *) NULL;
   free((void *) clsbuf);
   clsbuf = (short *) NULL;
   free((void *) ptrbuf);
@@ -638,6 +640,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
  error:
   if(xbuf)
     free((void *) xbuf);
+  if(rabuf)
+    free((void *) rabuf);
   if(clsbuf)
     free((void *) clsbuf);
   if(ptrbuf)
@@ -665,7 +669,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float *sattmp = (float *) NULL;
   long nsattmp;
 
-  float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand, fang;
+  double tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5;
+  double sind, cosd, secd, tand, fang;
   float skylev, skynoise, exptime, rcore, gain, magzpt, percorr;
   float tpi;
   float apcor[NFLUX];
@@ -680,7 +685,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   int noexp = 0;
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
-  float scatcoeff = 0.0, xi, xn;
+  float scatcoeff = 0.0;
+  double xi, xn;
 
   int cats_are_80 = 0;
 
@@ -730,39 +736,39 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   /* Read WCS info */
-  ffgkye(fits, "CRVAL1", &tpa, (char *) NULL, &status);
-  ffgkye(fits, "CRVAL2", &tpd, (char *) NULL, &status);
+  ffgkyd(fits, "CRVAL1", &tpa, (char *) NULL, &status);
+  ffgkyd(fits, "CRVAL2", &tpd, (char *) NULL, &status);
   if(status) {
-    fitsio_err(errstr, status, "ffgkye: CRVAL[12]");
+    fitsio_err(errstr, status, "ffgkyd: CRVAL[12]");
     goto error;
   }
 
-  ffgkye(fits, "CRPIX1", &c, (char *) NULL, &status);
-  ffgkye(fits, "CRPIX2", &f, (char *) NULL, &status);
+  ffgkyd(fits, "CRPIX1", &c, (char *) NULL, &status);
+  ffgkyd(fits, "CRPIX2", &f, (char *) NULL, &status);
   if(status) {
-    fitsio_err(errstr, status, "ffgkye: CRPIX[12]");
+    fitsio_err(errstr, status, "ffgkyd: CRPIX[12]");
     goto error;
   }
 
-  ffgkye(fits, "CD1_1", &a, (char *) NULL, &status);
-  ffgkye(fits, "CD1_2", &b, (char *) NULL, &status);
-  ffgkye(fits, "CD2_1", &d, (char *) NULL, &status);
-  ffgkye(fits, "CD2_2", &e, (char *) NULL, &status);
+  ffgkyd(fits, "CD1_1", &a, (char *) NULL, &status);
+  ffgkyd(fits, "CD1_2", &b, (char *) NULL, &status);
+  ffgkyd(fits, "CD2_1", &d, (char *) NULL, &status);
+  ffgkyd(fits, "CD2_2", &e, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
 
     /* Try for obsolescent one */
-    ffgkye(fits, "CDELT1", &scl1, (char *) NULL, &status);
-    ffgkye(fits, "CDELT2", &scl2, (char *) NULL, &status);
+    ffgkyd(fits, "CDELT1", &scl1, (char *) NULL, &status);
+    ffgkyd(fits, "CDELT2", &scl2, (char *) NULL, &status);
     if(status) {
-      fitsio_err(errstr, status, "ffgkye: CDELT[12]");
+      fitsio_err(errstr, status, "ffgkyd: CDELT[12]");
       goto error;
     }
 
-    ffgkye(fits, "PC1_1", &a, (char *) NULL, &status);
-    ffgkye(fits, "PC1_2", &b, (char *) NULL, &status);
-    ffgkye(fits, "PC2_1", &d, (char *) NULL, &status);
-    ffgkye(fits, "PC2_2", &e, (char *) NULL, &status);
+    ffgkyd(fits, "PC1_1", &a, (char *) NULL, &status);
+    ffgkyd(fits, "PC1_2", &b, (char *) NULL, &status);
+    ffgkyd(fits, "PC2_1", &d, (char *) NULL, &status);
+    ffgkyd(fits, "PC2_2", &e, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
 
@@ -773,7 +779,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       e = 1.0;
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: PC[12]_[12]");
+      fitsio_err(errstr, status, "ffgkyd: PC[12]_[12]");
       goto error;
     }
 
@@ -783,61 +789,61 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     e *= scl2;
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: CD[12]_[12]");
+    fitsio_err(errstr, status, "ffgkyd: CD[12]_[12]");
     goto error;
   }
 
-  ffgkye(fits, "PV2_1", &projp1, (char *) NULL, &status);
+  ffgkyd(fits, "PV2_1", &projp1, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    ffgkye(fits, "PROJP1", &projp1, (char *) NULL, &status);
+    ffgkyd(fits, "PROJP1", &projp1, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       projp1 = 1.0;
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: PROJP1");
+      fitsio_err(errstr, status, "ffgkyd: PROJP1");
       goto error;
     }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PV2_1");
+    fitsio_err(errstr, status, "ffgkyd: PV2_1");
     goto error;
   }
 
-  ffgkye(fits, "PV2_3", &projp3, (char *) NULL, &status);
+  ffgkyd(fits, "PV2_3", &projp3, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    ffgkye(fits, "PROJP3", &projp3, (char *) NULL, &status);
+    ffgkyd(fits, "PROJP3", &projp3, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       projp3 = 220.0;
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: PROJP3");
+      fitsio_err(errstr, status, "ffgkyd: PROJP3");
       goto error;
     }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PV2_3");
+    fitsio_err(errstr, status, "ffgkyd: PV2_3");
     goto error;
   }
 
-  ffgkye(fits, "PV2_5", &projp5, (char *) NULL, &status);
+  ffgkyd(fits, "PV2_5", &projp5, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    ffgkye(fits, "PROJP5", &projp5, (char *) NULL, &status);
+    ffgkyd(fits, "PROJP5", &projp5, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       projp5 = 0.0;
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: PROJP5");
+      fitsio_err(errstr, status, "ffgkyd: PROJP5");
       goto error;
     }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PV2_5");
+    fitsio_err(errstr, status, "ffgkyd: PV2_5");
     goto error;
   }
 
@@ -849,10 +855,13 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   d *= DEG_TO_RAD;
   e *= DEG_TO_RAD;
 
-  secd = 1.0 / cosf(tpd);
-  tand = tanf(tpd);
+  sind = sin(tpd);
+  cosd = cos(tpd);
 
-  fang = atan2f(b, a);
+  secd = 1.0 / cos(tpd);
+  tand = tan(tpd);
+
+  fang = atan2(b, a);
 
   if(satlev < 0) {
     /* Get saturation level - tries SATLEV first, on MEarth this
@@ -1286,7 +1295,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf;
   float *locskybuf, *skyrmsbuf, *badpixbuf;
 
-  float tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5, secd, tand, fang;
+  double tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5;
+  double sind, cosd, secd, tand, fang;
   float seeing, ellipt, skylev, skynoise, exptime, rcore, gain, percorr;
   float skyvar, area, tpi, tmp, expfac;
   double mjd, fd;
@@ -1298,9 +1308,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float flux, fluxerr, peak;
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
-  float scatcoeff = 0.0, xi, xn;
-
-  float xexpect, yexpect;
+  float scatcoeff = 0.0;
+  double xi, xn, xexpect, yexpect;
 
   char latstr[FLEN_VALUE] = { '\0' }, lonstr[FLEN_VALUE] = { '\0' };
   char heightstr[FLEN_VALUE] = { '\0' };
@@ -1414,39 +1423,39 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   /* Read WCS info */
-  ffgkye(fits, "CRVAL1", &tpa, (char *) NULL, &status);
-  ffgkye(fits, "CRVAL2", &tpd, (char *) NULL, &status);
+  ffgkyd(fits, "CRVAL1", &tpa, (char *) NULL, &status);
+  ffgkyd(fits, "CRVAL2", &tpd, (char *) NULL, &status);
   if(status) {
-    fitsio_err(errstr, status, "ffgkye: CRVAL[12]");
+    fitsio_err(errstr, status, "ffgkyd: CRVAL[12]");
     goto error;
   }
 
-  ffgkye(fits, "CRPIX1", &c, (char *) NULL, &status);
-  ffgkye(fits, "CRPIX2", &f, (char *) NULL, &status);
+  ffgkyd(fits, "CRPIX1", &c, (char *) NULL, &status);
+  ffgkyd(fits, "CRPIX2", &f, (char *) NULL, &status);
   if(status) {
-    fitsio_err(errstr, status, "ffgkye: CRPIX[12]");
+    fitsio_err(errstr, status, "ffgkyd: CRPIX[12]");
     goto error;
   }
 
-  ffgkye(fits, "CD1_1", &a, (char *) NULL, &status);
-  ffgkye(fits, "CD1_2", &b, (char *) NULL, &status);
-  ffgkye(fits, "CD2_1", &d, (char *) NULL, &status);
-  ffgkye(fits, "CD2_2", &e, (char *) NULL, &status);
+  ffgkyd(fits, "CD1_1", &a, (char *) NULL, &status);
+  ffgkyd(fits, "CD1_2", &b, (char *) NULL, &status);
+  ffgkyd(fits, "CD2_1", &d, (char *) NULL, &status);
+  ffgkyd(fits, "CD2_2", &e, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
 
     /* Try for obsolescent one */
-    ffgkye(fits, "CDELT1", &scl1, (char *) NULL, &status);
-    ffgkye(fits, "CDELT2", &scl2, (char *) NULL, &status);
+    ffgkyd(fits, "CDELT1", &scl1, (char *) NULL, &status);
+    ffgkyd(fits, "CDELT2", &scl2, (char *) NULL, &status);
     if(status) {
-      fitsio_err(errstr, status, "ffgkye: CDELT[12]");
+      fitsio_err(errstr, status, "ffgkyd: CDELT[12]");
       goto error;
     }
 
-    ffgkye(fits, "PC1_1", &a, (char *) NULL, &status);
-    ffgkye(fits, "PC1_2", &b, (char *) NULL, &status);
-    ffgkye(fits, "PC2_1", &d, (char *) NULL, &status);
-    ffgkye(fits, "PC2_2", &e, (char *) NULL, &status);
+    ffgkyd(fits, "PC1_1", &a, (char *) NULL, &status);
+    ffgkyd(fits, "PC1_2", &b, (char *) NULL, &status);
+    ffgkyd(fits, "PC2_1", &d, (char *) NULL, &status);
+    ffgkyd(fits, "PC2_2", &e, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
 
@@ -1457,7 +1466,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       e = 1.0;
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: PC[12]_[12]");
+      fitsio_err(errstr, status, "ffgkyd: PC[12]_[12]");
       goto error;
     }
 
@@ -1467,61 +1476,61 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     e *= scl2;
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: CD[12]_[12]");
+    fitsio_err(errstr, status, "ffgkyd: CD[12]_[12]");
     goto error;
   }
 
-  ffgkye(fits, "PV2_1", &projp1, (char *) NULL, &status);
+  ffgkyd(fits, "PV2_1", &projp1, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    ffgkye(fits, "PROJP1", &projp1, (char *) NULL, &status);
+    ffgkyd(fits, "PROJP1", &projp1, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       projp1 = 1.0;
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: PROJP1");
+      fitsio_err(errstr, status, "ffgkyd: PROJP1");
       goto error;
     }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PV2_1");
+    fitsio_err(errstr, status, "ffgkyd: PV2_1");
     goto error;
   }
 
-  ffgkye(fits, "PV2_3", &projp3, (char *) NULL, &status);
+  ffgkyd(fits, "PV2_3", &projp3, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    ffgkye(fits, "PROJP3", &projp3, (char *) NULL, &status);
+    ffgkyd(fits, "PROJP3", &projp3, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       projp3 = 220.0;
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: PROJP3");
+      fitsio_err(errstr, status, "ffgkyd: PROJP3");
       goto error;
     }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PV2_3");
+    fitsio_err(errstr, status, "ffgkyd: PV2_3");
     goto error;
   }
 
-  ffgkye(fits, "PV2_5", &projp5, (char *) NULL, &status);
+  ffgkyd(fits, "PV2_5", &projp5, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    ffgkye(fits, "PROJP5", &projp5, (char *) NULL, &status);
+    ffgkyd(fits, "PROJP5", &projp5, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       projp5 = 0.0;
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: PROJP5");
+      fitsio_err(errstr, status, "ffgkyd: PROJP5");
       goto error;
     }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: PV2_5");
+    fitsio_err(errstr, status, "ffgkyd: PV2_5");
     goto error;
   }
 
@@ -1533,10 +1542,13 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   d *= DEG_TO_RAD;
   e *= DEG_TO_RAD;
 
-  secd = 1.0 / cosf(tpd);
-  tand = tanf(tpd);
+  sind = sin(tpd);
+  cosd = cos(tpd);
 
-  fang = atan2f(b, a);
+  secd = 1.0 / cos(tpd);
+  tand = tan(tpd);
+
+  fang = atan2(b, a);
 
   if(satlev < 0) {
     /* Get saturation level - tries SATLEV first.  On MEarth this
