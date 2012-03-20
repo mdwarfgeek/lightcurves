@@ -138,7 +138,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 	   avzp, gain, sigma, skyfiterr, area, avextinc, avsigm, avscint);
 
   for(t = 0; t < ntheo; t++) {
-    mag = t * 0.01 + magmin;
+    mag = t * THEOSTEP + magmin;
 
     photons = powf(10.0, 0.4 * (avzp - mag)) * gain;
     tmp = 2.5 * loge * sqrtf(photons +
