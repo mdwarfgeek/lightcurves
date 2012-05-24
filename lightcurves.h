@@ -129,8 +129,10 @@ struct lc_frame {
   /* MEarth-specific: realtime status information */
   long rtstat;
 
-  /* MEarth-specific: is it astrometric? */
-  int isast;
+  /* MEarth-specific: scheduler information */
+  int schpri;
+  float schcad;
+  char schtype[FLEN_VALUE];
 
   /* MEarth-specific: "instrument version" */
   struct instvers *instvers;

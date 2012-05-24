@@ -437,7 +437,15 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
       if(status == KEY_NO_EXIST) {
 	status = 0;
 	ffgkys(fits, "FILTER2", filter, (char *) NULL, &status);
-	if(status) {
+	if(status == KEY_NO_EXIST) {
+	  status = 0;
+	  ffgkys(fits, "INSFILTE", filter, (char *) NULL, &status);
+	  if(status) {
+	    fitsio_err(errstr, status, "ffgkye: INSFILTE");
+	    goto error;
+	  }
+	}
+	else if(status) {
 	  fitsio_err(errstr, status, "ffgkye: FILTER2");
 	  goto error;
 	}
@@ -1044,7 +1052,15 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       if(status == KEY_NO_EXIST) {
 	status = 0;
 	ffgkys(fits, "FILTER2", filter, (char *) NULL, &status);
-	if(status) {
+	if(status == KEY_NO_EXIST) {
+	  status = 0;
+	  ffgkys(fits, "INSFILTE", filter, (char *) NULL, &status);
+	  if(status) {
+	    fitsio_err(errstr, status, "ffgkye: INSFILTE");
+	    goto error;
+	  }
+	}
+	else if(status) {
 	  fitsio_err(errstr, status, "ffgkye: FILTER2");
 	  goto error;
 	}
@@ -1332,6 +1348,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float magzpt, zpcorr, airmass = 1.0, extinct = 0.0;
   int l1, l2, i, ilim, noexp = 0;
 
+  long schpri;
+  float schcad;
   char schtype[FLEN_VALUE];
 
   struct instvers *instvers = (struct instvers *) NULL;
@@ -1753,7 +1771,15 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       if(status == KEY_NO_EXIST) {
 	status = 0;
 	ffgkys(fits, "FILTER2", filter, (char *) NULL, &status);
-	if(status) {
+	if(status == KEY_NO_EXIST) {
+	  status = 0;
+	  ffgkys(fits, "INSFILTE", filter, (char *) NULL, &status);
+	  if(status) {
+	    fitsio_err(errstr, status, "ffgkye: INSFILTE");
+	    goto error;
+	  }
+	}
+	else if(status) {
 	  fitsio_err(errstr, status, "ffgkye: FILTER2");
 	  goto error;
 	}
@@ -2048,7 +2074,27 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
-  /* MEarth-specific: scheduling type */
+  /* MEarth-specific: scheduling information */
+  ffgkyj(fits, "SCHPRI", &schpri, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    schpri = -1;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkyj: SCHPRI");
+    goto error;
+  }
+
+  ffgkye(fits, "SCHCAD", &schcad, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    schcad = -999.0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: SCHCAD");
+    goto error;
+  }
+
   ffgkys(fits, "SCHTYPE", schtype, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
@@ -2334,7 +2380,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].skytemp = skytemp;
 
   mefinfo->frames[iframe].rtstat = rtstat;
-  mefinfo->frames[iframe].isast = !strcmp(schtype, "a");
+  mefinfo->frames[iframe].schpri = schpri;
+  mefinfo->frames[iframe].schcad = schcad;
+  memcpy(mefinfo->frames[iframe].schtype, schtype, sizeof(mefinfo->frames[iframe].schtype));
 
   mefinfo->frames[iframe].zpdiff = magzpt - mefinfo->refmagzpt;
 

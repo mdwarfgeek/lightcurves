@@ -883,6 +883,36 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
+    if(mefinfo->frames[pt].schpri >= 0) {
+      snprintf(kbuf, sizeof(kbuf), "SPRI%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Scheduling priority for datapoint %ld", pt+1);
+      ffpkyj(fits, kbuf, mefinfo->frames[pt].schpri, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
+    }
+
+    if(mefinfo->frames[pt].schcad >= 0) {
+      snprintf(kbuf, sizeof(kbuf), "SCAD%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Scheduling cadence for datapoint %ld", pt+1);
+      ffpkye(fits, kbuf, mefinfo->frames[pt].schcad, 6, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkye: %s", kbuf);
+	goto error;
+      }
+    }
+    
+    if(mefinfo->frames[pt].schtype[0]) {
+      snprintf(kbuf, sizeof(kbuf), "STYP%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Observation type code for datapoint %ld", pt+1);
+      ffpkys(fits, kbuf, mefinfo->frames[pt].schtype, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkys: %s", kbuf);
+	goto error;
+      }
+    }
+
     snprintf(kbuf, sizeof(kbuf), "ISEG%ld", pt+1);
     snprintf(cbuf, sizeof(cbuf), "Segment number for datapoint %ld", pt+1);
     ffpkyj(fits, kbuf, mefinfo->frames[pt].iseg+1, cbuf, &status);
@@ -909,7 +939,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
-    if(!mefinfo->frames[pt].isast)
+    if(strcmp(mefinfo->frames[pt].schtype, "a"))
       allast = 0;
 
     snprintf(kbuf, sizeof(kbuf), "IUPD%ld", pt+1);
