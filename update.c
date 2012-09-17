@@ -560,9 +560,9 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   double *epos = (double *) NULL;
 
-  float *fluxbuf = (float *) NULL, *fluxerrbuf, *xlcbuf, *ylcbuf, *airbuf, *habuf, *wtbuf;
-  float *peakbuf;
-  double *hjdbuf = (double *) NULL;
+  float *fluxbuf = (float *) NULL, *fluxerrbuf, *airbuf, *habuf, *wtbuf;
+  float *locskybuf, *peakbuf;
+  double *hjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
   unsigned char *flagbuf = (unsigned char *) NULL;
 
   int ikey, nkeys, keylen;
@@ -921,6 +921,54 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       goto error;
     }
 
+    snprintf(kbuf, sizeof(kbuf), "LXX%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[0], 12, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "LXY%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[1], 12, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "LXD%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[2], 12, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "LYY%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[3], 12, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "LYX%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[4], 12, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+      goto error;
+    }
+
+    snprintf(kbuf, sizeof(kbuf), "LYD%ld", nmeasexist+pt+1);
+    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[5], 12, cbuf, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+      goto error;
+    }
+
     /* Calculate Earth's heliocentric position at this MJD */
     getearth(mefinfo->mjdref + mefinfo->frames[pt].mjd, epos + 3*pt);
   }
@@ -1045,8 +1093,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   }
 
   /* Allocate output buffers */
-  fluxbuf = (float *) malloc(9 * nmeasout * sizeof(float));
-  hjdbuf = (double *) malloc(nmeasout * sizeof(double));
+  fluxbuf = (float *) malloc(8 * nmeasout * sizeof(float));
+  hjdbuf = (double *) malloc(3 * nmeasout * sizeof(double));
   flagbuf = (unsigned char *) malloc(nmeasout * sizeof(unsigned char));
   rawbuf = (unsigned char *) malloc(rowsize * sizeof(unsigned char));
   if(!fluxbuf || !hjdbuf || !flagbuf || !rawbuf) {
@@ -1055,14 +1103,16 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   }
 
   fluxerrbuf = fluxbuf + nmeasout;
-  xlcbuf = fluxbuf + 2 * nmeasout;
-  ylcbuf = fluxbuf + 3 * nmeasout;
-  airbuf = fluxbuf + 4 * nmeasout;
-  habuf = fluxbuf + 5 * nmeasout;
-  wtbuf = fluxbuf + 6 * nmeasout;
-  peakbuf = fluxbuf + 7 * nmeasout;
+  airbuf = fluxbuf + 2 * nmeasout;
+  habuf = fluxbuf + 3 * nmeasout;
+  wtbuf = fluxbuf + 4 * nmeasout;
+  locskybuf = fluxbuf + 5 * nmeasout;
+  peakbuf = fluxbuf + 6 * nmeasout;
 
-  medlist = fluxbuf + 8 * nmeasout;
+  xlcbuf = hjdbuf + nmeasout;
+  ylcbuf = hjdbuf + 2 * nmeasout;
+
+  medlist = fluxbuf + 7 * nmeasout;
 
   /* Loop through all stars */
   starout = 0;
@@ -1085,13 +1135,14 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffgcvd(reff, gcols[5], starin + 1, 1, nmeasexist, -999.0, hjdbuf, &anynull, &status);
     ffgcve(reff, gcols[6], starin + 1, 1, nmeasexist, -999.0, fluxbuf, &anynull, &status);
     ffgcve(reff, gcols[7], starin + 1, 1, nmeasexist, -999.0, fluxerrbuf, &anynull, &status);
-    ffgcve(reff, gcols[8], starin + 1, 1, nmeasexist, -999.0, xlcbuf, &anynull, &status);
-    ffgcve(reff, gcols[9], starin + 1, 1, nmeasexist, -999.0, ylcbuf, &anynull, &status);
+    ffgcvd(reff, gcols[8], starin + 1, 1, nmeasexist, -999.0, xlcbuf, &anynull, &status);
+    ffgcvd(reff, gcols[9], starin + 1, 1, nmeasexist, -999.0, ylcbuf, &anynull, &status);
     ffgcve(reff, gcols[10], starin + 1, 1, nmeasexist, -999.0, airbuf, &anynull, &status);
     ffgcve(reff, gcols[11], starin + 1, 1, nmeasexist, -999.0, habuf, &anynull, &status);
     ffgcve(reff, gcols[12], starin + 1, 1, nmeasexist, -999.0, wtbuf, &anynull, &status);
-    ffgcve(reff, gcols[13], starin + 1, 1, nmeasexist, -999.0, peakbuf, &anynull, &status);
-    ffgcvb(reff, gcols[14], starin + 1, 1, nmeasexist, 0, flagbuf, &anynull, &status);
+    ffgcve(reff, gcols[13], starin + 1, 1, nmeasexist, -999.0, locskybuf, &anynull, &status);
+    ffgcve(reff, gcols[14], starin + 1, 1, nmeasexist, -999.0, peakbuf, &anynull, &status);
+    ffgcvb(reff, gcols[15], starin + 1, 1, nmeasexist, 0, flagbuf, &anynull, &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
       goto error;
@@ -1138,6 +1189,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       airbuf[nmeasexist+pt] = lcbuf[pt].airmass;
       habuf[nmeasexist+pt] = lcbuf[pt].ha;
       wtbuf[nmeasexist+pt] = lcbuf[pt].wt;
+      locskybuf[nmeasexist+pt] = lcbuf[pt].sky;
       peakbuf[nmeasexist+pt] = lcbuf[pt].peak;
 
       flagbuf[nmeasexist+pt] = flags;
@@ -1212,13 +1264,14 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffpcnd(fits, gcols[5], starout+1, 1, nmeasout, hjdbuf, -999.0, &status);
     ffpcne(fits, gcols[6], starout+1, 1, nmeasout, fluxbuf, -999.0, &status);
     ffpcne(fits, gcols[7], starout+1, 1, nmeasout, fluxerrbuf, -999.0, &status);
-    ffpcne(fits, gcols[8], starout+1, 1, nmeasout, xlcbuf, -999.0, &status);
-    ffpcne(fits, gcols[9], starout+1, 1, nmeasout, ylcbuf, -999.0, &status);
+    ffpcnd(fits, gcols[8], starout+1, 1, nmeasout, xlcbuf, -999.0, &status);
+    ffpcnd(fits, gcols[9], starout+1, 1, nmeasout, ylcbuf, -999.0, &status);
     ffpcne(fits, gcols[10], starout+1, 1, nmeasout, airbuf, -999.0, &status);
     ffpcne(fits, gcols[11], starout+1, 1, nmeasout, habuf, -999.0, &status);
     ffpcne(fits, gcols[12], starout+1, 1, nmeasout, wtbuf, -999.0, &status);
-    ffpcne(fits, gcols[13], starout+1, 1, nmeasout, peakbuf, -999.0, &status);
-    ffpclb(fits, gcols[14], starout+1, 1, nmeasout, flagbuf, &status);
+    ffpcne(fits, gcols[13], starout+1, 1, nmeasout, locskybuf, -999.0, &status);
+    ffpcne(fits, gcols[14], starout+1, 1, nmeasout, peakbuf, -999.0, &status);
+    ffpclb(fits, gcols[15], starout+1, 1, nmeasout, flagbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpcl");
       goto error;

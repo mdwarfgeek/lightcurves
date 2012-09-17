@@ -156,7 +156,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   int cats_are_80 = 0;
 
-  float exptime, skylev, skynoise, rcore, gain, magzpt;
+  float exptime, pedestal = 0, skylev, skynoise, rcore, gain, magzpt;
   float apcor[NFLUX], percorr;
   char filter[FLEN_VALUE];
   float airmass = 1.0, extinct = 0.0;
@@ -164,8 +164,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   int noexp = 0;
 
-  float *xbuf = (float *) NULL, *ybuf, *apbuf;
-  double *rabuf = (double *) NULL, *decbuf;
+  float *apbuf = (float *) NULL;
+  double *xbuf = (double *) NULL, *ybuf, *rabuf, *decbuf;
   short *clsbuf = (short *) NULL, *bfbuf;
   long *ptrbuf = (long *) NULL, *cfbuf;
   float *apmedbuf = (float *) NULL, *aprmsbuf, *apoffbuf;
@@ -309,6 +309,16 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   exptime = fabsf(exptime);
   if(exptime < 1.0)
     exptime = 1.0;
+
+  ffgkye(fits, "PEDESTAL", &pedestal, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    pedestal = 0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: PEDESTAL");
+    goto error;
+  }
 
   ffgkye(fits, "SKYLEVEL", &skylev, (char *) NULL, &status);
   if(status) {
@@ -525,20 +535,19 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
   
   /* Allocate column buffers */
-  xbuf = (float *) malloc(3 * rblksz * sizeof(float));
-  rabuf = (double *) malloc(2 * rblksz * sizeof(double));
+  apbuf = (float *) malloc(rblksz * sizeof(float));
+  xbuf = (double *) malloc(4 * rblksz * sizeof(double));
   clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
   ptrbuf = (long *) malloc(2 * rblksz * sizeof(long));
   apmedbuf = (float *) malloc((2+mefinfo->nseg) * rblksz * NFLUX * sizeof(float));
-  if(!xbuf || !rabuf || !clsbuf || !ptrbuf || !apmedbuf) {
+  if(!apbuf || !xbuf || !clsbuf || !ptrbuf || !apmedbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
   
   ybuf = xbuf + rblksz;
-  apbuf = xbuf + 2 * rblksz;
-
-  decbuf = rabuf + rblksz;
+  rabuf = xbuf + 2 * rblksz;
+  decbuf = xbuf + 3 * rblksz;
 
   bfbuf = clsbuf + rblksz;
 
@@ -569,8 +578,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   while(remain > 0) {
     rread = (remain > rblksz ? rblksz : remain);
     
-    ffgcve(fits, gcols[0], roff + 1, 1, rread, -999.0, xbuf, &anynull, &status);
-    ffgcve(fits, gcols[1], roff + 1, 1, rread, -999.0, ybuf, &anynull, &status);
+    ffgcvd(fits, gcols[0], roff + 1, 1, rread, -999.0, xbuf, &anynull, &status);
+    ffgcvd(fits, gcols[1], roff + 1, 1, rread, -999.0, ybuf, &anynull, &status);
     ffgcvi(fits, gcols[2], roff + 1, 1, rread, 0, clsbuf, &anynull, &status);
     ffgcvj(fits, gcols[3], roff + 1, 1, rread, 0, ptrbuf, &anynull, &status);
     ffgcvi(fits, gcols[4], roff + 1, 1, rread, 0, bfbuf, &anynull, &status);
@@ -632,10 +641,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   mefinfo->percorr = percorr;
 
   /* Free workspace */
+  free((void *) apbuf);
+  apbuf = (float *) NULL;
   free((void *) xbuf);
-  xbuf = (float *) NULL;
-  free((void *) rabuf);
-  rabuf = (double *) NULL;
+  xbuf = (double *) NULL;
   free((void *) clsbuf);
   clsbuf = (short *) NULL;
   free((void *) ptrbuf);
@@ -646,10 +655,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   return(0);
 
  error:
+  if(apbuf)
+    free((void *) apbuf);
   if(xbuf)
     free((void *) xbuf);
-  if(rabuf)
-    free((void *) rabuf);
   if(clsbuf)
     free((void *) clsbuf);
   if(ptrbuf)
@@ -673,13 +682,14 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
   struct lc_star *stars = (struct lc_star *) NULL;
 
-  float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf, *clsbuf, *a7buf, *locskybuf;
+  double *xbuf = (double *) NULL, *ybuf;
+  float *fluxbuf = (float *) NULL, *pkhtbuf, *clsbuf, *a7buf, *locskybuf;
   float *sattmp = (float *) NULL;
   long nsattmp;
 
   double tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5;
   double sind, cosd, secd, tand, fang;
-  float skylev, skynoise, exptime, rcore, gain, magzpt, percorr;
+  float skylev, pedestal = 0, skynoise, exptime, rcore, gain, magzpt, percorr;
   float tpi;
   float apcor[NFLUX];
 
@@ -924,6 +934,16 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   if(exptime < 1.0)
     exptime = 1.0;
 
+  ffgkye(fits, "PEDESTAL", &pedestal, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    pedestal = 0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: PEDESTAL");
+    goto error;
+  }
+
   ffgkye(fits, "SKYLEVEL", &skylev, (char *) NULL, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgkye: SKYLEVEL");
@@ -1146,18 +1166,19 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   }
   
   /* Allocate column buffers */
-  xbuf = (float *) malloc(7 * rblksz * sizeof(float));
-  if(!xbuf) {
+  xbuf = (double *) malloc(2 * rblksz * sizeof(double));
+  fluxbuf = (float *) malloc(5 * rblksz * sizeof(float));
+  if(!xbuf || !fluxbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
   
   ybuf = xbuf + rblksz;
-  fluxbuf = xbuf + 2 * rblksz;
-  pkhtbuf = xbuf + 3 * rblksz;
-  clsbuf = xbuf + 4 * rblksz;
-  a7buf = xbuf + 5 * rblksz;
-  locskybuf = xbuf + 6 * rblksz;
+
+  pkhtbuf = fluxbuf + rblksz;
+  clsbuf = fluxbuf + 2 * rblksz;
+  a7buf = fluxbuf + 3 * rblksz;
+  locskybuf = fluxbuf + 4 * rblksz;
   
   /* Allocate memory for catalogue stars */
   stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
@@ -1178,8 +1199,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   while(remain > 0) {
     rread = (remain > rblksz ? rblksz : remain);
     
-    ffgcve(fits, gcols[0], roff + 1L, 1L, rread, 0.0, xbuf, (int *) NULL, &status);
-    ffgcve(fits, gcols[1], roff + 1L, 1L, rread, 0.0, ybuf, (int *) NULL, &status);
+    ffgcvd(fits, gcols[0], roff + 1L, 1L, rread, 0.0, xbuf, (int *) NULL, &status);
+    ffgcvd(fits, gcols[1], roff + 1L, 1L, rread, 0.0, ybuf, (int *) NULL, &status);
     ffgcve(fits, gcols[2], roff + 1L, 1L, rread, 0.0, pkhtbuf, (int *) NULL, &status);
     ffgcve(fits, gcols[3], roff + 1L, 1L, rread, 0.0, clsbuf, (int *) NULL, &status);
     ffgcve(fits, gcols[4], roff + 1L, 1L, rread, 0.0, a7buf, (int *) NULL, &status);
@@ -1206,7 +1227,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	if(col == 0)
 	  stars[rout].refmag = 2.5 * log10f(MAX(1.0, stars[rout].ref[col].flux));
 
-	stars[rout].ref[col].peak = pkhtbuf[r]+locskybuf[r];
+	stars[rout].ref[col].sky = locskybuf[r]-pedestal;
+	stars[rout].ref[col].peak = pkhtbuf[r]+locskybuf[r]-pedestal;
 
 	if(stars[rout].ref[col].peak > 0.95*satlev)
 	  stars[rout].ref[col].satur = 1;
@@ -1235,7 +1257,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
       stars[rout].apradius = 1.0;  /* default = rcore */
 
-      if(pkhtbuf[r]+locskybuf[r] > 0.95*satlev) {
+      if(pkhtbuf[r]+locskybuf[r]-pedestal > 0.95*satlev) {
 	sattmp[nsattmp] = stars[rout].ref[0].flux;
 	nsattmp++;
       }
@@ -1247,7 +1269,9 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
   /* Free workspace */
   free((void *) xbuf);
-  xbuf = (float *) NULL;
+  xbuf = (double *) NULL;
+  free((void *) fluxbuf);
+  fluxbuf = (float *) NULL;
 
   /* Determine saturation level robustly - 10%ile */
   if(nsattmp > 0) {
@@ -1287,6 +1311,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     free((void *) stars);
   if(xbuf)
     free((void *) xbuf);
+  if(fluxbuf)
+    free((void *) fluxbuf);
   if(sattmp)
     free((void *) sattmp);
 
@@ -1308,12 +1334,12 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   struct lc_point *points = (struct lc_point *) NULL;
 
-  float *xbuf = (float *) NULL, *ybuf, *fluxbuf, *pkhtbuf;
-  float *locskybuf, *skyrmsbuf, *badpixbuf;
+  double *xbuf = (double *) NULL, *ybuf;
+  float *fluxbuf = (float *) NULL, *pkhtbuf, *locskybuf, *skyrmsbuf, *badpixbuf;
 
   double tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5;
   double sind, cosd, secd, tand, fang;
-  float seeing, ellipt, skylev, skynoise, exptime, rcore, gain, percorr;
+  float seeing, ellipt, pedestal, skylev, skynoise, exptime, rcore, gain, percorr;
   float skyvar, area, tpi, tmp, expfac;
   double mjd, fd;
   int iy, im, id;
@@ -1321,7 +1347,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float apcor[NFLUX];
 
   long nrows, rblksz, roff, remain, rout, rread, r;
-  float flux, fluxerr, peak;
+  float flux, fluxerr, locsky, peak;
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
   float scatcoeff = 0.0;
@@ -1636,6 +1662,16 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
   else if(status) {
     fitsio_err(errstr, status, "ffgkye: ELLIPTIC");
+    goto error;
+  }
+
+  ffgkye(fits, "PEDESTAL", &pedestal, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    pedestal = 0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkye: PEDESTAL");
     goto error;
   }
 
@@ -2145,18 +2181,19 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
   
   /* Allocate column buffers */
-  xbuf = (float *) malloc(7 * rblksz * sizeof(float));
-  if(!xbuf) {
+  xbuf = (double *) malloc(2 * rblksz * sizeof(double));
+  fluxbuf = (float *) malloc(5 * rblksz * sizeof(float));
+  if(!xbuf || !fluxbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
   
   ybuf = xbuf + rblksz;
-  fluxbuf = xbuf + 2 * rblksz;
-  pkhtbuf = xbuf + 3 * rblksz;
-  locskybuf = xbuf + 4 * rblksz;
-  skyrmsbuf = xbuf + 5 * rblksz;
-  badpixbuf = xbuf + 6 * rblksz;
+
+  pkhtbuf = fluxbuf + rblksz;
+  locskybuf = fluxbuf + 2 * rblksz;
+  skyrmsbuf = fluxbuf + 3 * rblksz;
+  badpixbuf = fluxbuf + 4 * rblksz;
 
   /* Allocate memory for lightcurve points */
   points = (struct lc_point *) malloc(rblksz * sizeof(struct lc_point));
@@ -2185,8 +2222,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   while(remain > 0) {
     rread = (remain > rblksz ? rblksz : remain);
     
-    ffgcve(fits, gcols[0], roff + 1L, 1L, rread, 0.0, xbuf, (int *) NULL, &status);
-    ffgcve(fits, gcols[1], roff + 1L, 1L, rread, 0.0, ybuf, (int *) NULL, &status);
+    ffgcvd(fits, gcols[0], roff + 1L, 1L, rread, 0.0, xbuf, (int *) NULL, &status);
+    ffgcvd(fits, gcols[1], roff + 1L, 1L, rread, 0.0, ybuf, (int *) NULL, &status);
     ffgcve(fits, gcols[2], roff + 1L, 1L, rread, 0.0, pkhtbuf, (int *) NULL, &status);
     ffgcve(fits, gcols[3], roff + 1L, 1L, rread, 0.0, locskybuf, (int *) NULL, &status);
     ffgcve(fits, gcols[4], roff + 1L, 1L, rread, 0.0, skyrmsbuf, (int *) NULL, &status);
@@ -2244,7 +2281,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  flux = fluxbuf[r] * mefinfo->apcor[col] * mefinfo->percorr;
 	  fluxerr = (fabsf(fluxbuf[r]) * mefinfo->apcor[col] / gain + skyvar);
 
-	  peak = mefinfo->stars[rout].ref[col].peak + pkhtbuf[r]+locskybuf[r]; /* ?? */
+	  locsky = mefinfo->stars[rout].ref[col].sky + locskybuf[r] - pedestal;
+	  peak = mefinfo->stars[rout].ref[col].peak + pkhtbuf[r]+locskybuf[r] - pedestal; /* ?? */
 
 	  if(flux == 0.0 || mefinfo->stars[rout].ref[col].flux == 0.0)
 	    flux = 0.0;
@@ -2259,7 +2297,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  flux = fluxbuf[r] * apcor[col] * percorr;
 	  fluxerr = (fabsf(fluxbuf[r]) * apcor[col] / gain + skyvar);
 
-	  peak = pkhtbuf[r]+locskybuf[r];
+	  locsky = locskybuf[r] - pedestal;
+	  peak = pkhtbuf[r]+locskybuf[r] - pedestal;
 
 	  if(peak > 0.95*satlev || mefinfo->stars[rout].ref[col].satur)
 	    points[r].satur = 1;
@@ -2294,12 +2333,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  /* Stash result */
 	  points[r].fluxerr = sqrtf(var);
 	  points[r].fluxerrcom = points[r].fluxerr;
+	  points[r].sky = locsky;
 	  points[r].peak = peak;
 	}
 	else {
 	  points[r].flux = 0.0;
 	  points[r].fluxerr = 0.0;
 	  points[r].fluxerrcom = 0.0;
+	  points[r].sky = 0.0;
 	  points[r].peak = 0.0;
 	}
 
@@ -2334,7 +2375,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   /* Free workspace */
   free((void *) xbuf);
-  xbuf = (float *) NULL;
+  xbuf = (double *) NULL;
+  free((void *) fluxbuf);
+  fluxbuf = (float *) NULL;
 
   free((void *) points);
   points = (struct lc_point *) NULL;
@@ -2362,7 +2405,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].exptime = exptime;
   mefinfo->frames[iframe].seeing = seeing;
   mefinfo->frames[iframe].ellipt = ellipt;
-  mefinfo->frames[iframe].skylev = skylev;
+  mefinfo->frames[iframe].skylev = skylev-pedestal;
   mefinfo->frames[iframe].skynoise = skynoise;
   mefinfo->frames[iframe].fang = fang;
 
@@ -2409,6 +2452,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
  error:
   if(xbuf)
     free((void *) xbuf);
+  if(fluxbuf)
+    free((void *) fluxbuf);
   if(points)
     free((void *) points);
   if(skyfiterrbuf)

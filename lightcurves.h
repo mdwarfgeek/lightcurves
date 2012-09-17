@@ -28,14 +28,15 @@ struct instvers {
 };
 
 struct lc_point {
-  float x;
-  float y;
+  double x;
+  double y;
   float flux;
   float fluxerr;
   float fluxerrcom;  /* combined uncertainty including fit */
   float airmass;
   float ha;
   float wt;  /* weight given in computing polynomial corr. */
+  float sky;   /* local sky */
   float peak;  /* peak counts including sky */
   unsigned char satur : 1;
   unsigned char conf : 1;
@@ -52,8 +53,8 @@ struct lc_star_segment {
 struct lc_star {
   /* Reference frame info */
   long ptr;
-  float x;
-  float y;
+  double x;
+  double y;
   double ra;
   double dec;
   int cls;
@@ -109,6 +110,9 @@ struct lc_frame {
 
   /* Uncertainty contribution from systematics fit */
   float sigm;
+
+  /* Standard 6-coefficient transformation to reference system */
+  double tr[6];
 
   /* Median x,y offsets and uncertainties */
   float xoff;
@@ -312,6 +316,10 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 		    float *medbuf, int degree, struct systematic_fit *f, char *errstr);
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		      float *medbuf, struct systematic_fit *f, char *errstr);
+
+/* Plate solutions: xytoxy.c */
+int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
+	    double tr[6], char *errstr);
 
 /* Catalogue and list driven file reading: readfits.c */
 int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
