@@ -544,10 +544,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 		      char *errstr) {
   int status = 0, col, ncoluse, anynull;
 
-  char *colnames[15] = { "medflux", "rms", "chisq", "nchisq", "pointer",
+  char *colnames[16] = { "medflux", "rms", "chisq", "nchisq", "pointer",
 			 "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
-                         "weight", "peak", "flags" };
-  int gcols[15];
+                         "weight", "sky", "peak", "flags" };
+  int gcols[16];
 
   char kbuf[FLEN_KEYWORD];
   char cbuf[FLEN_COMMENT];
