@@ -1423,6 +1423,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
     colnames[3] = "Sky_level";  /* WHY were these changed? */
     colnames[4] = "Sky_rms";
+    optcolnames[0] = "Error_bit_flag";
   }
 
   /* Get column numbers */
@@ -2349,7 +2350,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  points[r].flux += calc_intra(xbuf[r], ybuf[r], icorr);
 
 	/* Accumulate counts of frames with bad pixels */
-	if(gcols[4] && badpixbuf[r] > 0.0) {
+	if(gcols[5] && badpixbuf[r] > 0.0) {
 	  points[r].conf = 1;
 	  mefinfo->stars[rout].cflag++;
 	}
