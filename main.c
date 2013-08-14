@@ -1107,6 +1107,44 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   r = 0;
   frow = 1;
 
+#define TABLE_FLUSH() {							\
+  ffpcld(fits, 1, frow, 1, r, xbuf, &status);				\
+  ffpcld(fits, 2, frow, 1, r, ybuf, &status);				\
+  ffpcne(fits, 3, frow, 1, r, medbuf, -999.0, &status);			\
+  ffpcle(fits, 4, frow, 1, r, rmsbuf, &status);				\
+  ffpcle(fits, 5, frow, 1, r, chibuf, &status);				\
+  ffpclj(fits, 6, frow, 1, r, nchibuf, &status);			\
+  ffpcli(fits, 7, frow, 1, r, clsbuf, &status);				\
+  ffpcli(fits, 8, frow, 1, r, bfbuf, &status);				\
+  ffpclj(fits, 9, frow, 1, r, cfbuf, &status);				\
+  ffpclj(fits, 10, frow, 1, r, sfbuf, &status);				\
+  ffpclj(fits, 11, frow, 1, r, ptrbuf, &status);			\
+  ffpcne(fits, 12, frow, 1, r * NFLUX, apmedbuf, -999.0, &status);	\
+  ffpcne(fits, 13, frow, 1, r * NFLUX, aprmsbuf, -999.0, &status);	\
+  ffpcne(fits, 14, frow, 1, mefinfo->nseg * r * NFLUX, apoffbuf, -999.0, &status); \
+  ffpcle(fits, 15, frow, 1, r, apbuf, &status);				\
+  ffpcnd(fits, 16, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);	\
+  ffpcne(fits, 17, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);	\
+  ffpcne(fits, 18, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status); \
+  ffpcnd(fits, 19, frow, 1, r * mefinfo->nf, xlcbuf, -999.0, &status);	\
+  ffpcnd(fits, 20, frow, 1, r * mefinfo->nf, ylcbuf, -999.0, &status);	\
+  ffpcne(fits, 21, frow, 1, r * mefinfo->nf, airbuf, -999.0, &status);	\
+  ffpcne(fits, 22, frow, 1, r * mefinfo->nf, habuf, -999.0, &status);	\
+  ffpcne(fits, 23, frow, 1, r * mefinfo->nf, wtbuf, -999.0, &status);	\
+  ffpcne(fits, 24, frow, 1, r * mefinfo->nf, locskybuf, -999.0, &status); \
+  ffpcne(fits, 25, frow, 1, r * mefinfo->nf, peakbuf, -999.0, &status);	\
+  ffpclb(fits, 26, frow, 1, r * mefinfo->nf, flagbuf, &status);		\
+  ffpcld(fits, 27, frow, 1, r, rabuf, &status);				\
+  ffpcld(fits, 28, frow, 1, r, decbuf, &status);			\
+  if(status) {								\
+    fitsio_err(errstr, status, "ffpcl");				\
+    goto error;								\
+  }									\
+									\
+  frow += r;								\
+  r = 0;								\
+}
+
   ap1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
   ap2 = (mefinfo->aperture ? mefinfo->aperture : NFLUX);
 
@@ -1206,79 +1244,13 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
     if(r >= rblksz) {
       /* Flush */
-      ffpcld(fits, 1, frow, 1, r, xbuf, &status);
-      ffpcld(fits, 2, frow, 1, r, ybuf, &status);
-      ffpcne(fits, 3, frow, 1, r, medbuf, -999.0, &status);
-      ffpcle(fits, 4, frow, 1, r, rmsbuf, &status);
-      ffpcle(fits, 5, frow, 1, r, chibuf, &status);
-      ffpclj(fits, 6, frow, 1, r, nchibuf, &status);
-      ffpcli(fits, 7, frow, 1, r, clsbuf, &status);
-      ffpcli(fits, 8, frow, 1, r, bfbuf, &status);
-      ffpclj(fits, 9, frow, 1, r, cfbuf, &status);
-      ffpclj(fits, 10, frow, 1, r, sfbuf, &status);
-      ffpclj(fits, 11, frow, 1, r, ptrbuf, &status);
-      ffpcne(fits, 12, frow, 1, r * NFLUX, apmedbuf, -999.0, &status);
-      ffpcne(fits, 13, frow, 1, r * NFLUX, aprmsbuf, -999.0, &status);
-      ffpcne(fits, 14, frow, 1, mefinfo->nseg * r * NFLUX, apoffbuf, -999.0, &status);
-      ffpcle(fits, 15, frow, 1, r, apbuf, &status);
-      ffpcnd(fits, 16, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
-      ffpcne(fits, 17, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
-      ffpcne(fits, 18, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
-      ffpcnd(fits, 19, frow, 1, r * mefinfo->nf, xlcbuf, -999.0, &status);
-      ffpcnd(fits, 20, frow, 1, r * mefinfo->nf, ylcbuf, -999.0, &status);
-      ffpcne(fits, 21, frow, 1, r * mefinfo->nf, airbuf, -999.0, &status);
-      ffpcne(fits, 22, frow, 1, r * mefinfo->nf, habuf, -999.0, &status);
-      ffpcne(fits, 23, frow, 1, r * mefinfo->nf, wtbuf, -999.0, &status);
-      ffpcne(fits, 24, frow, 1, r * mefinfo->nf, locskybuf, -999.0, &status);
-      ffpcne(fits, 25, frow, 1, r * mefinfo->nf, peakbuf, -999.0, &status);
-      ffpclb(fits, 26, frow, 1, r * mefinfo->nf, flagbuf, &status);
-      ffpcld(fits, 27, frow, 1, r, rabuf, &status);
-      ffpcld(fits, 28, frow, 1, r, decbuf, &status);
-      if(status) {
-	fitsio_err(errstr, status, "ffpcl");
-	goto error;
-      }
-
-      frow += r;
-      r = 0;
+      TABLE_FLUSH();
     }
   }
 
   /* Flush out buffers */
   if(r > 0) {
-    /* Flush */
-    ffpcld(fits, 1, frow, 1, r, xbuf, &status);
-    ffpcld(fits, 2, frow, 1, r, ybuf, &status);
-    ffpcne(fits, 3, frow, 1, r, medbuf, -999.0, &status);
-    ffpcle(fits, 4, frow, 1, r, rmsbuf, &status);
-    ffpcle(fits, 5, frow, 1, r, chibuf, &status);
-    ffpclj(fits, 6, frow, 1, r, nchibuf, &status);
-    ffpcli(fits, 7, frow, 1, r, clsbuf, &status);
-    ffpcli(fits, 8, frow, 1, r, bfbuf, &status);
-    ffpclj(fits, 9, frow, 1, r, cfbuf, &status);
-    ffpclj(fits, 10, frow, 1, r, sfbuf, &status);
-    ffpclj(fits, 11, frow, 1, r, ptrbuf, &status);
-    ffpcne(fits, 12, frow, 1, r * NFLUX, apmedbuf, -999.0, &status);
-    ffpcne(fits, 13, frow, 1, r * NFLUX, aprmsbuf, -999.0, &status);
-    ffpcne(fits, 14, frow, 1, mefinfo->nseg * r * NFLUX, apoffbuf, -999.0, &status);
-    ffpcle(fits, 15, frow, 1, r, apbuf, &status);
-    ffpcnd(fits, 16, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);
-    ffpcne(fits, 17, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);
-    ffpcne(fits, 18, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status);
-    ffpcnd(fits, 19, frow, 1, r * mefinfo->nf, xlcbuf, -999.0, &status);
-    ffpcnd(fits, 20, frow, 1, r * mefinfo->nf, ylcbuf, -999.0, &status);
-    ffpcne(fits, 21, frow, 1, r * mefinfo->nf, airbuf, -999.0, &status);
-    ffpcne(fits, 22, frow, 1, r * mefinfo->nf, habuf, -999.0, &status);
-    ffpcne(fits, 23, frow, 1, r * mefinfo->nf, wtbuf, -999.0, &status);
-    ffpcne(fits, 24, frow, 1, r * mefinfo->nf, locskybuf, -999.0, &status);
-    ffpcne(fits, 25, frow, 1, r * mefinfo->nf, peakbuf, -999.0, &status);
-    ffpclb(fits, 26, frow, 1, r * mefinfo->nf, flagbuf, &status);
-    ffpcld(fits, 27, frow, 1, r, rabuf, &status);
-    ffpcld(fits, 28, frow, 1, r, decbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpcl");
-      goto error;
-    }
+    TABLE_FLUSH();
   }    
 
   free((void *) lcbuf);
