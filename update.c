@@ -42,6 +42,7 @@ static void usage (char *av) {
 	  "Lightcurve processing:\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
 	  "         -s level  Override saturation level to 'level'.\n"
+	  "         -V file   Use 'instrument version' table from 'file' (MEarth only).\n"
 	  "Output:\n"
 	  "         -c cls    Write out only class==cls (e.g. to select just targets).\n"
 	  "         -o file   Writes updated lightcurves to 'file'.\n"
