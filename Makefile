@@ -20,12 +20,11 @@ SLA_LIB=/usr/local/lib
 #CC=gcc
 
 # Compiler flags
-CFLAGS=-g -O -Wall -I$(CFITSIO_INC) -I$(PGPLOT_INC) -I$(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DCSLALIB -DHAVE_MMAP
-#CFLAGS=-xO4 -g -I$(CFITSIO_INC) -I$(PGPLOT_INC) -I$(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DHAVE_MMAP -D__EXTENSIONS__ -D_LONGLONG_TYPE
+#CFLAGS=-g -Wall -I$(CFITSIO_INC) -I$(PGPLOT_INC) -I$(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DCSLALIB -DHAVE_MMAP # NO OPT FOR DEBUG
+CFLAGS=-O3 -ffast-math -Wall -I$(CFITSIO_INC) -I$(PGPLOT_INC) -I$(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DCSLALIB -DHAVE_MMAP
 
 # Linker flags
 LIBS=-L$(CFITSIO_LIB) -lcfitsio -L$(PGPLOT_LIB) -lcpgplot -lpgplot -L$(SLA_LIB) -lsla -lg2c -L$(X11_LIB) -lX11 -lm
-#LIBS=-L$(CFITSIO_LIB) -lcfitsio -L$(PGPLOT_LIB) -lcpgplot -lpgplot -L$(SLA_LIB) -lsla -L/usr/local/lib -lpng -lz -L$(X11_LIB) -lX11 -L/opt/SUNWspro/lib -R/opt/SUNWspro/lib -lF77 -lM77 -lsunmath -lm -lnsl -lsocket
 
 #### End constants section ####
 
@@ -49,7 +48,7 @@ TESTBUF_OBJS=${TESTBUF_SRCS:%.c=%.o}
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
 
-all: lightcurves update testbuf
+all: lightcurves update
 
 # Rules for lightcurves
 
