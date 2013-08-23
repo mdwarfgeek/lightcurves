@@ -553,36 +553,50 @@ int main (int argc, char *argv[]) {
 static int write_lc (fitsfile *reff, fitsfile *fits,
 		     struct buffer_info *buf, struct lc_mef *mefinfo,
 		     char *errstr) {
-  int status = 0, col, ncols;
+  int status = 0, col, icol, ocol, ntmpl, ncols;
 
-  char *ttype[] = { "x", "y", "medflux", "rms", "chisq", "nchisq",
-		    "class", "bflag", "cflag", "sflag", "pointer",
-		    "apflux", "aprms", "apoffsets", "apradius",
-		    "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
-		    "weight", "sky", "peak", "flags",
-		    "ra", "dec" };
-  char *tform[] = { "1D", "1D", "1E", "1E", "1E", "1J",
-		    "1I", "1I", "1J", "1J", "1J",
-		    "", "", "", "1E",
-		    "", "", "", "", "", "", "",
-		    "", "", "", "",
-		    "1D", "1D" };
-  char *tunit[] = { "pixels", "pixels", "mag", "mag", "", "",
-		    "", "", "", "", "",
-		    "mag", "mag", "mag", "pixels",
-		    "days", "mag", "mag", "pixels", "pixels", "", "radians",
-		    "", "counts", "counts", "",
-		    "radians", "radians" };
-  char *tdisp[] = { "F8.2", "F8.2", "F7.4", "F7.4", "F10.1", "I4",
-		    "I2", "I2", "I4", "I8", "I8",
-		    "F7.4", "F7.4", "F7.4", "F4.2",
-		    "F14.6", "F7.4", "F7.4", "F8.2", "F8.2", "F6.4", "F9.6",
-		    "F9.0", "F8.2", "F5.0", "I3",
-		    "F9.6", "F9.6" };
+  char tsbuf[FLEN_VALUE], tfbuf[FLEN_VALUE], tdbuf[FLEN_VALUE], tbbuf[FLEN_VALUE];
+
+  /* Column templates */
+  char *tmpl_ttype[] = { "x", "y", "medflux", "rms", "chisq", "nchisq",
+			 "class", "bflag", "cflag", "sflag", "pointer",
+			 "offsets", "apnum", "apradius",
+			 "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
+			 "weight", "sky", "peak", "flags",
+			 "ra", "dec" };
+  char *tmpl_tform[] = { "1D", "1D", "1E", "1E", "1E", "1J",
+			 "1I", "1I", "1J", "1J", "1J",
+			 tsbuf, "1I", "1E",
+			 tdbuf, tfbuf, tfbuf, tdbuf, tdbuf, tfbuf, tfbuf,
+			 tfbuf, tfbuf, tfbuf, tbbuf,
+			 "1D", "1D" };
+  char *tmpl_tunit[] = { "pixels", "pixels", "mag", "mag", "", "",
+			 "", "", "", "", "",
+			 "mag", "", "pixels",
+			 "days", "mag", "mag", "pixels", "pixels", "", "radians",
+			 "", "counts", "counts", "",
+			 "radians", "radians" };
+  char *tmpl_tdisp[] = { "F8.2", "F8.2", "F7.4", "F7.4", "F10.1", "I4",
+			 "I2", "I2", "I4", "I8", "I8",
+			 "F7.4", "", "F4.2",
+			 "F14.6", "F7.4", "F7.4", "F8.2", "F8.2", "F6.4", "F9.6",
+			 "F9.0", "F8.2", "F5.0", "I3",
+			 "F9.6", "F9.6" };
+
+  /* Repeat column for every aperture? */
+  unsigned char tpap[] = { 0, 0, 1, 1, 0, 0,
+			   0, 0, 0, 0, 0,
+			   1, 0, 0,
+			   0, 1, 1, 0, 0, 0, 0,
+			   1, 0, 0, 0,
+			   0, 0 };
+
+  /* Real arrays, we build these later */
+  char **ttype = (char **) NULL, **tform, **tunit, **tdisp;
+
   char kbuf[FLEN_KEYWORD];
+  char vbuf[FLEN_VALUE];
   char cbuf[FLEN_COMMENT];
-  char tabuf[FLEN_VALUE], tsbuf[FLEN_VALUE];
-  char tfbuf[FLEN_VALUE], tdbuf[FLEN_VALUE], tbbuf[FLEN_VALUE];
 
   long pt, star;
 
@@ -590,13 +604,14 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   double *epos = (double *) NULL;
 
-  float *medbuf = (float *) NULL, *rmsbuf, *chibuf, *apbuf;
   double *xbuf = (double *) NULL, *ybuf, *rabuf, *decbuf;
-  long *nchibuf = (long *) NULL, *ptrbuf, *cfbuf, *sfbuf;
-  short *clsbuf = (short *) NULL, *bfbuf;
-  float *apmedbuf = (float *) NULL, *aprmsbuf, *apoffbuf;
-  float *fluxbuf = (float *) NULL, *fluxerrbuf, *airbuf, *habuf, *wtbuf;
-  float *locskybuf, *peakbuf;
+  float *medbuf = (float *) NULL, *rmsbuf;
+  float *apbuf = (float *) NULL, *chibuf;
+  long *ptrbuf = (long *) NULL, *cfbuf, *sfbuf, *nchibuf;
+  short *clsbuf = (short *) NULL, *bfbuf, *apnumbuf;
+  float *offbuf = (float *) NULL;
+  float *fluxbuf = (float *) NULL, *fluxerrbuf, *wtbuf;
+  float *airbuf = (float *) NULL, *habuf, *locskybuf, *peakbuf;
   double *hjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
   unsigned char *flagbuf = (unsigned char *) NULL;
 
@@ -607,36 +622,87 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   long satflag;
   unsigned char flags;
 
-  int ap, ap1, ap2;
+  int ap, ap1, ap2, napcol;
   int allast;
 
   int iseg;
 
+  /* Figure out apertures */
+  ap1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
+  ap2 = (mefinfo->aperture ? mefinfo->aperture-1 : NFLUX);
+
+  napcol = ap2-ap1 + 1;
+
   /* Generate tform specifier for fluxes and errors */
-  snprintf(tabuf, sizeof(tabuf), "%dE", NFLUX);
-  snprintf(tsbuf, sizeof(tabuf), "%ldE", mefinfo->nseg*NFLUX);
+  snprintf(tsbuf, sizeof(tsbuf), "%ldE", mefinfo->nseg);
   snprintf(tdbuf, sizeof(tdbuf), "%ldD", mefinfo->nf);
   snprintf(tfbuf, sizeof(tfbuf), "%ldE", mefinfo->nf);
   snprintf(tbbuf, sizeof(tbbuf), "%ldB", mefinfo->nf);
 
-  tform[11] = tabuf;
-  tform[12] = tabuf;
-  tform[13] = tsbuf;
-  tform[15] = tdbuf;
-  tform[16] = tfbuf;
-  tform[17] = tfbuf;
-  tform[18] = tdbuf;
-  tform[19] = tdbuf;
-  tform[20] = tfbuf;
-  tform[21] = tfbuf;
-  tform[22] = tfbuf;
-  tform[23] = tfbuf;
-  tform[24] = tfbuf;
-  tform[25] = tbbuf;
+  /* Figure out real number of columns */
+  ntmpl = sizeof(tmpl_ttype) / sizeof(tmpl_ttype[0]);
+
+  ncols = 0;
+  for(icol = 0; icol < ntmpl; icol++) {
+    ncols++;
+
+    if(tpap[icol])
+      ncols += ap2-ap1;
+  }
+   
+  /* Allocate workspace */
+  ttype = (char **) malloc(4 * ncols * sizeof(char *));
+  if(!ttype) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+
+  tform = ttype + ncols;
+  tunit = ttype + 2*ncols;
+  tdisp = ttype + 3*ncols;
+
+  /* Make sure populated with null pointers */
+  ocol = 0;
+
+  for(icol = 0; icol < ntmpl; icol++) {
+    ocol++;
+
+    if(tpap[icol])
+      for(ap = ap1; ap < ap2; ap++) {
+	ttype[ocol] = NULL;
+	ocol++;
+      }
+  }
+
+  /* Build real column descriptors */
+  ocol = 0;
+
+  for(icol = 0; icol < ntmpl; icol++) {
+    ttype[ocol] = tmpl_ttype[icol];
+    tform[ocol] = tmpl_tform[icol];
+    tunit[ocol] = tmpl_tunit[icol];
+    tdisp[ocol] = tmpl_tdisp[icol];
+    
+    ocol++;
+
+    if(tpap[icol])
+      for(ap = ap1; ap < ap2; ap++) {
+	snprintf(vbuf, sizeof(vbuf), "%s%d", tmpl_ttype[icol], ap+1);
+	ttype[ocol] = strdup(vbuf);
+	if(!ttype[ocol]) {
+	  report_syserr(errstr, "malloc");
+	  goto error;
+	}
+
+	tform[ocol] = tmpl_tform[icol];
+	tunit[ocol] = tmpl_tunit[icol];
+	tdisp[ocol] = tmpl_tdisp[icol];
+
+	ocol++;
+      }
+  }
 
   /* Create table */
-  ncols = sizeof(ttype) / sizeof(ttype[0]);
-
   ffcrtb(fits, BINARY_TBL, mefinfo->nstars, ncols, ttype, tform, tunit, "", &status);
   if(status) {
     for(col = 0; col < ncols; col++)
@@ -657,6 +723,22 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	goto error;
       }
     }
+
+  /* Dispense with workspace */
+  ocol = 0;
+
+  for(icol = 0; icol < ntmpl; icol++) {
+    ocol++;
+
+    if(tpap[icol])
+      for(ap = ap1; ap < ap2; ap++) {
+	free((void *) ttype[ocol]);
+	ocol++;
+      }
+  }
+
+  free((void *) ttype);
+  ttype = (char **) NULL;
 
   /* Allocate buffer for earth positions */
   epos = (double *) malloc(3 * mefinfo->nf * sizeof(double));
@@ -1061,42 +1143,42 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   }
 
   /* Allocate output buffers */
-  medbuf = (float *) malloc(4 * rblksz * sizeof(float));
   xbuf = (double *) malloc(4 * rblksz * sizeof(double));
-  nchibuf = (long *) malloc(4 * rblksz * sizeof(long));
-  clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
-  apmedbuf = (float *) malloc((2+mefinfo->nseg) * rblksz * NFLUX * sizeof(float));
-  fluxbuf = (float *) malloc(7 * rblksz * mefinfo->nf * sizeof(float));
+  medbuf = (float *) malloc(2 * rblksz * napcol * sizeof(float));
+  apbuf = (float *) malloc(2 * rblksz * sizeof(float));
+  ptrbuf = (long *) malloc(4 * rblksz * sizeof(long));
+  clsbuf = (short *) malloc(3 * rblksz * sizeof(short));
+  offbuf = (float *) malloc(mefinfo->nseg * napcol * rblksz * sizeof(float));
   hjdbuf = (double *) malloc(3 * rblksz * mefinfo->nf * sizeof(double));
+  fluxbuf = (float *) malloc(3 * rblksz * mefinfo->nf * napcol * sizeof(float));
+  airbuf = (float *) malloc(4 * rblksz * mefinfo->nf * sizeof(float));
   flagbuf = (unsigned char *) malloc(rblksz * mefinfo->nf * sizeof(unsigned char));
-  if(!medbuf || !xbuf || !nchibuf || !clsbuf || !apmedbuf || !fluxbuf || !hjdbuf || !flagbuf) {
+  if(!xbuf || !medbuf || !apbuf || !ptrbuf || !clsbuf || !offbuf || !hjdbuf || !fluxbuf || !airbuf || !flagbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
 
-  rmsbuf = medbuf + rblksz;
-  chibuf = medbuf + 2 * rblksz;
-  apbuf = medbuf + 3 * rblksz;
+  rmsbuf = medbuf + napcol * rblksz;
+
+  chibuf = apbuf + rblksz;
 
   ybuf = xbuf + rblksz;
   rabuf = xbuf + 2 * rblksz;
   decbuf = xbuf + 3 * rblksz;
 
   bfbuf = clsbuf + rblksz;
+  apnumbuf = clsbuf + 2*rblksz;
 
-  ptrbuf = nchibuf + rblksz;
-  cfbuf = nchibuf + 2 * rblksz;
-  sfbuf = nchibuf + 3 * rblksz;
+  cfbuf = ptrbuf + rblksz;
+  sfbuf = ptrbuf + 2 * rblksz;
+  nchibuf = ptrbuf + 3 * rblksz;
 
-  aprmsbuf = apmedbuf + rblksz * NFLUX;
-  apoffbuf = apmedbuf + 2 * rblksz * NFLUX;
+  fluxerrbuf = fluxbuf + napcol * rblksz * mefinfo->nf;
+  wtbuf = fluxbuf + 2 * napcol * rblksz * mefinfo->nf;  
 
-  fluxerrbuf = fluxbuf + rblksz * mefinfo->nf;
-  airbuf = fluxbuf + 2 * rblksz * mefinfo->nf;
-  habuf = fluxbuf + 3 * rblksz * mefinfo->nf;
-  wtbuf = fluxbuf + 4 * rblksz * mefinfo->nf;
-  locskybuf = fluxbuf + 5 * rblksz * mefinfo->nf;
-  peakbuf = fluxbuf + 6 * rblksz * mefinfo->nf;
+  habuf = airbuf + rblksz * mefinfo->nf;
+  locskybuf = airbuf + 2 * rblksz * mefinfo->nf;
+  peakbuf = airbuf + 3 * rblksz * mefinfo->nf;
 
   xlcbuf = hjdbuf + rblksz * mefinfo->nf;
   ylcbuf = hjdbuf + 2 * rblksz * mefinfo->nf;
@@ -1104,38 +1186,44 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   /* Loop through all stars - read in the lightcurve points one
    * at a time and write out blocks of 'rblksz' objects.
    */
-  r = 0;
+  r = 0;  /* number of rows buffered */
   frow = 1;
 
+#define FORAP for(ap = 0; ap < napcol; ap++)
+#define WRITE_COL(func, buf, len)			\
+  func(fits, ++ocol, frow, 1, r*(len), buf, &status)
+#define WRITE_COL_NULL(func, buf, len, nullval)		\
+  func(fits, ++ocol, frow, 1, r*(len), buf, nullval, &status)
+
 #define TABLE_FLUSH() {							\
-  ffpcld(fits, 1, frow, 1, r, xbuf, &status);				\
-  ffpcld(fits, 2, frow, 1, r, ybuf, &status);				\
-  ffpcne(fits, 3, frow, 1, r, medbuf, -999.0, &status);			\
-  ffpcle(fits, 4, frow, 1, r, rmsbuf, &status);				\
-  ffpcle(fits, 5, frow, 1, r, chibuf, &status);				\
-  ffpclj(fits, 6, frow, 1, r, nchibuf, &status);			\
-  ffpcli(fits, 7, frow, 1, r, clsbuf, &status);				\
-  ffpcli(fits, 8, frow, 1, r, bfbuf, &status);				\
-  ffpclj(fits, 9, frow, 1, r, cfbuf, &status);				\
-  ffpclj(fits, 10, frow, 1, r, sfbuf, &status);				\
-  ffpclj(fits, 11, frow, 1, r, ptrbuf, &status);			\
-  ffpcne(fits, 12, frow, 1, r * NFLUX, apmedbuf, -999.0, &status);	\
-  ffpcne(fits, 13, frow, 1, r * NFLUX, aprmsbuf, -999.0, &status);	\
-  ffpcne(fits, 14, frow, 1, mefinfo->nseg * r * NFLUX, apoffbuf, -999.0, &status); \
-  ffpcle(fits, 15, frow, 1, r, apbuf, &status);				\
-  ffpcnd(fits, 16, frow, 1, r * mefinfo->nf, hjdbuf, -999.0, &status);	\
-  ffpcne(fits, 17, frow, 1, r * mefinfo->nf, fluxbuf, -999.0, &status);	\
-  ffpcne(fits, 18, frow, 1, r * mefinfo->nf, fluxerrbuf, -999.0, &status); \
-  ffpcnd(fits, 19, frow, 1, r * mefinfo->nf, xlcbuf, -999.0, &status);	\
-  ffpcnd(fits, 20, frow, 1, r * mefinfo->nf, ylcbuf, -999.0, &status);	\
-  ffpcne(fits, 21, frow, 1, r * mefinfo->nf, airbuf, -999.0, &status);	\
-  ffpcne(fits, 22, frow, 1, r * mefinfo->nf, habuf, -999.0, &status);	\
-  ffpcne(fits, 23, frow, 1, r * mefinfo->nf, wtbuf, -999.0, &status);	\
-  ffpcne(fits, 24, frow, 1, r * mefinfo->nf, locskybuf, -999.0, &status); \
-  ffpcne(fits, 25, frow, 1, r * mefinfo->nf, peakbuf, -999.0, &status);	\
-  ffpclb(fits, 26, frow, 1, r * mefinfo->nf, flagbuf, &status);		\
-  ffpcld(fits, 27, frow, 1, r, rabuf, &status);				\
-  ffpcld(fits, 28, frow, 1, r, decbuf, &status);			\
+  ocol = 0;								\
+  WRITE_COL(ffpcld, xbuf, 1);						\
+  WRITE_COL(ffpcld, ybuf, 1);						\
+  FORAP WRITE_COL_NULL(ffpcne, medbuf+ap*rblksz, 1, -999.0);		\
+  FORAP WRITE_COL_NULL(ffpcne, rmsbuf+ap*rblksz, 1, -999.0);		\
+  WRITE_COL(ffpcle, chibuf, 1);						\
+  WRITE_COL(ffpclj, nchibuf, 1);					\
+  WRITE_COL(ffpcli, clsbuf, 1);						\
+  WRITE_COL(ffpcli, bfbuf, 1);						\
+  WRITE_COL(ffpclj, cfbuf, 1);						\
+  WRITE_COL(ffpclj, sfbuf, 1);						\
+  WRITE_COL(ffpclj, ptrbuf, 1);						\
+  FORAP WRITE_COL_NULL(ffpcne, offbuf+ap*rblksz*mefinfo->nseg, mefinfo->nseg, -999.0);	\
+  WRITE_COL(ffpcli, apnumbuf, 1);					\
+  WRITE_COL(ffpcle, apbuf, 1);						\
+  WRITE_COL_NULL(ffpcnd, hjdbuf, mefinfo->nf, -999.0);			\
+  FORAP WRITE_COL_NULL(ffpcne, fluxbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
+  FORAP WRITE_COL_NULL(ffpcne, fluxerrbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
+  WRITE_COL_NULL(ffpcnd, xlcbuf, mefinfo->nf, -999.0);			\
+  WRITE_COL_NULL(ffpcnd, ylcbuf, mefinfo->nf, -999.0);			\
+  WRITE_COL_NULL(ffpcne, airbuf, mefinfo->nf, -999.0);			\
+  WRITE_COL_NULL(ffpcne, habuf, mefinfo->nf, -999.0);			\
+  FORAP WRITE_COL_NULL(ffpcne, wtbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
+  WRITE_COL_NULL(ffpcne, locskybuf, mefinfo->nf, -999.0);		\
+  WRITE_COL_NULL(ffpcne, peakbuf, mefinfo->nf, -999.0);			\
+  WRITE_COL(ffpclb, flagbuf, mefinfo->nf);				\
+  WRITE_COL(ffpcld, rabuf, 1);						\
+  WRITE_COL(ffpcld, decbuf, 1);						\
   if(status) {								\
     fitsio_err(errstr, status, "ffpcl");				\
     goto error;								\
@@ -1145,9 +1233,6 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   r = 0;								\
 }
 
-  ap1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
-  ap2 = (mefinfo->aperture ? mefinfo->aperture : NFLUX);
-
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Fill in buffers */
     xbuf[r] = mefinfo->stars[star].x;
@@ -1155,36 +1240,38 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     medbuf[r] = (mefinfo->stars[star].med > 0.0 ?
 		 mefinfo->zp - mefinfo->stars[star].med : -999.0);
     rmsbuf[r] = mefinfo->stars[star].rms;
+
+    for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+      offbuf[r*mefinfo->nseg + iseg]
+	= mefinfo->stars[star].segs[iseg].corr[mefinfo->stars[star].iap];
+    
+
+    for(ap = ap1; ap < ap2; ap++) {
+      medbuf[(ap-ap1+1)*rblksz+r] = (mefinfo->stars[star].medflux[ap] > 0.0 ?
+				     mefinfo->zp - mefinfo->stars[star].medflux[ap] :
+				     -999.0);
+      rmsbuf[(ap-ap1+1)*rblksz+r] = mefinfo->stars[star].sigflux[ap];
+
+      for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+	offbuf[((ap-ap1+1)*rblksz + r) * mefinfo->nseg + iseg]
+	  = mefinfo->stars[star].segs[iseg].corr[ap];
+    }
+
     chibuf[r] = mefinfo->stars[star].chisq;
     nchibuf[r] = mefinfo->stars[star].nchisq;
+
     clsbuf[r] = mefinfo->stars[star].cls;
     bfbuf[r] = mefinfo->stars[star].bflag;
     cfbuf[r] = mefinfo->stars[star].cflag;
     ptrbuf[r] = mefinfo->stars[star].ptr;
 
-    for(ap = 0; ap < NFLUX; ap++) {
-      apmedbuf[r*NFLUX+ap] = -999.0;
-      aprmsbuf[r*NFLUX+ap] = -999.0;
-
-      for(iseg = 0; iseg < mefinfo->nseg; iseg++)
-	apoffbuf[(r*NFLUX+ap)*mefinfo->nseg+iseg] = -999.0;
-    }
-
-    for(ap = ap1; ap < ap2; ap++) {
-      apmedbuf[r*NFLUX+ap] = (mefinfo->stars[star].medflux[ap] > 0.0 ?
-			      mefinfo->zp - mefinfo->stars[star].medflux[ap] : -999.0);
-      aprmsbuf[r*NFLUX+ap] = mefinfo->stars[star].sigflux[ap];
-
-      for(iseg = 0; iseg < mefinfo->nseg; iseg++)
-	apoffbuf[(r*NFLUX+ap)*mefinfo->nseg+iseg] = mefinfo->stars[star].segs[iseg].corr[ap];
-    }
-
+    apnumbuf[r] = mefinfo->stars[star].iap+1;
     apbuf[r] = mefinfo->stars[star].apradius;
     rabuf[r] = mefinfo->stars[star].ra;
     decbuf[r] = mefinfo->stars[star].dec;
 
     /* Get lightcurve */
-    if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, 0, errstr))
+    if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, mefinfo->stars[star].iap, errstr))
       goto error;
 
     /* Fill in buffer */
@@ -1240,6 +1327,28 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
     sfbuf[r] = satflag;
 
+    /* Do other apertures */
+    for(ap = ap1; ap < ap2; ap++) {
+      soff = ((ap-ap1+1)*rblksz + r) * mefinfo->nf;
+      
+      /* Get lightcurve */
+      if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, ap, errstr))
+	goto error;
+
+      /* Fill in buffer */
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+	if(lcbuf[pt].flux != 0.0) {
+	  fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].flux;
+	  if(lcbuf[pt].fluxerrcom > 0.0)
+	    fluxerrbuf[soff+pt] = lcbuf[pt].fluxerrcom;
+	  else
+	    fluxerrbuf[soff+pt] = -999.0;
+	}
+
+	wtbuf[soff+pt] = lcbuf[pt].wt;
+      }
+    }
+
     r++;
 
     if(r >= rblksz) {
@@ -1259,16 +1368,20 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   epos = (double *) NULL;
   free((void *) medbuf);
   medbuf = (float *) NULL;
+  free((void *) apbuf);
+  apbuf = (float *) NULL;
   free((void *) xbuf);
   xbuf = (double *) NULL;
-  free((void *) nchibuf);
-  nchibuf = (long *) NULL;
+  free((void *) ptrbuf);
+  ptrbuf = (long *) NULL;
   free((void *) clsbuf);
   clsbuf = (short *) NULL;
-  free((void *) apmedbuf);
-  apmedbuf = (float *) NULL;
+  free((void *) offbuf);
+  offbuf = (float *) NULL;
   free((void *) fluxbuf);
   fluxbuf = (float *) NULL;
+  free((void *) airbuf);
+  airbuf = (float *) NULL;
   free((void *) hjdbuf);
   hjdbuf = (double *) NULL;
   free((void *) flagbuf);
@@ -1277,22 +1390,43 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   return(0);
 
  error:
+  if(ttype) {
+    ocol = 0;
+    
+    for(icol = 0; icol < ntmpl; icol++) {
+      ocol++;
+      
+      if(tpap[icol])
+	for(ap = ap1; ap < ap2; ap++) {
+	  if(ttype[ocol])
+	    free((void *) ttype[ocol]);
+
+	  ocol++;
+	}
+    }
+    
+    free((void *) ttype);
+  }
   if(lcbuf)
     free((void *) lcbuf);
   if(epos)
     free((void *) epos);
   if(medbuf)
     free((void *) medbuf);
+  if(apbuf)
+    free((void *) apbuf);
   if(xbuf)
     free((void *) xbuf);
-  if(nchibuf)
-    free((void *) nchibuf);
+  if(ptrbuf)
+    free((void *) ptrbuf);
   if(clsbuf)
     free((void *) clsbuf);
-  if(apmedbuf)
-    free((void *) apmedbuf);
+  if(offbuf)
+    free((void *) offbuf);
   if(fluxbuf)
     free((void *) fluxbuf);
+  if(airbuf)
+    free((void *) airbuf);
   if(hjdbuf)
     free((void *) hjdbuf);
   if(flagbuf)

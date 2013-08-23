@@ -6,6 +6,9 @@
 /* Number of flux measures */
 #define NFLUX  4
 
+/* Flux measure to use for normalization */
+#define REFAP  0
+
 /* Flags column in lightcurve file */
 #define FLAG_NODP  0x01  /* No data point (off chip) */
 #define FLAG_CONF  0x02  /* Aperture contains bad pixels */
@@ -64,7 +67,7 @@ struct lc_star {
   struct lc_point ref[NFLUX];
 
   /* Reference magnitude to which to tie the photometry */
-  float refmag;
+  float refmag;  /* in aperture REFAP */
 
   /* Information for each piece of the light curve */
   struct lc_star_segment *segs;
@@ -73,10 +76,11 @@ struct lc_star {
   float medflux[NFLUX];
   float sigflux[NFLUX];
 
-  /* Which aperture did we use? */
+  /* Which aperture did we choose? */
+  int iap;
   float apradius;
 
-  /* Median flux, RMS and chisq for chosen aperture */
+  /* Median flux, RMS and chisq for chosen aperture (iap) */
   float med;
   float rms;
   float chisq;

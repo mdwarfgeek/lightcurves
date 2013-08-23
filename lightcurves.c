@@ -282,26 +282,24 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       }
     }
 
-    if(mefinfo->aperture != 1 || !norenorm) {
-      /* Compute final per-object median flux */
-      for(star = 0; star < mefinfo->nstars; star++) {
-	/* Read in measurements for this star */
-	if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
-	  goto error;
+    /* Compute final per-object median flux */
+    for(star = 0; star < mefinfo->nstars; star++) {
+      /* Read in measurements for this star */
+      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
+	goto error;
 	
-	/* Calculate median flux */
-	opt1 = 0;
-	for(pt = 0; pt < mefinfo->nf; pt++) {
-	  if(ptbuf[pt].flux != 0.0) {
-	    medbuf1[opt1] = ptbuf[pt].flux;
-	    opt1++;
-	  }
+      /* Calculate median flux */
+      opt1 = 0;
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+	if(ptbuf[pt].flux != 0.0) {
+	  medbuf1[opt1] = ptbuf[pt].flux;
+	  opt1++;
 	}
-	
-	medsig(medbuf1, opt1, &medflux, &sigflux);
-	mefinfo->stars[star].medflux[meas] = medflux;
-	mefinfo->stars[star].sigflux[meas] = sigflux;
       }
+      
+      medsig(medbuf1, opt1, &medflux, &sigflux);
+      mefinfo->stars[star].medflux[meas] = medflux;
+      mefinfo->stars[star].sigflux[meas] = sigflux;
     }
 
     if(!norenorm) {
@@ -364,19 +362,17 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   if(verbose && isatty(1))
     printf("\n");
 
-  if(mefinfo->aperture != 1) {
-    /* Combine apertures */
-    if(chooseap(buf, mefinfo, ptbuf, medbuf1, errstr))
-      goto error;
-  }
+  /* Aperture correct and choose default aperture */
+  if(chooseap(buf, mefinfo, ptbuf, medbuf1, errstr))
+    goto error;
 
-  /* Recompute per-object median flux */
+  /* Compute median and chi squared in chosen aperture */
   if(verbose)
-    printf(" Computing median fluxes and chisq for combined apertures\n");
+    printf(" Computing median fluxes and chisq for chosen apertures\n");
 
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Read in measurements for this star */
-    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
+    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, mefinfo->stars[star].iap, errstr))
       goto error;
     
     /* Calculate median flux */
@@ -647,39 +643,22 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	report_err(errstr, "could not find an aperture for star %ld", star+1);
 	goto error;
       }
-      
-      /* Reshuffle */
-      if(useaper > 0) {
-	/* Read in measurements for this star in 'useaper' */
-	if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, useaper, errstr))
-	  goto error;
-	
-	/* Write out into aperture 0 */
-	if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
-	  goto error;
-      }
+
+      mefinfo->stars[star].iap = useaper;
     }
   }
-  else if(mefinfo->aperture > 1) {
-    /* Reshuffle */
-    for(star = 0; star < mefinfo->nstars; star++) {
-      /* Read in measurements for this star in chosen aperture */
-      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, mefinfo->aperture-1, errstr))
-	goto error;
-      
-      /* Write out into aperture 0 */
-      if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
-	goto error;
-    }
+  else {
+    for(star = 0; star < mefinfo->nstars; star++)
+      mefinfo->stars[star].iap = mefinfo->aperture-1;
   }
 
   /* Recompute per-object median flux (NEW POINTS ONLY) */
   if(verbose)
-    printf(" Computing median fluxes for combined apertures\n");
+    printf(" Computing median fluxes\n");
 
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Read in measurements for this star */
-    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
+    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, mefinfo->stars[star].iap, errstr))
       goto error;
     
     /* Calculate median flux */
@@ -711,7 +690,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Read in measurements for this star */
-    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
+    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, mefinfo->stars[star].iap, errstr))
       goto error;
 
     /* Calculate chi-squared */

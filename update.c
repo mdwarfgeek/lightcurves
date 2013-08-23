@@ -1149,7 +1149,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     }
 
     /* Get lightcurve */
-    if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, 0, errstr))
+    if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, mefinfo->stars[star].iap, errstr))
       goto error;
 
     /* Fill in buffer */

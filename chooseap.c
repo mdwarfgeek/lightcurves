@@ -40,11 +40,14 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
     /* Compute empirical aperture corrections */
     for(pt = 0; pt < mefinfo->nf; pt++) {
       /* Read in reference aperture */
-      if(buffer_fetch_frame(buf, refbuf, 0, mefinfo->nstars, pt, 0, errstr))
+      if(buffer_fetch_frame(buf, refbuf, 0, mefinfo->nstars, pt, REFAP, errstr))
 	goto error;
       
       /* Loop through comparison apertures */
-      for(aper = 1; aper < NFLUX; aper++) {
+      for(aper = 0; aper < NFLUX; aper++) {
+	if(aper == REFAP)
+	  continue;
+
 	if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, aper, errstr))
 	  goto error;
 	
@@ -80,15 +83,18 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
     corbuf = (float *) NULL;
     
     /* Compute mean aperture corrections */
-    for(aper = 1; aper < NFLUX; aper++) {
+    for(aper = 0; aper < NFLUX; aper++) {
+      if(aper == REFAP)
+	continue;
+
       if(nav[aper] >= 1)
 	avapcor[aper] /= nav[aper];
       else
 	avapcor[aper] = 0.0;
       
       if(verbose)
-	printf("  Aperture correction %d->1 = %.4f using %ld frames\n",
-	       aper+1, avapcor[aper], nav[aper]);
+	printf("  Aperture correction %d->%d = %.4f using %ld frames\n",
+	       aper+1, REFAP+1, avapcor[aper], nav[aper]);
     }
   }    
 
@@ -116,31 +122,30 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
     else
       useaper = mefinfo->aperture-1;
 
-    /* Reshuffle */
-    if(useaper > 0) {
-      /* Read in measurements for this star in 'useaper' */
-      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, useaper, errstr))
+    mefinfo->stars[star].iap = useaper;
+    mefinfo->stars[star].apradius *= flux_apers[useaper];
+
+    /* Apply aperture corrections */
+    for(aper = 0; aper < NFLUX; aper++) {
+      if(aper == REFAP)
+	continue;
+
+      /* Read in measurements for this star in 'aper' */
+      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, aper, errstr))
 	goto error;
 
       /* Apply aperture correction */
       for(pt = 0; pt < mefinfo->nf; pt++)
 	if(ptbuf[pt].flux > 0.0 && ptbuf[pt].fluxerrcom > 0.0)
-	  ptbuf[pt].flux -= avapcor[useaper];
+	  ptbuf[pt].flux -= avapcor[aper];
 
-      /* Update aperture size */
-      mefinfo->stars[star].apradius *= flux_apers[useaper];
-
-      /* Write out into aperture 0 */
-      if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, 0, errstr))
+      /* Write out */
+      if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, aper, errstr))
 	goto error;
-    }
-  }
 
-  /* Also apply aperture corrections to median fluxes */
-  for(star = 0; star < mefinfo->nstars; star++) {
-    for(aper = 1; aper < NFLUX; aper++)
-      if(mefinfo->stars[star].medflux[aper] != 0.0)
-	mefinfo->stars[star].medflux[aper] -= avapcor[aper];
+      /* Correct median flux */
+      mefinfo->stars[star].medflux[aper] -= avapcor[aper];
+    }
   }
 
   return(0);

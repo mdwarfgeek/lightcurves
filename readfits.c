@@ -1224,7 +1224,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	/* sky contribution ? only affects normalisation I think but not sure */
 
 	/* Store reference magnitude for this star */
-	if(col == 0)
+	if(col == REFAP)
 	  stars[rout].refmag = 2.5 * log10f(MAX(1.0, stars[rout].ref[col].flux));
 
 	stars[rout].ref[col].sky = locskybuf[r]-pedestal;
