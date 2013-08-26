@@ -20,6 +20,7 @@
 
 static int write_lc (fitsfile *reff, fitsfile *fits,
 		     struct buffer_info *buf, struct lc_mef *mefinfo,
+		     int outcls, int wantoutcls,
 		     char *errstr);
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 			   char **fnlist, char *errstr);
@@ -43,9 +44,10 @@ static void usage (char *av) {
 	  "         -mm       Same, only also removes it.\n"
 	  "         -n        Do not renormalise median to reference magnitude.\n"
 	  "         -s level  Override saturation level to 'level'.\n"
-	  "         -u mag    Set upper(,lower) mag limit for systematics correction.\n\n"
-	  "         -V file   Use 'instrument version' table from 'file' (MEarth only).\n"
+	  "         -u mag    Set upper(,lower) mag limit for systematics correction.\n"
+	  "         -V file   Use 'instrument version' table from 'file' (MEarth only).\n\n"
 	  "Output:\n"
+	  "         -c cls    Write out only comparison stars and class==cls.\n"
 	  "         -g file   Writes good frames list to 'file'.\n"
 	  "         -o file   Writes lightcurves to 'file'.\n"
 	  "         -p        Disables plots.\n"
@@ -89,6 +91,9 @@ int main (int argc, char *argv[]) {
   int norenorm = 0;
   int polydeg = -1;
 
+  int outcls = 0;
+  int wantoutcls = 0;
+
   int len, maxflen, fspc;
   float *medbuf1 = (float *) NULL, *medbuf2, medsat, medlim;
   long nmedsat, nmedlim, nstartot;
@@ -114,12 +119,18 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "a:df:g:i:mno:pqs:u:vV:")) != -1)
+  while((c = getopt(argc, argv, "a:c:df:g:i:mno:pqs:u:vV:")) != -1)
     switch(c) {
     case 'a':
       aperture = (int) strtol(optarg, &ep, 0);
       if(*ep != '\0' || aperture < 0)
 	fatal(1, "invalid aperture: %s", optarg);
+      break;
+    case 'c':
+      outcls = (int) strtol(optarg, &ep, 0);
+      if(*ep != '\0')
+	fatal(1, "invalid class flag: %s", optarg);
+      wantoutcls = 1;
       break;
     case 'd':
       diffmode++;
@@ -464,7 +475,7 @@ int main (int argc, char *argv[]) {
       if(verbose)
 	printf(" Writing %s\n", outfile);
 
-      if(write_lc(inf, outf, &buf, &(meflist[mef]), errstr))
+      if(write_lc(inf, outf, &buf, &(meflist[mef]), outcls, wantoutcls, errstr))
 	fatal(1, "write_lc: %s", errstr);
     }
 
@@ -552,6 +563,7 @@ int main (int argc, char *argv[]) {
 
 static int write_lc (fitsfile *reff, fitsfile *fits,
 		     struct buffer_info *buf, struct lc_mef *mefinfo,
+		     int outcls, int wantoutcls,
 		     char *errstr) {
   int status = 0, col, icol, ocol, ntmpl, ncols;
 
@@ -598,7 +610,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   char vbuf[FLEN_VALUE];
   char cbuf[FLEN_COMMENT];
 
-  long pt, star;
+  long pt, star, nstarout;
 
   struct lc_point *lcbuf = (struct lc_point *) NULL;
 
@@ -702,8 +714,20 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       }
   }
 
+  /* Figure out how large the table is */
+  if(wantoutcls) {
+    nstarout = 0;
+    for(star = 0; star < mefinfo->nstars; star++) {
+      if(mefinfo->stars[star].used ||
+	 mefinfo->stars[star].cls == outcls)
+	nstarout++;
+    }
+  }
+  else
+    nstarout = mefinfo->nstars;
+
   /* Create table */
-  ffcrtb(fits, BINARY_TBL, mefinfo->nstars, ncols, ttype, tform, tunit, "", &status);
+  ffcrtb(fits, BINARY_TBL, nstarout, ncols, ttype, tform, tunit, "", &status);
   if(status) {
     for(col = 0; col < ncols; col++)
       fprintf(stderr, "%d %s %s %s\n", col+1, ttype[col], tform[col], tunit[col]);
@@ -1234,6 +1258,11 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 }
 
   for(star = 0; star < mefinfo->nstars; star++) {
+    if(wantoutcls &&
+       !mefinfo->stars[star].used &&
+       mefinfo->stars[star].cls != outcls)
+      continue;  /* skip star */
+
     /* Fill in buffers */
     xbuf[r] = mefinfo->stars[star].x;
     ybuf[r] = mefinfo->stars[star].y;

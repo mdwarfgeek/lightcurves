@@ -76,6 +76,9 @@ struct lc_star {
   float medflux[NFLUX];
   float sigflux[NFLUX];
 
+  /* Used as comparison star in how many apertures? */
+  int used;
+
   /* Which aperture did we choose? */
   int iap;
   float apradius;

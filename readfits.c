@@ -1255,6 +1255,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       stars[rout].bflag = (a7buf[r] < 0.0 ? 1 : 0);
       stars[rout].cflag = 0;
 
+      stars[rout].used = 0;
+
       stars[rout].apradius = 1.0;  /* default = rcore */
 
       if(pkhtbuf[r]+locskybuf[r]-pedestal > 0.95*satlev) {

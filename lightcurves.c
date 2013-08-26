@@ -26,6 +26,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   struct systematic_fit *sysbuf = (struct systematic_fit *) NULL;
 
   long star, meas, meas1, meas2, pt, opt1, opt2;
+  int used;
 
   float medflux, sigflux, rmsflux;
   float tmp, chisq;
@@ -288,18 +289,22 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
 	goto error;
 	
-      /* Calculate median flux */
+      /* Calculate median flux and set "used" flag for comparison stars */
       opt1 = 0;
+      used = 0;
       for(pt = 0; pt < mefinfo->nf; pt++) {
 	if(ptbuf[pt].flux != 0.0) {
 	  medbuf1[opt1] = ptbuf[pt].flux;
 	  opt1++;
 	}
+	if(ptbuf[pt].wt > 0)
+	  used = 1;
       }
       
       medsig(medbuf1, opt1, &medflux, &sigflux);
       mefinfo->stars[star].medflux[meas] = medflux;
       mefinfo->stars[star].sigflux[meas] = sigflux;
+      mefinfo->stars[star].used += used;
     }
 
     if(!norenorm) {
