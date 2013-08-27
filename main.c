@@ -36,7 +36,7 @@ static void usage (char *av) {
   fprintf(stderr, "Usage:\t%s [options] reffile file [...]\n\n", av);
   fprintf(stderr,
 	  "Lightcurve processing:\n"
-	  "         -a        Disables aperture selection code.\n"
+	  "         -a aper   Specify aperture or 'sel' for only auto (default both).\n"
 	  "         -d        Enables difference imaging mode.\n"
 	  "         -f degree Apply polynomial of 'degree' for systematics removal.\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
@@ -87,6 +87,8 @@ int main (int argc, char *argv[]) {
   int ninstvers = 0;
 
   int aperture = 0;
+  int apselmode = APSEL_SEL | APSEL_ALL;
+
   int domerid = 0;
   int norenorm = 0;
   int polydeg = -1;
@@ -122,9 +124,14 @@ int main (int argc, char *argv[]) {
   while((c = getopt(argc, argv, "a:c:df:g:i:mno:pqs:u:vV:")) != -1)
     switch(c) {
     case 'a':
-      aperture = (int) strtol(optarg, &ep, 0);
-      if(*ep != '\0' || aperture < 0)
-	fatal(1, "invalid aperture: %s", optarg);
+      if(!strncasecmp(optarg, "sel", 3))
+	apselmode = APSEL_SEL;  /* just selected aperture */
+      else {
+	aperture = (int) strtol(optarg, &ep, 0);
+	if(*ep != '\0' || aperture < 0)
+	  fatal(1, "invalid aperture: %s", optarg);
+	apselmode = APSEL_SEL;
+      }
       break;
     case 'c':
       outcls = (int) strtol(optarg, &ep, 0);
@@ -328,6 +335,7 @@ int main (int argc, char *argv[]) {
 
     meflist[mef].degree = polydeg;
     meflist[mef].aperture = aperture;
+    meflist[mef].apselmode = apselmode;
     meflist[mef].domerid = domerid;
 
     meflist[mef].avsigma = 0.0;
@@ -368,7 +376,7 @@ int main (int argc, char *argv[]) {
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
 		  dointra, &(intralist[mef]),
 		  doinstvers, instverslist, ninstvers,
-		  diffmode, satlev, errstr))
+		  diffmode, satlev, 1, errstr))
 	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
     }
 
@@ -595,12 +603,12 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 			 "F9.0", "F8.2", "F5.0", "I3",
 			 "F9.6", "F9.6" };
 
-  /* Repeat column for every aperture? */
+  /* Repeat column for every aperture?  1 = always, 2 = only if writing all requested */
   unsigned char tpap[] = { 0, 0, 1, 1, 0, 0,
 			   0, 0, 0, 0, 0,
 			   1, 0, 0,
-			   0, 1, 1, 0, 0, 0, 0,
-			   1, 0, 0, 0,
+			   0, 2, 2, 0, 0, 0, 0,
+			   2, 0, 0, 0,
 			   0, 0 };
 
   /* Real arrays, we build these later */
@@ -634,16 +642,36 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   long satflag;
   unsigned char flags;
 
-  int ap, ap1, ap2, napcol;
+  int ap, ap1, ap2, lap1, lap2, napcol, nlapcol;
   int allast;
 
   int iseg;
 
   /* Figure out apertures */
-  ap1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
-  ap2 = (mefinfo->aperture ? mefinfo->aperture-1 : NFLUX);
+  if(mefinfo->aperture) {
+    ap1 = mefinfo->aperture-1;
+    ap2 = ap1;
+    napcol = 1;
+    lap1 = ap1;
+    lap2 = ap2;
+    nlapcol = 1;
+  }
+  else {
+    ap1 = 0;
+    ap2 = NFLUX;
+    napcol = ap2-ap1 + 1;
 
-  napcol = ap2-ap1 + 1;
+    if(mefinfo->apselmode & APSEL_ALL) {
+      lap1 = ap1;
+      lap2 = ap2;
+      nlapcol = napcol;
+    }
+    else {
+      lap1 = 0;
+      lap2 = 0;
+      nlapcol = 1;
+    }
+  }
 
   /* Generate tform specifier for fluxes and errors */
   snprintf(tsbuf, sizeof(tsbuf), "%ldE", mefinfo->nseg);
@@ -658,7 +686,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   for(icol = 0; icol < ntmpl; icol++) {
     ncols++;
 
-    if(tpap[icol])
+    if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
       ncols += ap2-ap1;
   }
    
@@ -679,7 +707,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   for(icol = 0; icol < ntmpl; icol++) {
     ocol++;
 
-    if(tpap[icol])
+    if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
       for(ap = ap1; ap < ap2; ap++) {
 	ttype[ocol] = NULL;
 	ocol++;
@@ -697,7 +725,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     
     ocol++;
 
-    if(tpap[icol])
+    if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
       for(ap = ap1; ap < ap2; ap++) {
 	snprintf(vbuf, sizeof(vbuf), "%s%d", tmpl_ttype[icol], ap+1);
 	ttype[ocol] = strdup(vbuf);
@@ -754,7 +782,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   for(icol = 0; icol < ntmpl; icol++) {
     ocol++;
 
-    if(tpap[icol])
+    if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
       for(ap = ap1; ap < ap2; ap++) {
 	free((void *) ttype[ocol]);
 	ocol++;
@@ -790,6 +818,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	 "Polynomial degree in fit", &status);
   ffpkyj(fits, "APSEL", mefinfo->aperture,
 	 "Aperture used (0 = automatic)", &status);
+  ffpkyj(fits, "APMODE", mefinfo->apselmode,
+	 "Aperture output mode", &status);
   ffpkyj(fits, "DOMERID", mefinfo->domerid,
 	 "Meridian flip removal?", &status);
   ffpkyf(fits, "REFFANG", mefinfo->reffang, 6,
@@ -1174,7 +1204,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   clsbuf = (short *) malloc(3 * rblksz * sizeof(short));
   offbuf = (float *) malloc(mefinfo->nseg * napcol * rblksz * sizeof(float));
   hjdbuf = (double *) malloc(3 * rblksz * mefinfo->nf * sizeof(double));
-  fluxbuf = (float *) malloc(3 * rblksz * mefinfo->nf * napcol * sizeof(float));
+  fluxbuf = (float *) malloc(3 * rblksz * mefinfo->nf * nlapcol * sizeof(float));
   airbuf = (float *) malloc(4 * rblksz * mefinfo->nf * sizeof(float));
   flagbuf = (unsigned char *) malloc(rblksz * mefinfo->nf * sizeof(unsigned char));
   if(!xbuf || !medbuf || !apbuf || !ptrbuf || !clsbuf || !offbuf || !hjdbuf || !fluxbuf || !airbuf || !flagbuf) {
@@ -1197,8 +1227,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   sfbuf = ptrbuf + 2 * rblksz;
   nchibuf = ptrbuf + 3 * rblksz;
 
-  fluxerrbuf = fluxbuf + napcol * rblksz * mefinfo->nf;
-  wtbuf = fluxbuf + 2 * napcol * rblksz * mefinfo->nf;  
+  fluxerrbuf = fluxbuf + nlapcol * rblksz * mefinfo->nf;
+  wtbuf = fluxbuf + 2 * nlapcol * rblksz * mefinfo->nf;  
 
   habuf = airbuf + rblksz * mefinfo->nf;
   locskybuf = airbuf + 2 * rblksz * mefinfo->nf;
@@ -1214,6 +1244,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   frow = 1;
 
 #define FORAP for(ap = 0; ap < napcol; ap++)
+#define FORLAP for(ap = 0; ap < nlapcol; ap++)
 #define WRITE_COL(func, buf, len)			\
   func(fits, ++ocol, frow, 1, r*(len), buf, &status)
 #define WRITE_COL_NULL(func, buf, len, nullval)		\
@@ -1236,13 +1267,13 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   WRITE_COL(ffpcli, apnumbuf, 1);					\
   WRITE_COL(ffpcle, apbuf, 1);						\
   WRITE_COL_NULL(ffpcnd, hjdbuf, mefinfo->nf, -999.0);			\
-  FORAP WRITE_COL_NULL(ffpcne, fluxbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
-  FORAP WRITE_COL_NULL(ffpcne, fluxerrbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
+  FORLAP WRITE_COL_NULL(ffpcne, fluxbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
+  FORLAP WRITE_COL_NULL(ffpcne, fluxerrbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
   WRITE_COL_NULL(ffpcnd, xlcbuf, mefinfo->nf, -999.0);			\
   WRITE_COL_NULL(ffpcnd, ylcbuf, mefinfo->nf, -999.0);			\
   WRITE_COL_NULL(ffpcne, airbuf, mefinfo->nf, -999.0);			\
   WRITE_COL_NULL(ffpcne, habuf, mefinfo->nf, -999.0);			\
-  FORAP WRITE_COL_NULL(ffpcne, wtbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
+  FORLAP WRITE_COL_NULL(ffpcne, wtbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
   WRITE_COL_NULL(ffpcne, locskybuf, mefinfo->nf, -999.0);		\
   WRITE_COL_NULL(ffpcne, peakbuf, mefinfo->nf, -999.0);			\
   WRITE_COL(ffpclb, flagbuf, mefinfo->nf);				\
@@ -1357,8 +1388,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     sfbuf[r] = satflag;
 
     /* Do other apertures */
-    for(ap = ap1; ap < ap2; ap++) {
-      soff = ((ap-ap1+1)*rblksz + r) * mefinfo->nf;
+    for(ap = lap1; ap < lap2; ap++) {
+      soff = ((ap-lap1+1)*rblksz + r) * mefinfo->nf;
       
       /* Get lightcurve */
       if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, ap, errstr))
@@ -1425,7 +1456,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     for(icol = 0; icol < ntmpl; icol++) {
       ocol++;
       
-      if(tpap[icol])
+      if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
 	for(ap = ap1; ap < ap2; ap++) {
 	  if(ttype[ocol])
 	    free((void *) ttype[ocol]);

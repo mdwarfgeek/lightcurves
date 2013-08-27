@@ -227,6 +227,11 @@ struct lc_mef {
   /* Use this aperture in output (0 to select automatically) */
   long aperture;
 
+  /* Aperture selection output modes */
+  long apselmode;
+#define APSEL_SEL 0x01
+#define APSEL_ALL 0x02  /* not supported on own yet, todo */
+
   /* Account for meridian offsets? */
   long domerid;
 
@@ -338,7 +343,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
 	      int doinstvers, struct instvers *instverslist, int ninstvers,
-	      int diffmode, float satlev,
+	      int diffmode, float satlev, int checkrows,
 	      char *errstr);
 
 /* Utility functions: dsolve.c, dmatinv.c, linear.c, medsig.c, sortfloat.c */

@@ -148,11 +148,19 @@ static struct {
 int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 	     char *errstr) {
   int status = 0, anynull;
-  int ncoluse, col;
 
-  char *colnames[12] = { "x", "y", "class", "pointer", "bflag", "cflag",
-			 "apflux", "aprms", "apoffsets", "apradius", "ra", "dec" };
-  int gcols[12];
+  char *colnames[] = { "x", "y", "class", "pointer", "bflag", "cflag",
+		       "medflux", "rms", "offsets", "apnum", "apradius",
+		       "ra", "dec" };
+  unsigned char tpap[] = { 0, 0, 0, 0, 0, 0,
+			   1, 1, 1, 0, 0,
+			   0, 0 };
+
+  char cn[FLEN_VALUE+1];
+  int *gcols = (int *) NULL;
+  int tcol, icol, ntmpl, ncols;
+
+  int ap, ap1, ap2, napcol;
 
   int cats_are_80 = 0;
 
@@ -166,7 +174,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   float *apbuf = (float *) NULL;
   double *xbuf = (double *) NULL, *ybuf, *rabuf, *decbuf;
-  short *clsbuf = (short *) NULL, *bfbuf;
+  short *clsbuf = (short *) NULL, *bfbuf, *apnumbuf;
   long *ptrbuf = (long *) NULL, *cfbuf;
   float *apmedbuf = (float *) NULL, *aprmsbuf, *apoffbuf;
 
@@ -177,7 +185,6 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   long degree;
 
   long nrows, r, rr, roff, remain, rread, rblksz;
-  int ap;
 
   int iseg;
   long iver, jtmp;
@@ -192,6 +199,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   ffgkye(fits, "UMLIM", &umlim, (char *) NULL, &status);
   ffgkyj(fits, "POLYDEG", &degree, (char *) NULL, &status);
   ffgkyj(fits, "APSEL", &(mefinfo->aperture), (char *) NULL, &status);
+  ffgkyj(fits, "APMODE", &(mefinfo->apselmode), (char *) NULL, &status);
   ffgkyj(fits, "DOMERID", &(mefinfo->domerid), (char *) NULL, &status);
   ffgkyj(fits, "NSEGME", &(mefinfo->nseg), (char *) NULL, &status);
   if(status) {
@@ -387,20 +395,20 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     goto error;
   }
 
-  for(col = 0; col < NFLUX; col++) {
-    ffgkye(fits, cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col],
-	   &(apcor[col]), (char *) NULL, &status);
+  for(icol = 0; icol < NFLUX; icol++) {
+    ffgkye(fits, cats_are_80 ? apcor_keys_80[icol] : apcor_keys_32[icol],
+	   &(apcor[icol]), (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      apcor[col] = 1.0;
+      apcor[icol] = 1.0;
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkye: %s", 
-		 cats_are_80 ? apcor_keys_80[col] : apcor_keys_32[col]);
+		 cats_are_80 ? apcor_keys_80[icol] : apcor_keys_32[icol]);
       goto error;
     }
     else {
-      apcor[col] = powf(10.0, 0.4 * apcor[col]);
+      apcor[icol] = powf(10.0, 0.4 * apcor[icol]);
     }
   }
 
@@ -514,17 +522,61 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     goto error;
   }
 
+  if(mefinfo->aperture) {
+    ap1 = mefinfo->aperture-1;
+    ap2 = mefinfo->aperture-1;
+    napcol = 1;
+  }
+  else {
+    ap1 = 0;
+    ap2 = NFLUX;
+    napcol = ap2-ap1 + 1;
+  }
+
+  /* Decide how many columns */
+  ntmpl = sizeof(colnames) / sizeof(colnames[0]);
+
+  ncols = 0;
+  for(tcol = 0; tcol < ntmpl; tcol++) {
+    ncols++;
+
+    if(tpap[tcol])
+      ncols += ap2-ap1;
+  }
+
+  /* Allocate arrays */
+  gcols = (int *) malloc(ncols * sizeof(int));
+  if(!gcols) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+
   /* Get column numbers */
-  ncoluse = sizeof(colnames) / sizeof(colnames[0]);
-  
-  for(col = 0; col < ncoluse; col++) {
-    ffgcno(fits, CASEINSEN, colnames[col], &(gcols[col]), &status);
+  icol = 0;
+  for(tcol = 0; tcol < ntmpl; tcol++) {
+    ffgcno(fits, CASEINSEN, colnames[tcol], gcols+icol, &status);
     if(status == COL_NOT_UNIQUE)
       status = 0;  /* ignore */
     else if(status) {
-      fitsio_err(errstr, status, "ffgcno: %s", colnames[col]);
+      fitsio_err(errstr, status, "ffgcno: %s", colnames[tcol]);
       goto error;
     }
+
+    icol++;
+
+    if(tpap[tcol])
+      for(ap = ap1; ap < ap2; ap++) {
+	snprintf(cn, sizeof(cn), "%s%d", colnames[tcol], ap+1);
+	ffgcno(fits, CASEINSEN, cn, gcols+icol, &status);
+	if(status == COL_NOT_UNIQUE)
+	  status = 0;  /* ignore */
+	else if(status) {
+	  fitsio_err(errstr, status, "ffgcno: %s", cn);
+	  goto error;
+	}
+
+	icol++;
+      }
   }
   
   /* Get block size for row I/O */
@@ -537,9 +589,9 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   /* Allocate column buffers */
   apbuf = (float *) malloc(rblksz * sizeof(float));
   xbuf = (double *) malloc(4 * rblksz * sizeof(double));
-  clsbuf = (short *) malloc(2 * rblksz * sizeof(short));
+  clsbuf = (short *) malloc(3 * rblksz * sizeof(short));
   ptrbuf = (long *) malloc(2 * rblksz * sizeof(long));
-  apmedbuf = (float *) malloc((2+mefinfo->nseg) * rblksz * NFLUX * sizeof(float));
+  apmedbuf = (float *) malloc((2+mefinfo->nseg) * rblksz * napcol * sizeof(float));
   if(!apbuf || !xbuf || !clsbuf || !ptrbuf || !apmedbuf) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -550,11 +602,12 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   decbuf = xbuf + 3 * rblksz;
 
   bfbuf = clsbuf + rblksz;
+  apnumbuf = clsbuf + 2 * rblksz;
 
   cfbuf = ptrbuf + rblksz;
 
-  aprmsbuf = apmedbuf + NFLUX * rblksz;
-  apoffbuf = apmedbuf + 2 * NFLUX * rblksz;
+  aprmsbuf = apmedbuf + napcol * rblksz;
+  apoffbuf = apmedbuf + 2 * napcol * rblksz;
 
   /* Allocate memory for catalogue stars */
   stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
@@ -574,26 +627,35 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   /* Read catalogue */
   roff = 0L;
   remain = nrows;
-  
+
   while(remain > 0) {
     rread = (remain > rblksz ? rblksz : remain);
     
-    ffgcvd(fits, gcols[0], roff + 1, 1, rread, -999.0, xbuf, &anynull, &status);
-    ffgcvd(fits, gcols[1], roff + 1, 1, rread, -999.0, ybuf, &anynull, &status);
-    ffgcvi(fits, gcols[2], roff + 1, 1, rread, 0, clsbuf, &anynull, &status);
-    ffgcvj(fits, gcols[3], roff + 1, 1, rread, 0, ptrbuf, &anynull, &status);
-    ffgcvi(fits, gcols[4], roff + 1, 1, rread, 0, bfbuf, &anynull, &status);
-    ffgcvj(fits, gcols[5], roff + 1, 1, rread, 0, cfbuf, &anynull, &status);
-    ffgcve(fits, gcols[6], roff + 1, 1, rread * NFLUX, -999.0, apmedbuf, &anynull,
+    icol = 0;
+    ffgcvd(fits, gcols[icol++], roff + 1, 1, rread, -999.0, xbuf, &anynull, &status);
+    ffgcvd(fits, gcols[icol++], roff + 1, 1, rread, -999.0, ybuf, &anynull, &status);
+    ffgcvi(fits, gcols[icol++], roff + 1, 1, rread, 0, clsbuf, &anynull, &status);
+    ffgcvj(fits, gcols[icol++], roff + 1, 1, rread, 0, ptrbuf, &anynull, &status);
+    ffgcvi(fits, gcols[icol++], roff + 1, 1, rread, 0, bfbuf, &anynull, &status);
+    ffgcvj(fits, gcols[icol++], roff + 1, 1, rread, 0, cfbuf, &anynull, &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffgcve(fits, gcols[icol++], roff + 1, 1, rread, -999.0, apmedbuf+ap*rblksz, &anynull,
+	     &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffgcve(fits, gcols[icol++], roff + 1, 1, rread, -999.0, aprmsbuf+ap*rblksz, &anynull,
+	     &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffgcve(fits, gcols[icol++], roff + 1, 1, mefinfo->nseg * rread, -999.0, apoffbuf+ap*mefinfo->nseg*rblksz, &anynull,
+	     &status);
+
+    ffgcvi(fits, gcols[icol++], roff + 1, 1, rread, 0, apnumbuf, &anynull, &status);
+    ffgcve(fits, gcols[icol++], roff + 1, 1, rread, -999.0, apbuf, &anynull, &status);
+    ffgcvd(fits, gcols[icol++], roff + 1, 1, rread, -999.0, rabuf, &anynull,
 	   &status);
-    ffgcve(fits, gcols[7], roff + 1, 1, rread * NFLUX, -999.0, aprmsbuf, &anynull,
-	   &status);
-    ffgcve(fits, gcols[8], roff + 1, 1, mefinfo->nseg * rread * NFLUX, -999.0, apoffbuf, &anynull,
-	   &status);
-    ffgcve(fits, gcols[9], roff + 1, 1, rread, -999.0, apbuf, &anynull, &status);
-    ffgcvd(fits, gcols[10], roff + 1, 1, rread, -999.0, rabuf, &anynull,
-	   &status);
-    ffgcvd(fits, gcols[11], roff + 1, 1, rread, -999.0, decbuf, &anynull,
+    ffgcvd(fits, gcols[icol++], roff + 1, 1, rread, -999.0, decbuf, &anynull,
 	   &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
@@ -612,13 +674,23 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
       stars[rr].bflag = bfbuf[r];
       stars[rr].cflag = cfbuf[r];
 
-      for(ap = 0; ap < NFLUX; ap++) {
-	stars[rr].medflux[ap] = (apmedbuf[r*NFLUX+ap] > 0.0 ? mefinfo->zp - apmedbuf[r*NFLUX+ap] : -999.0);
-	stars[rr].sigflux[ap] = aprmsbuf[r*NFLUX+ap];
+      if(mefinfo->aperture) {
+	stars[rr].medflux[mefinfo->aperture-1] = (apmedbuf[r] > 0.0 ? mefinfo->zp - apmedbuf[r] : -999.0);
+	stars[rr].sigflux[mefinfo->aperture-1] = aprmsbuf[r];
+
 	for(iseg = 0; iseg < mefinfo->nseg; iseg++)
-	  stars[rr].segs[iseg].corr[ap] = apoffbuf[(r*NFLUX+ap)*mefinfo->nseg+iseg];
+          stars[rr].segs[iseg].corr[mefinfo->aperture-1] = apoffbuf[r*mefinfo->nseg+iseg];
+      }
+      else {
+	for(ap = ap1; ap < ap2; ap++) {
+	  stars[rr].medflux[ap] = (apmedbuf[(ap-ap1+1)*rblksz+r] > 0.0 ? mefinfo->zp - apmedbuf[(ap-ap1+1)*rblksz+r] : -999.0);
+	  stars[rr].sigflux[ap] = aprmsbuf[(ap-ap1+1)*rblksz+r];
+	  for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+	    stars[rr].segs[iseg].corr[ap] = apoffbuf[((ap-ap1+1)*rblksz+r)*mefinfo->nseg+iseg];
+	}
       }
 
+      stars[rr].iap = apnumbuf[r]-1;
       stars[rr].apradius = apbuf[r];
     }
     
@@ -641,6 +713,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   mefinfo->percorr = percorr;
 
   /* Free workspace */
+  free((void *) gcols);
+  gcols = (int *) NULL;
   free((void *) apbuf);
   apbuf = (float *) NULL;
   free((void *) xbuf);
@@ -655,6 +729,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   return(0);
 
  error:
+  if(gcols)
+    free((void *) gcols);
   if(apbuf)
     free((void *) apbuf);
   if(xbuf)
@@ -1325,7 +1401,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
 	      int doinstvers, struct instvers *instverslist, int ninstvers,
-	      int diffmode, float satlev,
+	      int diffmode, float satlev, int checkrows,
 	      char *errstr) {
   fitsfile *fits;
   int status = 0;
@@ -1348,7 +1424,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   float apcor[NFLUX];
 
-  long nrows, rblksz, roff, remain, rout, rread, r;
+  long nrows, rblksz, roff, remain, routoff, rin, rrin, rout, rrout, rread;
   float flux, fluxerr, locsky, peak;
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
@@ -1403,9 +1479,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     fitsio_err(errstr, status, "ffgnrw");
     goto error;
   }
-  
+
   /* Check for mismatches */
-  if(nrows != mefinfo->nstars) {
+  if(checkrows && nrows != mefinfo->nstars) {
     report_err(errstr,
 	       "number of stars does not match: %d != %d",
 	       nrows, mefinfo->nstars);
@@ -2215,7 +2291,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   /* Read catalogue */
   roff = 0L;
   remain = nrows;
-  rout = 0L;
+  rin = 0L;
+  routoff = 0L;
 
   navskyfiterr = 0;
 
@@ -2238,91 +2315,100 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       ffgcve(fits, gcols[6+col], roff + 1L, 1L, rread, 0.0, fluxbuf,
 	     (int *) NULL, &status);
 
-      for(r = 0; r < rread; r++) {
-	rout = roff + r;
+      rout = 0;
+
+      for(rin = 0; rin < rread; rin++) {
+	rrin = roff + rin;
+	rrout = routoff + rout;
+
+	/* Do we want this row?  The list is guaranteed to be sorted,
+	   so a simple comparison is adequate. */
+	if(rrout >= mefinfo->nstars ||
+	   mefinfo->stars[rrout].ptr != rrin+1)
+	  continue;
 
 	/* Where should the star be? */
-	XYZP(mefinfo->stars[rout].ra, mefinfo->stars[rout].dec, xexpect, yexpect);
+	XYZP(mefinfo->stars[rrout].ra, mefinfo->stars[rrout].dec, xexpect, yexpect);
 
 	/* Store difference - gives offset of centroid */
 	/* Changed back to simple x and y positions */
-	points[r].x = xbuf[r]; //- xexpect;
-	points[r].y = ybuf[r]; //- yexpect;
+	points[rout].x = xbuf[rin]; //- xexpect;
+	points[rout].y = ybuf[rin]; //- yexpect;
 
 	/* Apply scattered light correction */
 	if(scatcoeff != 0.0) {
-	  XIXNZP(xbuf[r], ybuf[r], xi, xn);
-	  fluxbuf[r] *= powf(10.0, 0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
+	  XIXNZP(xbuf[rin], ybuf[rin], xi, xn);
+	  fluxbuf[rin] *= powf(10.0, 0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
 	}
 
 	/* Compute airmass */
 	if(doairm) {
-	  slaMapqkz(mefinfo->stars[rout].ra, mefinfo->stars[rout].dec,
+	  slaMapqkz(mefinfo->stars[rrout].ra, mefinfo->stars[rrout].dec,
 		    amprms, &apra, &apdec);
 	  slaAopqk(apra, apdec, aoprms, &aob, &zob, &hob, &dob, &rob);
-	  points[r].airmass = slaAirmas(zob);
-	  points[r].ha = hob;
+	  points[rout].airmass = slaAirmas(zob);
+	  points[rout].ha = hob;
 
 	  if(hob > 0)
 	    iha = 1;  /* "average" HA in some sense - will NOT work for wide-field */
 	}
 	else {
-	  points[r].airmass = -999.0;  /* flag unusability */
-	  points[r].ha = -999.0;
+	  points[rout].airmass = -999.0;  /* flag unusability */
+	  points[rout].ha = -999.0;
 	}
 
 	area = M_PI * rcore * rcore * flux_apers[col] * flux_apers[col];
 	skyvar = skynoise * skynoise * area +
-	         skyrmsbuf[r] * skyrmsbuf[r] * area * area;
+	         skyrmsbuf[rin] * skyrmsbuf[rin] * area * area;
 
 	if(col == 0) {  /* accumulate only once! */
-	  skyfiterrbuf[navskyfiterr] = skyrmsbuf[r];
+	  skyfiterrbuf[navskyfiterr] = skyrmsbuf[rin];
 	  navskyfiterr++;
 	}
 
 	if(diffmode) {
-	  flux = fluxbuf[r] * mefinfo->apcor[col] * mefinfo->percorr;
-	  fluxerr = (fabsf(fluxbuf[r]) * mefinfo->apcor[col] / gain + skyvar);
+	  flux = fluxbuf[rin] * mefinfo->apcor[col] * mefinfo->percorr;
+	  fluxerr = (fabsf(fluxbuf[rin]) * mefinfo->apcor[col] / gain + skyvar);
 
-	  locsky = mefinfo->stars[rout].ref[col].sky + locskybuf[r] - pedestal;
-	  peak = mefinfo->stars[rout].ref[col].peak + pkhtbuf[r]+locskybuf[r] - pedestal; /* ?? */
+	  locsky = mefinfo->stars[rrout].ref[col].sky + locskybuf[rin] - pedestal;
+	  peak = mefinfo->stars[rrout].ref[col].peak + pkhtbuf[rin]+locskybuf[rin] - pedestal; /* ?? */
 
-	  if(flux == 0.0 || mefinfo->stars[rout].ref[col].flux == 0.0)
+	  if(flux == 0.0 || mefinfo->stars[rrout].ref[col].flux == 0.0)
 	    flux = 0.0;
 	  else
-	    flux += mefinfo->stars[rout].ref[col].flux;
+	    flux += mefinfo->stars[rrout].ref[col].flux;
 
-	  fluxerr += mefinfo->stars[rout].ref[col].fluxerr;
+	  fluxerr += mefinfo->stars[rrout].ref[col].fluxerr;
 
-	  points[r].satur = mefinfo->stars[rout].ref[col].satur;
+	  points[rout].satur = mefinfo->stars[rrout].ref[col].satur;
 	}
 	else {
-	  flux = fluxbuf[r] * apcor[col] * percorr;
-	  fluxerr = (fabsf(fluxbuf[r]) * apcor[col] / gain + skyvar);
+	  flux = fluxbuf[rin] * apcor[col] * percorr;
+	  fluxerr = (fabsf(fluxbuf[rin]) * apcor[col] / gain + skyvar);
 
-	  locsky = locskybuf[r] - pedestal;
-	  peak = pkhtbuf[r]+locskybuf[r] - pedestal;
+	  locsky = locskybuf[rin] - pedestal;
+	  peak = pkhtbuf[rin]+locskybuf[rin] - pedestal;
 
-	  if(peak > 0.95*satlev || mefinfo->stars[rout].ref[col].satur)
-	    points[r].satur = 1;
+	  if(peak > 0.95*satlev || mefinfo->stars[rrout].ref[col].satur)
+	    points[rout].satur = 1;
 	  else
-	    points[r].satur = 0;
+	    points[rout].satur = 0;
 	}
 
 	if(flux > 0.0) {
-	  points[r].flux = 2.5 * log10f(MAX(1.0, flux));
+	  points[rout].flux = 2.5 * log10f(MAX(1.0, flux));
 
 	  if(!diffmode)
-	    points[r].flux -= zpcorr;
+	    points[rout].flux -= zpcorr;
 
 	  /* Compute uncertainty */
 	  rms = 2.5 * log10f(1.0 + sqrtf(fluxerr) / flux);
 	  var = rms*rms;
 
 	  /* Scintillation */
-	  if(diam > 0.0 && points[r].airmass > 0.0) {
+	  if(diam > 0.0 && points[rout].airmass > 0.0) {
 	    sc = 0.09 * powf(diam / 10.0, -2.0 / 3.0) *
- 	                powf(points[r].airmass, 3.0 / 2.0) *
+ 	                powf(points[rout].airmass, 3.0 / 2.0) *
  	                expf(-height / 8000.0) /
 	                sqrtf(2*exptime);
 	    scrms = 2.5 * log10f(1.0 + sc);
@@ -2334,37 +2420,41 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  }
 
 	  /* Stash result */
-	  points[r].fluxerr = sqrtf(var);
-	  points[r].fluxerrcom = points[r].fluxerr;
-	  points[r].sky = locsky;
-	  points[r].peak = peak;
+	  points[rout].fluxerr = sqrtf(var);
+	  points[rout].fluxerrcom = points[rout].fluxerr;
+	  points[rout].sky = locsky;
+	  points[rout].peak = peak;
 	}
 	else {
-	  points[r].flux = 0.0;
-	  points[r].fluxerr = 0.0;
-	  points[r].fluxerrcom = 0.0;
-	  points[r].sky = 0.0;
-	  points[r].peak = 0.0;
+	  points[rout].flux = 0.0;
+	  points[rout].fluxerr = 0.0;
+	  points[rout].fluxerrcom = 0.0;
+	  points[rout].sky = 0.0;
+	  points[rout].peak = 0.0;
 	}
 
 	/* Apply intrapixel correction if requested */
 	if(dointra)
-	  points[r].flux += calc_intra(xbuf[r], ybuf[r], icorr);
+	  points[rout].flux += calc_intra(xbuf[rin], ybuf[rin], icorr);
 
 	/* Accumulate counts of frames with bad pixels */
-	if(gcols[5] && badpixbuf[r] > 0.0) {
-	  points[r].conf = 1;
-	  mefinfo->stars[rout].cflag++;
+	if(gcols[5] && badpixbuf[rin] > 0.0) {
+	  points[rout].conf = 1;
+	  mefinfo->stars[rrout].cflag++;
 	}
 	else
-	  points[r].conf = 0;
+	  points[rout].conf = 0;
 
-	points[r].wt = 0;
+	points[rout].wt = 0;
+
+	rout++;
       }
 
-      /* Write out those */
-      if(buffer_put_frame(buf, points, roff, rread, iframe, col, errstr))
-	goto error;
+      if(rout > 0) {
+	/* Write out those */
+	if(buffer_put_frame(buf, points, routoff, rout, iframe, col, errstr))
+	  goto error;
+      }
     }
 
     if(status) {
@@ -2374,6 +2464,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     
     roff += rread;
     remain -= rread;
+    routoff += rout;
   }
 
   /* Free workspace */
@@ -2384,6 +2475,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   free((void *) points);
   points = (struct lc_point *) NULL;
+
+  /* Check we got everything */
+  if(routoff != mefinfo->nstars) {
+    report_err(errstr,
+	       "number of stars does not match: %d != %d",
+	       routoff, mefinfo->nstars);
+    goto error;
+  }
 
   /* Accumulate averages of noise contributions */
   tmp = skynoise * skynoise * expfac;

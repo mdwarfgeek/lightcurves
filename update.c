@@ -42,7 +42,7 @@ static void usage (char *av) {
 	  "Lightcurve processing:\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
 	  "         -s level  Override saturation level to 'level'.\n"
-	  "         -V file   Use 'instrument version' table from 'file' (MEarth only).\n"
+	  "         -V file   Use 'instrument version' table from 'file' (MEarth only).\n\n"
 	  "Output:\n"
 	  "         -c cls    Write out only class==cls (e.g. to select just targets).\n"
 	  "         -o file   Writes updated lightcurves to 'file'.\n"
@@ -366,7 +366,7 @@ int main (int argc, char *argv[]) {
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
 		  dointra, &(intralist[mef]),
 		  doinstvers, instverslist, ninstvers,
-		  diffmode, satlev, errstr))
+		  diffmode, satlev, 0, errstr))
 	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
     }
 
@@ -543,17 +543,30 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 		      struct buffer_info *buf, struct lc_mef *mefinfo,
 		      int outcls, int wantoutcls, 
 		      char *errstr) {
-  int status = 0, col, ncoluse, anynull;
+  int status = 0, icol, ntmpl, ncoluse, anynull;
 
-  char *colnames[16] = { "medflux", "rms", "chisq", "nchisq", "pointer",
-			 "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
-                         "weight", "sky", "peak", "flags" };
-  int gcols[16];
+  char *colnames[] = { "pointer",
+		       "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
+		       "weight", "sky", "peak", "flags",
+		       "medflux", "rms", "chisq", "nchisq" };
+  unsigned char tpap[] = { 0,
+			   0, 1, 1, 0, 0, 0, 0,
+			   1, 0, 0, 0,
+			   1, 1, 0, 0 };
+  unsigned char tvec[] = { 0,
+			   1, 1, 1, 1, 1, 1, 1,
+			   1, 1, 1, 1,
+			   0, 0, 0, 0 };
+
+  char cn[FLEN_VALUE+1];
+  int *gcols = (int *) NULL;
 
   char kbuf[FLEN_KEYWORD];
   char cbuf[FLEN_COMMENT];
 
-  long pt, star;
+  long pt, star, soff, istar;
+
+  int ap, ap1, ap2, napcol;
 
   long nmeasexist, nupdate, nmeasout;
 
@@ -561,8 +574,9 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   double *epos = (double *) NULL;
 
-  float *fluxbuf = (float *) NULL, *fluxerrbuf, *airbuf, *habuf, *wtbuf;
-  float *locskybuf, *peakbuf;
+  float *medfluxbuf = (float *) NULL, *rmsbuf;
+  float *fluxbuf = (float *) NULL, *fluxerrbuf, *wtbuf;
+  float *airbuf = (float *) NULL, *habuf, *locskybuf, *peakbuf;
   double *hjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
   unsigned char *flagbuf = (unsigned char *) NULL;
 
@@ -572,7 +586,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   long satflag;
   unsigned char flags;
 
-  int ncols, tcol;
+  int ncolsfile, tcol;
   long previnstart, prevoutstart, previnpos, prevoutpos;
   int intype, outtype;
   long inrpt, inwidth, inbytes, outrpt, outwidth, outbytes;
@@ -610,23 +624,75 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   /* Get number of rows and columns */
   ffgnrw(reff, &nstarin, &status);
-  ffgncl(reff, &ncols, &status);
+  ffgncl(reff, &ncolsfile, &status);
   if(status) {
     fitsio_err(errstr, status, "ffgncl");
     goto error;
   }
 
+  /* Figure out apertures */
+  if(mefinfo->aperture) {
+    ap1 = mefinfo->aperture-1;
+    ap2 = ap1;
+    napcol = 1;
+  }
+  else {
+    if(mefinfo->apselmode & APSEL_ALL) {
+      ap1 = 0;
+      ap2 = NFLUX;
+      napcol = ap2-ap1 + 1;
+    }
+    else {
+      ap1 = 0;
+      ap2 = 0;
+      napcol = 1;
+    }
+  }
+
+  /* Decide how many columns */
+  ntmpl = sizeof(colnames) / sizeof(colnames[0]);
+
+  ncoluse = 0;
+  for(tcol = 0; tcol < ntmpl; tcol++) {
+    ncoluse++;
+
+    if(tpap[tcol])
+      ncoluse += ap2-ap1;
+  }
+
+  /* Allocate arrays */
+  gcols = (int *) malloc(ncoluse * sizeof(int));
+  if(!gcols) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+
   /* Get column numbers */
-  ncoluse = sizeof(colnames) / sizeof(colnames[0]);
-  
-  for(col = 0; col < ncoluse; col++) {
-    ffgcno(reff, CASEINSEN, colnames[col], &(gcols[col]), &status);
+  icol = 0;
+  for(tcol = 0; tcol < ntmpl; tcol++) {
+    ffgcno(reff, CASEINSEN, colnames[tcol], gcols+icol, &status);
     if(status == COL_NOT_UNIQUE)
       status = 0;  /* ignore */
     else if(status) {
-      fitsio_err(errstr, status, "ffgcno: %s", colnames[col]);
+      fitsio_err(errstr, status, "ffgcno: %s", colnames[tcol]);
       goto error;
     }
+
+    icol++;
+
+    if(tpap[tcol])
+      for(ap = ap1; ap < ap2; ap++) {
+	snprintf(cn, sizeof(cn), "%s%d", colnames[tcol], ap+1);
+	ffgcno(reff, CASEINSEN, cn, gcols+icol, &status);
+	if(status == COL_NOT_UNIQUE)
+	  status = 0;  /* ignore */
+	else if(status) {
+	  fitsio_err(errstr, status, "ffgcno: %s", cn);
+	  goto error;
+	}
+
+	icol++;
+      }
   }
 
   /* Copy in header keywords */
@@ -983,12 +1049,29 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   }
 
   /* Expand vectors */
-  for(col = 5; col < ncoluse; col++) {
-    ffmvec(fits, gcols[col], nmeasout, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffmvec");
-      goto error;
+  icol = 0;
+  for(tcol = 0; tcol < ntmpl; tcol++) {
+    if(tvec[tcol]) {
+      ffmvec(fits, gcols[icol], nmeasout, &status);
+      icol++;
+
+      if(tpap[tcol])
+	for(ap = ap1; ap < ap2; ap++) {	
+	  ffmvec(fits, gcols[icol], nmeasout, &status);
+	  icol++;
+	}
     }
+    else {
+      icol++;
+      
+      if(tpap[tcol])
+	icol += ap2-ap1;
+    }
+  }
+
+  if(status) {
+    fitsio_err(errstr, status, "ffmvec");
+    goto error;
   }
 
   /* Decide which bytes need copying */
@@ -997,11 +1080,11 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   previnpos = 1;
   prevoutpos = 1;
 
-  for(col = 1; col <= ncols; col++) {
-    ffgtcl(reff, col, &intype, &inrpt, &inwidth, &status);
-    ffgtcl(fits, col, &outtype, &outrpt, &outwidth, &status);
+  for(icol = 1; icol <= ncolsfile; icol++) {
+    ffgtcl(reff, icol, &intype, &inrpt, &inwidth, &status);
+    ffgtcl(fits, icol, &outtype, &outrpt, &outwidth, &status);
     if(status) {
-      fitsio_err(errstr, status, "ffgtcl: %d", col);
+      fitsio_err(errstr, status, "ffgtcl: %d", icol);
     }
     
     if(intype == TSTRING)
@@ -1014,7 +1097,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     
     found = 0;
     for(tcol = 0; tcol < ncoluse; tcol++)
-      if(col == gcols[tcol])
+      if(icol == gcols[tcol])
 	found = 1;
 
     if(found) {
@@ -1057,13 +1140,18 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
     for(starin = 0; starin < nstarin; starin++) {
       /* Read pointer to figure out original star number */
-      ffgcvj(reff, gcols[4], starin + 1, 1, 1, 0, &star, &anynull, &status);
+      ffgcvj(reff, gcols[0], starin + 1, 1, 1, 0, &pointer, &anynull, &status);
       if(status) {
 	fitsio_err(errstr, status, "ffgcv");
 	goto error;
       }
       
-      star--;  /* 1-base to zero-base */
+      star = -1;
+      for(istar = 0; istar < mefinfo->nstars; istar++)
+	if(mefinfo->stars[istar].ptr == pointer) {
+	  star = istar;
+	  break;
+	}
 
       if(mefinfo->stars[star].cls == outcls)
 	nstarout++;
@@ -1094,56 +1182,74 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   }
 
   /* Allocate output buffers */
-  fluxbuf = (float *) malloc(8 * nmeasout * sizeof(float));
+  medfluxbuf = (float *) malloc(2 * napcol * sizeof(float));
+  fluxbuf = (float *) malloc(3 * nmeasout * napcol * sizeof(float));
+  airbuf = (float *) malloc(5 * nmeasout * sizeof(float));
   hjdbuf = (double *) malloc(3 * nmeasout * sizeof(double));
   flagbuf = (unsigned char *) malloc(nmeasout * sizeof(unsigned char));
   rawbuf = (unsigned char *) malloc(rowsize * sizeof(unsigned char));
-  if(!fluxbuf || !hjdbuf || !flagbuf || !rawbuf) {
+  if(!medfluxbuf || !fluxbuf || !airbuf || !hjdbuf || !flagbuf || !rawbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
 
-  fluxerrbuf = fluxbuf + nmeasout;
-  airbuf = fluxbuf + 2 * nmeasout;
-  habuf = fluxbuf + 3 * nmeasout;
-  wtbuf = fluxbuf + 4 * nmeasout;
-  locskybuf = fluxbuf + 5 * nmeasout;
-  peakbuf = fluxbuf + 6 * nmeasout;
+  rmsbuf = medfluxbuf + napcol;
+
+  fluxerrbuf = fluxbuf + napcol * nmeasout;
+  wtbuf = fluxbuf + 2 * napcol * nmeasout;
+
+  habuf = airbuf + nmeasout;
+  locskybuf = airbuf + 2 * nmeasout;
+  peakbuf = airbuf + 3 * nmeasout;
+  medlist = airbuf + 4 * nmeasout;
 
   xlcbuf = hjdbuf + nmeasout;
   ylcbuf = hjdbuf + 2 * nmeasout;
-
-  medlist = fluxbuf + 7 * nmeasout;
 
   /* Loop through all stars */
   starout = 0;
 
   for(starin = 0; starin < nstarin; starin++) {
     /* Read pointer to figure out original star number */
-    ffgcvj(reff, gcols[4], starin + 1, 1, 1, 0, &pointer, &anynull, &status);
+    ffgcvj(reff, gcols[0], starin + 1, 1, 1, 0, &pointer, &anynull, &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
       goto error;
     }
 
-    star = pointer-1;
+    star = -1;
+    for(istar = 0; istar < mefinfo->nstars; istar++)
+      if(mefinfo->stars[istar].ptr == pointer) {
+	star = istar;
+	break;
+      }
 
     /* Skip the ones without the correct class if we're doing that */
     if(wantoutcls && mefinfo->stars[star].cls != outcls)
       continue;  /* I'm too lazy to reindent the rest of the loop */
 
     /* Read existing lightcurve info */
-    ffgcvd(reff, gcols[5], starin + 1, 1, nmeasexist, -999.0, hjdbuf, &anynull, &status);
-    ffgcve(reff, gcols[6], starin + 1, 1, nmeasexist, -999.0, fluxbuf, &anynull, &status);
-    ffgcve(reff, gcols[7], starin + 1, 1, nmeasexist, -999.0, fluxerrbuf, &anynull, &status);
-    ffgcvd(reff, gcols[8], starin + 1, 1, nmeasexist, -999.0, xlcbuf, &anynull, &status);
-    ffgcvd(reff, gcols[9], starin + 1, 1, nmeasexist, -999.0, ylcbuf, &anynull, &status);
-    ffgcve(reff, gcols[10], starin + 1, 1, nmeasexist, -999.0, airbuf, &anynull, &status);
-    ffgcve(reff, gcols[11], starin + 1, 1, nmeasexist, -999.0, habuf, &anynull, &status);
-    ffgcve(reff, gcols[12], starin + 1, 1, nmeasexist, -999.0, wtbuf, &anynull, &status);
-    ffgcve(reff, gcols[13], starin + 1, 1, nmeasexist, -999.0, locskybuf, &anynull, &status);
-    ffgcve(reff, gcols[14], starin + 1, 1, nmeasexist, -999.0, peakbuf, &anynull, &status);
-    ffgcvb(reff, gcols[15], starin + 1, 1, nmeasexist, 0, flagbuf, &anynull, &status);
+    icol = 1;
+
+    ffgcvd(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, hjdbuf, &anynull, &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, fluxbuf+ap*nmeasout, &anynull, &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, fluxerrbuf+ap*nmeasout, &anynull, &status);
+
+    ffgcvd(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, xlcbuf, &anynull, &status);
+    ffgcvd(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, ylcbuf, &anynull, &status);
+    ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, airbuf, &anynull, &status);
+    ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, habuf, &anynull, &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, wtbuf+ap*nmeasout, &anynull, &status);
+
+    ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, locskybuf, &anynull, &status);
+    ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, peakbuf, &anynull, &status);
+    ffgcvb(reff, gcols[icol++], starin + 1, 1, nmeasexist, 0, flagbuf, &anynull, &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
       goto error;
@@ -1202,6 +1308,28 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 				      mefinfo->stars[star].dec);
     }
 
+    /* Do other apertures */
+    for(ap = ap1; ap < ap2; ap++) {
+      soff = (ap-ap1+1)*nmeasout + nmeasexist;
+      
+      /* Get lightcurve */
+      if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, ap, errstr))
+	goto error;
+
+      /* Fill in buffer */
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+	if(lcbuf[pt].flux != 0.0) {
+	  fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].flux;
+	  if(lcbuf[pt].fluxerrcom > 0.0)
+	    fluxerrbuf[soff+pt] = lcbuf[pt].fluxerrcom;
+	  else
+	    fluxerrbuf[soff+pt] = -999.0;
+	}
+
+	wtbuf[soff+pt] = lcbuf[pt].wt;
+      }
+    }
+
     /* Raw-copy over the bits that didn't change */
     for(sect = 0; sect < ncopysect; sect++) {
       if(copysect[sect].ncopy <= 0)
@@ -1221,58 +1349,85 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     }
 
     /* Recalculate median flux */
-    nmed = 0;
-    
-    for(pt = 0; pt < nmeasout; pt++) {
-      if(fluxbuf[pt] != -999.0 && fluxerrbuf[pt] != -999.0) {
-	medlist[nmed] = fluxbuf[pt];
-	nmed++;
-      }
-    }
-    
-    if(nmed > 0) {
-      medsig(medlist, nmed, &medflux, &sigflux);
-    
-      if(nmed == 1)
-	sigflux = -999.0;
+    for(ap = 0; ap < napcol; ap++) {
+      soff = ap*nmeasout;
 
-      /* Calculate chi-squared */
-      chisq = 0.0;
-      nchisq = 0;
+      nmed = 0;
       
       for(pt = 0; pt < nmeasout; pt++) {
-	if(fluxbuf[pt] != -999.0 && fluxerrbuf[pt] != -999.0) {
-	  tmp = fluxbuf[pt] - medflux;
+	if(fluxbuf[soff+pt] != -999.0 && fluxerrbuf[soff+pt] != -999.0) {
+	  medlist[nmed] = fluxbuf[soff+pt];
+	  nmed++;
+	}
+      }
+      
+      if(nmed > 0) {
+	medsig(medlist, nmed, &medflux, &sigflux);
+	
+	if(nmed == 1)
+	  sigflux = -999.0;
+
+	medfluxbuf[ap] = medflux;
+	rmsbuf[ap] = sigflux;
+	
+	if(ap == 0) {
+	  /* Calculate chi-squared */
+	  chisq = 0.0;
+	  nchisq = 0;
 	  
-	  chisq += tmp*tmp / (fluxerrbuf[pt] * fluxerrbuf[pt]);
-	  nchisq++;
+	  for(pt = 0; pt < nmeasout; pt++) {
+	    if(fluxbuf[pt] != -999.0 && fluxerrbuf[pt] != -999.0) {
+	      tmp = fluxbuf[pt] - medflux;
+	      
+	      chisq += tmp*tmp / (fluxerrbuf[pt] * fluxerrbuf[pt]);
+	      nchisq++;
+	    }
+	  }
+	}
+      }
+      else {
+	medfluxbuf[ap] = -999.0;
+	rmsbuf[ap] = -999.0;
+
+	if(ap == 0) {
+	  chisq = -999.0;
+	  nchisq = 0;
 	}
       }
     }
-    else {
-      medflux = -999.0;
-      sigflux = -999.0;
-      chisq = -999.0;
-      nchisq = 0;
-    }
 
     /* Write in modified data */
-    ffpcne(fits, gcols[0], starout+1, 1, 1, &medflux, -999.0, &status);
-    ffpcne(fits, gcols[1], starout+1, 1, 1, &sigflux, -999.0, &status);
-    ffpcne(fits, gcols[2], starout+1, 1, 1, &chisq, -999.0, &status);
-    ffpcnj(fits, gcols[3], starout+1, 1, 1, &nchisq, -999, &status);
-    ffpclj(fits, gcols[4], starout+1, 1, 1, &pointer, &status);
-    ffpcnd(fits, gcols[5], starout+1, 1, nmeasout, hjdbuf, -999.0, &status);
-    ffpcne(fits, gcols[6], starout+1, 1, nmeasout, fluxbuf, -999.0, &status);
-    ffpcne(fits, gcols[7], starout+1, 1, nmeasout, fluxerrbuf, -999.0, &status);
-    ffpcnd(fits, gcols[8], starout+1, 1, nmeasout, xlcbuf, -999.0, &status);
-    ffpcnd(fits, gcols[9], starout+1, 1, nmeasout, ylcbuf, -999.0, &status);
-    ffpcne(fits, gcols[10], starout+1, 1, nmeasout, airbuf, -999.0, &status);
-    ffpcne(fits, gcols[11], starout+1, 1, nmeasout, habuf, -999.0, &status);
-    ffpcne(fits, gcols[12], starout+1, 1, nmeasout, wtbuf, -999.0, &status);
-    ffpcne(fits, gcols[13], starout+1, 1, nmeasout, locskybuf, -999.0, &status);
-    ffpcne(fits, gcols[14], starout+1, 1, nmeasout, peakbuf, -999.0, &status);
-    ffpclb(fits, gcols[15], starout+1, 1, nmeasout, flagbuf, &status);
+    icol = 0;
+
+    ffpclj(fits, gcols[icol++], starout+1, 1, 1, &pointer, &status);
+    ffpcnd(fits, gcols[icol++], starout+1, 1, nmeasout, hjdbuf, -999.0, &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, fluxbuf+ap*nmeasout, -999.0, &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, fluxerrbuf+ap*nmeasout, -999.0, &status);
+
+    ffpcnd(fits, gcols[icol++], starout+1, 1, nmeasout, xlcbuf, -999.0, &status);
+    ffpcnd(fits, gcols[icol++], starout+1, 1, nmeasout, ylcbuf, -999.0, &status);
+    ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, airbuf, -999.0, &status);
+    ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, habuf, -999.0, &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, wtbuf+ap*nmeasout, -999.0, &status);
+
+    ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, locskybuf, -999.0, &status);
+    ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, peakbuf, -999.0, &status);
+    ffpclb(fits, gcols[icol++], starout+1, 1, nmeasout, flagbuf, &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffpcne(fits, gcols[icol++], starout+1, 1, 1, medfluxbuf+ap, -999.0, &status);
+
+    for(ap = 0; ap < napcol; ap++)
+      ffpcne(fits, gcols[icol++], starout+1, 1, 1, rmsbuf+ap, -999.0, &status);
+
+    ffpcne(fits, gcols[icol++], starout+1, 1, 1, &chisq, -999.0, &status);
+    ffpcnj(fits, gcols[icol++], starout+1, 1, 1, &nchisq, -999, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpcl");
       goto error;
@@ -1281,14 +1436,20 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     starout++;
   }
 
+  free((void *) gcols);
+  gcols = (int *) NULL;
   free((void *) lcbuf);
   lcbuf = (struct lc_point *) NULL;
   free((void *) epos);
   epos = (double *) NULL;
   free((void *) copysect);
   copysect = (struct table_section *) NULL;
+  free((void *) medfluxbuf);
+  medfluxbuf = (float *) NULL;
   free((void *) fluxbuf);
   fluxbuf = (float *) NULL;
+  free((void *) airbuf);
+  airbuf = (float *) NULL;
   free((void *) hjdbuf);
   hjdbuf = (double *) NULL;
   free((void *) flagbuf);
@@ -1299,14 +1460,20 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   return(0);
 
  error:
+  if(gcols)
+    free((void *) gcols);
   if(lcbuf)
     free((void *) lcbuf);
   if(epos)
     free((void *) epos);
   if(copysect)
     free((void *) copysect);
+  if(medfluxbuf)
+    free((void *) medfluxbuf);
   if(fluxbuf)
     free((void *) fluxbuf);
+  if(airbuf)
+    free((void *) airbuf);
   if(hjdbuf)
     free((void *) hjdbuf);
   if(flagbuf)

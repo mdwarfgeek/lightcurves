@@ -523,9 +523,6 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
   float medflux, rmsflux, chisq, tmp;
   long nchisq;
 
-  int aper, useaper;
-  float diff, diffmin;
-
   int iseg, found, imr;
 
   /* Decide segments for all new points */
@@ -623,39 +620,30 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	}
       }
     }
+
+    /* Compute final per-object, per-aperture median flux */
+    for(star = 0; star < mefinfo->nstars; star++) {
+      /* Read in measurements for this star */
+      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
+	goto error;
+	
+      /* Calculate median flux and set "used" flag for comparison stars */
+      opt = 0;
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+	if(ptbuf[pt].flux != 0.0) {
+	  medbuf[opt] = ptbuf[pt].flux;
+	  opt++;
+	}
+      }
+      
+      medsig(medbuf, opt, &medflux, &rmsflux);
+      mefinfo->stars[star].medflux[meas] = medflux;
+      mefinfo->stars[star].sigflux[meas] = rmsflux;
+    }
   }
 
   if(verbose && isatty(1))
     printf("\n");
-
-  if(mefinfo->aperture == 0) {
-    /* Apply old aperture selections */
-    for(star = 0; star < mefinfo->nstars; star++) {
-      /* Which one was it? */
-      useaper = -1;
-      diffmin = 0;
-      for(aper = 0; aper < NFLUX; aper++) {
-	diff = fabsf(mefinfo->stars[star].apradius - flux_apers[aper]);
-	
-	if(useaper < 0 || diff < diffmin) {
-	  useaper = aper;
-	  diffmin = diff;
-	}
-      }
-      
-      /* Sanity check */
-      if(useaper < 0) {
-	report_err(errstr, "could not find an aperture for star %ld", star+1);
-	goto error;
-      }
-
-      mefinfo->stars[star].iap = useaper;
-    }
-  }
-  else {
-    for(star = 0; star < mefinfo->nstars; star++)
-      mefinfo->stars[star].iap = mefinfo->aperture-1;
-  }
 
   /* Recompute per-object median flux (NEW POINTS ONLY) */
   if(verbose)
