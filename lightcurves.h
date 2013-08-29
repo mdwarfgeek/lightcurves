@@ -3,11 +3,15 @@
 
 #include <fitsio.h>
 
-/* Number of flux measures */
+#ifndef NFLUX
+/* Default number of flux measures */
 #define NFLUX  4
+#endif
 
-/* Flux measure to use for normalization */
+#ifndef REFAP
+/* Default flux measure to use for normalization */
 #define REFAP  0
+#endif
 
 /* Flags column in lightcurve file */
 #define FLAG_NODP  0x01  /* No data point (off chip) */
