@@ -270,7 +270,7 @@ struct systematic_fit {
 };
 
 /* Globals */
-extern float flux_apers[NFLUX];
+extern float flux_apers[];
 extern int verbose;
 
 /* Disk buffer management: buffer.c */

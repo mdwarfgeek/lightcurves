@@ -18,27 +18,28 @@
 #include "floatmath.h"
 #include "util.h"
 
-/* Flux keywords and aperture sizes in terms of rcore */
-static char *flux_keys_32[NFLUX] = { "Core_flux",
-				     "Core2_flux",
-				     "Core3_flux",
-                                     "Core4_flux" };
-static char *flux_keys_80[NFLUX] = { "Aper_flux_3",
-				     "Aper_flux_4",
-				     "Aper_flux_5",
-                                     "Aper_flux_6" };
-float flux_apers[NFLUX] = { 1.0,
-			    M_SQRT2,
-			    2.0,
-                            2.0*M_SQRT2 };
-static char *apcor_keys_32[NFLUX] = { "APCOR",
-				      "APCOR2",
-				      "APCOR3",
-                                      "APCOR4" };
-static char *apcor_keys_80[NFLUX] = { "APCOR3",
-				      "APCOR4",
-				      "APCOR5",
-                                      "APCOR6" };
+/* Flux keywords and aperture sizes in terms of rcore.  These have no declared
+   size so NFLUX can be changed without having to keep modifying this file. */
+static char *flux_keys_32[] = { "Core_flux",
+				"Core2_flux",
+				"Core3_flux",
+				"Core4_flux" };
+static char *flux_keys_80[] = { "Aper_flux_3",
+				"Aper_flux_4",
+				"Aper_flux_5",
+				"Aper_flux_6" };
+float flux_apers[] = { 1.0,
+		       M_SQRT2,
+		       2.0,
+		       2.0*M_SQRT2 };
+static char *apcor_keys_32[] = { "APCOR",
+				 "APCOR2",
+				 "APCOR3",
+				 "APCOR4" };
+static char *apcor_keys_80[] = { "APCOR3",
+				 "APCOR4",
+				 "APCOR5",
+				 "APCOR6" };
 
 static struct {
   char *filt;
