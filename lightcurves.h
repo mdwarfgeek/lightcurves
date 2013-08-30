@@ -5,7 +5,7 @@
 
 #ifndef NFLUX
 /* Default number of flux measures */
-#define NFLUX  4
+#define NFLUX  3
 #endif
 
 #ifndef REFAP
