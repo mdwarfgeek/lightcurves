@@ -83,6 +83,8 @@ struct lc_star {
   /* Global median and scatter */
   float medflux[NFLUX];
   float sigflux[NFLUX];
+  float chiap[NFLUX];
+  long nchiap[NFLUX];
 
   /* Used as comparison star in how many apertures? */
   int used;
@@ -302,7 +304,7 @@ int buffer_put_object (struct buffer_info *b, struct lc_point *buf,
 
 /* Aperture combination: chooseap.c */
 int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
-	      struct lc_point *ptbuf, float *medbuf, char *errstr);
+	      struct lc_point *ptbuf, float *medbuf, int doapcor, char *errstr);
 
 /* "Instrument version": instvers.c */
 int read_instvers (char *filename, struct instvers **instverslist_r, int *ninstvers_r,

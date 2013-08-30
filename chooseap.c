@@ -7,7 +7,7 @@
 #include "util.h"
 
 int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
-	      struct lc_point *ptbuf, float *medbuf, char *errstr) {
+	      struct lc_point *ptbuf, float *medbuf, int doapcor, char *errstr) {
   long pt, star;
   float *corbuf = (float *) NULL, medcor;
   long ncor;
@@ -24,7 +24,7 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
     nav[aper] = 0;
   }
 
-  if(mefinfo->aperture == 0) {
+  if(mefinfo->aperture == 0 && doapcor) {
     /* Allocate buffers */
     corbuf = (float *) malloc(mefinfo->nstars * sizeof(float));
     if(!corbuf) {
@@ -121,27 +121,28 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
     mefinfo->stars[star].apradius *= flux_apers[useaper];
 
     /* Apply aperture corrections */
-
-    /* Read in measurements for this star */
-    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
-      goto error;
-
-    for(aper = 0; aper < NFLUX; aper++) {
-      if(aper == REFAP)
-	continue;
-
-      /* Apply aperture correction */
-      for(pt = 0; pt < mefinfo->nf; pt++)
-	if(ptbuf[pt].aper[aper].flux > 0.0 && ptbuf[pt].aper[aper].fluxerrcom > 0.0)
-	  ptbuf[pt].aper[aper].flux -= avapcor[aper];
-
-      /* Correct median flux */
-      mefinfo->stars[star].medflux[aper] -= avapcor[aper];
+    if(doapcor) {
+      /* Read in measurements for this star */
+      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
+	goto error;
+      
+      for(aper = 0; aper < NFLUX; aper++) {
+	if(aper == REFAP)
+	  continue;
+	
+	/* Apply aperture correction */
+	for(pt = 0; pt < mefinfo->nf; pt++)
+	  if(ptbuf[pt].aper[aper].flux > 0.0 && ptbuf[pt].aper[aper].fluxerrcom > 0.0)
+	    ptbuf[pt].aper[aper].flux -= avapcor[aper];
+	
+	/* Correct median flux */
+	mefinfo->stars[star].medflux[aper] -= avapcor[aper];
+      }
+      
+      /* Write out */
+      if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
+	goto error;
     }
-
-    /* Write out */
-    if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
-      goto error;
   }
 
   return(0);
