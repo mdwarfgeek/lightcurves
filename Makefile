@@ -19,9 +19,12 @@ SLA_LIB=/usr/local/lib
 # C compiler
 #CC=gcc
 
+# Opt/debug flags
+#OPT=-g  # NO OPT FOR DEBUG
+OPT=-g -O3 -ffast-math
+
 # Compiler flags
-#CFLAGS=-g -Wall -I$(CFITSIO_INC) -I$(PGPLOT_INC) -I$(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DCSLALIB -DHAVE_MMAP # NO OPT FOR DEBUG
-CFLAGS=-O3 -ffast-math -Wall -I$(CFITSIO_INC) -I$(PGPLOT_INC) -I$(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DCSLALIB -DHAVE_MMAP
+CFLAGS=$(OPT) -Wall -I$(CFITSIO_INC) -I$(PGPLOT_INC) -I$(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DCSLALIB -DHAVE_MMAP
 
 # Linker flags
 LIBS=-L$(CFITSIO_LIB) -lcfitsio -L$(PGPLOT_LIB) -lcpgplot -lpgplot -L$(SLA_LIB) -lsla -lg2c -L$(X11_LIB) -lX11 -lm
