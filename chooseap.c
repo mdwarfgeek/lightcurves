@@ -9,7 +9,6 @@
 int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      struct lc_point *ptbuf, float *medbuf, char *errstr) {
   long pt, star;
-  struct lc_point *refbuf = (struct lc_point *) NULL;
   float *corbuf = (float *) NULL, medcor;
   long ncor;
 
@@ -27,9 +26,8 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   if(mefinfo->aperture == 0) {
     /* Allocate buffers */
-    refbuf = (struct lc_point *) malloc(mefinfo->nstars * sizeof(struct lc_point));
     corbuf = (float *) malloc(mefinfo->nstars * sizeof(float));
-    if(!refbuf || !corbuf) {
+    if(!corbuf) {
       report_syserr(errstr, "malloc");
       goto error;
     }
@@ -39,8 +37,8 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
     
     /* Compute empirical aperture corrections */
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      /* Read in reference aperture */
-      if(buffer_fetch_frame(buf, refbuf, 0, mefinfo->nstars, pt, REFAP, errstr))
+      /* Read */
+      if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
 	goto error;
       
       /* Loop through comparison apertures */
@@ -48,20 +46,19 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	if(aper == REFAP)
 	  continue;
 
-	if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, aper, errstr))
-	  goto error;
-	
 	/* Compute median aperture correction */
 	ncor = 0;
 	for(star = 0; star < mefinfo->nstars; star++)
-	  if(refbuf[star].flux > 0.0 && ptbuf[star].flux > 0.0 &&
-	     refbuf[star].fluxerrcom > 0.0 && ptbuf[star].fluxerrcom > 0.0 &&
-	     !refbuf[star].satur && !ptbuf[star].satur &&
+	  if(ptbuf[star].aper[REFAP].flux > 0.0 &&
+	     ptbuf[star].aper[aper].flux > 0.0 &&
+	     ptbuf[star].aper[REFAP].fluxerrcom > 0.0 &&
+	     ptbuf[star].aper[aper].fluxerrcom > 0.0 &&
+	     !ptbuf[star].satur &&
 	     mefinfo->stars[star].sigflux[aper] > 0 &&
 	     mefinfo->stars[star].medflux[aper] >= mefinfo->sysllim &&
 	     mefinfo->stars[star].medflux[aper] <= mefinfo->sysulim &&
 	     mefinfo->stars[star].cls == -1) {
-	    corbuf[ncor] = ptbuf[star].flux - refbuf[star].flux;
+	    corbuf[ncor] = ptbuf[star].aper[aper].flux - ptbuf[star].aper[REFAP].flux;
 	    ncor++;
 	  }
 	
@@ -77,8 +74,6 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
       }
     }
     
-    free((void *) refbuf);
-    refbuf = (struct lc_point *) NULL;
     free((void *) corbuf);
     corbuf = (float *) NULL;
     
@@ -126,33 +121,32 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
     mefinfo->stars[star].apradius *= flux_apers[useaper];
 
     /* Apply aperture corrections */
+
+    /* Read in measurements for this star */
+    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
+      goto error;
+
     for(aper = 0; aper < NFLUX; aper++) {
       if(aper == REFAP)
 	continue;
 
-      /* Read in measurements for this star in 'aper' */
-      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, aper, errstr))
-	goto error;
-
       /* Apply aperture correction */
       for(pt = 0; pt < mefinfo->nf; pt++)
-	if(ptbuf[pt].flux > 0.0 && ptbuf[pt].fluxerrcom > 0.0)
-	  ptbuf[pt].flux -= avapcor[aper];
-
-      /* Write out */
-      if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, aper, errstr))
-	goto error;
+	if(ptbuf[pt].aper[aper].flux > 0.0 && ptbuf[pt].aper[aper].fluxerrcom > 0.0)
+	  ptbuf[pt].aper[aper].flux -= avapcor[aper];
 
       /* Correct median flux */
       mefinfo->stars[star].medflux[aper] -= avapcor[aper];
     }
+
+    /* Write out */
+    if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
+      goto error;
   }
 
   return(0);
 
  error:
-  if(refbuf)
-    free((void *) refbuf);
   if(corbuf)
     free((void *) corbuf);
 

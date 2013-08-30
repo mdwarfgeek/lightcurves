@@ -153,12 +153,12 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   fmax = 0.0;
 
   for(star = 0; star < mefinfo->nstars; star++) {
-    if(data[star].flux > 0.0 &&          /* Has a flux measurement */
-       data[star].fluxerr > 0.0 &&       /* And a reliable error */
+    if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
+       data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
        !data[star].satur &&              /* Not saturated */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
-      if(mfirst || data[star].flux > fmax) {
-	fmax = data[star].flux;
+      if(mfirst || data[star].aper[meas].flux > fmax) {
+	fmax = data[star].aper[meas].flux;
 	mfirst = 0;
       }
     }
@@ -205,11 +205,11 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   /* Calculate median and sigma of the rms of the comp stars */
   opt = 0;
   for(star = 0; star < mefinfo->nstars; star++) {
-    if(data[star].flux > 0.0 &&          /* Has a flux measurement */
-       data[star].fluxerr > 0.0 &&       /* And a reliable error */
+    if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
+       data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
        mefinfo->stars[star].sigflux[meas] > 0 &&
-       data[star].flux > fmin &&
-       data[star].flux < fmax &&         /* Not saturated */
+       data[star].aper[meas].flux > fmin &&
+       data[star].aper[meas].flux < fmax &&         /* Not saturated */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
       medbuf[opt] = mefinfo->stars[star].sigflux[meas];
       opt++;
@@ -226,14 +226,14 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   /* Calculate initial median and sigma offset */
   opt = 0;
   for(star = 0; star < mefinfo->nstars; star++) {
-    if(data[star].flux > 0.0 &&          /* Has a flux measurement */
-       data[star].fluxerr > 0.0 &&       /* And a reliable error */
+    if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
+       data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
        mefinfo->stars[star].sigflux[meas] > 0 &&
        mefinfo->stars[star].sigflux[meas] < rmsclip &&
-       data[star].flux > fmin &&
-       data[star].flux < fmax &&         /* Not saturated */
+       data[star].aper[meas].flux > fmin &&
+       data[star].aper[meas].flux < fmax &&         /* Not saturated */
        mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
-      val = data[star].flux - mefinfo->stars[star].medflux[meas];
+      val = data[star].aper[meas].flux - mefinfo->stars[star].medflux[meas];
 
       medbuf[opt] = val;
       opt++;
@@ -292,12 +292,12 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     swt = 0.0;
 
     for(star = 0; star < mefinfo->nstars; star++) {
-      if(data[star].flux > 0.0 &&          /* Has a flux measurement */
-	 data[star].fluxerr > 0.0 &&       /* And a reliable error */
+      if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
+	 data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
-	 data[star].flux > fmin &&
-	 data[star].flux < fmax &&         /* Not saturated */
+	 data[star].aper[meas].flux > fmin &&
+	 data[star].aper[meas].flux < fmax &&         /* Not saturated */
 	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
@@ -306,7 +306,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
 	pcorr = polyeval(pdx, pdy, coeff, degree);
 
-	val = data[star].flux - mefinfo->stars[star].medflux[meas];
+	val = data[star].aper[meas].flux - mefinfo->stars[star].medflux[meas];
 	pval = val - pcorr;
 
 	/* Use the ones within SIGCLIP of the median */
@@ -332,12 +332,12 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
     /* Accumulate sums for polynomial fit */
     for(star = 0; star < mefinfo->nstars; star++) {
-      if(data[star].flux > 0.0 &&          /* Has a flux measurement */
-	 data[star].fluxerr > 0.0 &&       /* And a reliable error */
+      if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
+	 data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
-	 data[star].flux > fmin &&
-	 data[star].flux < fmax &&         /* Not saturated */
+	 data[star].aper[meas].flux > fmin &&
+	 data[star].aper[meas].flux < fmax &&         /* Not saturated */
 	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
@@ -348,19 +348,19 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
             
 	pcorr = polyeval(pdx, pdy, coeff, degree);
 
-	val = data[star].flux - mefinfo->stars[star].medflux[meas];
+	val = data[star].aper[meas].flux - mefinfo->stars[star].medflux[meas];
 	pval = val - pcorr;
 
 	/* Use the ones within SIGCLIP of the median */
 	if(sigoff == 0.0 || fabsf(pval - medoff) < SIGCLIP * sigoff) {
 	  polyaccum(dx, dy, wt, val, a, b, degree);
-	  data[star].wt = wt;
+	  data[star].aper[meas].wt = wt;
 	}
 	else
-	  data[star].wt = 0;
+	  data[star].aper[meas].wt = 0;
       }
       else
-	data[star].wt = 0;
+	data[star].aper[meas].wt = 0;
     }
 
     /* Make a copy first */
@@ -407,12 +407,12 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     newchisq = 0;
     opt = 0;
     for(star = 0; star < mefinfo->nstars; star++) {
-      if(data[star].flux > 0.0 &&          /* Has a flux measurement */
-	 data[star].fluxerr > 0.0 &&       /* And a reliable error */
+      if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
+	 data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
-	 data[star].flux > fmin &&
-	 data[star].flux < fmax &&         /* Not saturated */
+	 data[star].aper[meas].flux > fmin &&
+	 data[star].aper[meas].flux < fmax &&         /* Not saturated */
 	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
@@ -424,7 +424,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	pcorr = polyeval(pdx, pdy, coeff, degree);
 	corr = polyeval(dx, dy, b, degree);
 
-	val = data[star].flux - mefinfo->stars[star].medflux[meas];
+	val = data[star].aper[meas].flux - mefinfo->stars[star].medflux[meas];
 	pval = val - pcorr;
 
 	/* Use the ones within SIGCLIP of the (old) median */
@@ -433,7 +433,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	  newchisq += (val - corr)*(val - corr) * wt;
 	  opt++;
 
-	  lastsig = data[star].fluxerr;
+	  lastsig = data[star].aper[meas].fluxerr;
 	
 #ifdef DEBUG
 	  tmpx[0] = mefinfo->stars[star].x;
@@ -502,7 +502,7 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
 
   /* Apply fit */
   for(star = 0; star < mefinfo->nstars; star++) {
-    if(data[star].flux > 0.0) {
+    if(data[star].aper[meas].flux > 0.0) {
       dx = mefinfo->stars[star].x - sysbuf[frame].xbar;
       dy = mefinfo->stars[star].y - sysbuf[frame].ybar;
 
@@ -511,12 +511,12 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
 
       //printf("%f %f %f %f\n", corr, sqrt(var), sysbuf[frame].sigoff, sysbuf[frame].sigm);
 
-      data[star].flux -= corr;
+      data[star].aper[meas].flux -= corr;
 
-      if(data[star].fluxerr > 0)
-	data[star].fluxerrcom = sqrt(data[star].fluxerr*data[star].fluxerr + var);
+      if(data[star].aper[meas].fluxerr > 0)
+	data[star].aper[meas].fluxerrcom = sqrt(data[star].aper[meas].fluxerr*data[star].aper[meas].fluxerr + var);
       else
-	data[star].fluxerrcom = 0.0;
+	data[star].aper[meas].fluxerrcom = 0.0;
     }
   }
 

@@ -32,7 +32,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   float tmp, chisq;
   long nchisq;
 
-  float medoff, sigoff;
+  float medoff[NFLUX], sigoff[NFLUX];
 
   int iseg, found, haveref;
   float medref, corr;
@@ -116,39 +116,38 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     goto error;
   }
 
-  /* Loop through the various flux measures */
   meas1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
   meas2 = (mefinfo->aperture ? mefinfo->aperture : NFLUX);
 
-  for(meas = meas1; meas < meas2; meas++) {
-    /* Apply polynomial correction if requested */
-    if(mefinfo->degree >= 0) {
-      if(verbose && isatty(1))
-	printf("\r Processing aperture %ld of %d",
-	       meas+1, NFLUX);
+  /* Apply polynomial correction if requested */
+  if(mefinfo->degree >= 0) {
+    /* Iterate between computing object median and rms, and
+     * successive frame corrections.  The polynomial fit
+     * (if any) is only done on the last iteration, using
+     * a simple constant for the others, so we don't
+     * disappear up our own exhaust pipe.
+     *
+     * The purpose of the earlier iterations is to refine
+     * the rms estimate used for weighting in the least
+     * squares analysis, so that it reflects the actual
+     * error in that object and not the frame-to-frame
+     * offsets (which are the dominant effect otherwise
+     * on data taken in non-photometric conditions).
+     */
+    for(iter = 0; iter < NITER; iter++) {
+      degree = (iter == NITER-1 ? mefinfo->degree : 0);
       
-      /* Iterate between computing object median and rms, and
-       * successive frame corrections.  The polynomial fit
-       * (if any) is only done on the last iteration, using
-       * a simple constant for the others, so we don't
-       * disappear up our own exhaust pipe.
-       *
-       * The purpose of the earlier iterations is to refine
-       * the rms estimate used for weighting in the least
-       * squares analysis, so that it reflects the actual
-       * error in that object and not the frame-to-frame
-       * offsets (which are the dominant effect otherwise
-       * on data taken in non-photometric conditions).
-       */
-      for(iter = 0; iter < NITER; iter++) {
-	degree = (iter == NITER-1 ? mefinfo->degree : 0);
+    if(verbose && isatty(1))
+      printf("\r Processing iteration %d of %d",
+	     iter+1, NITER);
 
-	/* Compute per-object, per-segment median flux */
-	for(star = 0; star < mefinfo->nstars; star++) {
-	  /* Read in measurements for this star */
-	  if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
-	    goto error;
-	  
+      /* Compute per-object, per-segment median flux */
+      for(star = 0; star < mefinfo->nstars; star++) {
+	/* Read in measurements for this star */
+	if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
+	  goto error;
+	
+	for(meas = meas1; meas < meas2; meas++) {
 	  /* Compute segment medians and global median */
 	  opt1 = 0;
 	  medref = 0;
@@ -159,8 +158,8 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    opt2 = 0;
 
 	    for(pt = 0; pt < mefinfo->nf; pt++)
-	      if(ptbuf[pt].flux != 0.0 && mefinfo->frames[pt].iseg == iseg) {
-		medbuf2[opt2] = ptbuf[pt].flux;
+	      if(ptbuf[pt].aper[meas].flux != 0.0 && mefinfo->frames[pt].iseg == iseg) {
+		medbuf2[opt2] = ptbuf[pt].aper[meas].flux;
 		opt2++;
 	      }
 
@@ -186,29 +185,32 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
 	    /* Global median, after correction */
 	    for(pt = 0; pt < mefinfo->nf; pt++)
-	      if(ptbuf[pt].flux != 0.0 && mefinfo->frames[pt].iseg == iseg) {
+	      if(ptbuf[pt].aper[meas].flux != 0.0 && mefinfo->frames[pt].iseg == iseg) {
 		if(mefinfo->domerid > 1) {
-		  ptbuf[pt].flux -= corr;
+		  ptbuf[pt].aper[meas].flux -= corr;
 
-		  medbuf1[opt1] = ptbuf[pt].flux;
+		  medbuf1[opt1] = ptbuf[pt].aper[meas].flux;
 		}
 		else
-		  medbuf1[opt1] = ptbuf[pt].flux - corr;
+		  medbuf1[opt1] = ptbuf[pt].aper[meas].flux - corr;
 
 		opt1++;
 	      }
 	  }
 
 	  medsig(medbuf1, opt1, &medflux, &sigflux);
+	  
           mefinfo->stars[star].medflux[meas] = medflux;
           mefinfo->stars[star].sigflux[meas] = sigflux;
-
-	  if(mefinfo->domerid > 1)
-            /* Write out measurements for this star */
-            if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
-              goto error;
 	}
 
+	if(mefinfo->domerid > 1)
+	  /* Write out measurements for this star */
+	  if(buffer_put_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
+	    goto error;
+      }
+
+      for(meas = meas1; meas < meas2; meas++) {
 	/* Compute and take off median correction in each segment - this
 	 * forces any "common-mode" components present in every object to
 	 * go into the frame corrections instead.
@@ -230,10 +232,10 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  
 	  if(opt1 > 0) {
 	    medsig(medbuf1, opt1, &(medcorr[iseg]), (float *) NULL);
-
+	    
 	    if(verbose > 2)
 	      printf("medcorr[%d]=%.4f\n", iseg, medcorr[iseg]);
-
+	    
 	    /* Take it off */
 	    for(star = 0; star < mefinfo->nstars; star++)
 	      mefinfo->stars[star].segs[iseg].corr[meas] -= medcorr[iseg];
@@ -241,18 +243,20 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  else
 	    medcorr[iseg] = 0;
 	}
-	
-	/* Compute 2-D correction for each frame */
-	for(pt = 0; pt < mefinfo->nf; pt++) {
-	  /* Read in measurements for this frame */
-	  if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
-	    goto error;
+      }
 
+      /* Compute 2-D correction for each frame */
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+	/* Read in measurements for this frame */
+	if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
+	  goto error;
+	
+	for(meas = meas1; meas < meas2; meas++) {
 	  /* Take off median correction from actual points if necessary */
 	  if(mefinfo->domerid > 1)
 	    for(star = 0; star < mefinfo->nstars; star++)
-	      if(ptbuf[star].flux != 0.0)
-		ptbuf[star].flux += medcorr[mefinfo->frames[pt].iseg];
+	      if(ptbuf[star].aper[meas].flux != 0.0)
+		ptbuf[star].aper[meas].flux += medcorr[mefinfo->frames[pt].iseg];
 	  
 	  /* Perform polynomial fit correction */
 	  if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf1, degree,
@@ -268,47 +272,54 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      mefinfo->frames[pt].extinc += sysbuf[pt].coeff[0];
 	      mefinfo->frames[pt].sigm = sqrtf(sysbuf[pt].cov[0][0]);
 	    }
-
+	    
 	    /* Perform polynomial fit correction */
 	    if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf1, sysbuf, errstr))
 	      goto error;
 	  }	    
-
-	  if(sysbuf[pt].npt > 0 || mefinfo->domerid > 1) {
-	    /* Write out corrected fluxes */
-	    if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
-	      goto error;
-	  }
 	}
+	
+	/* Write out corrected fluxes */
+	if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
+	  goto error;
       }
     }
 
-    /* Compute final per-object median flux */
-    for(star = 0; star < mefinfo->nstars; star++) {
-      /* Read in measurements for this star */
-      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
-	goto error;
-	
+    if(verbose && isatty(1))
+      printf("\n");
+  }
+
+  /* Compute final per-object median flux */
+  for(star = 0; star < mefinfo->nstars; star++) {
+    /* Read in measurements for this star */
+    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
+      goto error;
+    
+    used = 0;
+    
+    for(meas = meas1; meas < meas2; meas++) {
       /* Calculate median flux and set "used" flag for comparison stars */
       opt1 = 0;
-      used = 0;
       for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(ptbuf[pt].flux != 0.0) {
-	  medbuf1[opt1] = ptbuf[pt].flux;
+	if(ptbuf[pt].aper[meas].flux != 0.0) {
+	  medbuf1[opt1] = ptbuf[pt].aper[meas].flux;
 	  opt1++;
 	}
-	if(ptbuf[pt].wt > 0)
+	if(ptbuf[pt].aper[meas].wt > 0)
 	  used = 1;
       }
       
       medsig(medbuf1, opt1, &medflux, &sigflux);
       mefinfo->stars[star].medflux[meas] = medflux;
       mefinfo->stars[star].sigflux[meas] = sigflux;
-      mefinfo->stars[star].used += used;
     }
-
-    if(!norenorm) {
-      /* Compute median offset from reference system */
+    
+    mefinfo->stars[star].used += used;
+  }
+  
+  if(!norenorm) {
+    /* Compute median offset from reference system */
+    for(meas = meas1; meas < meas2; meas++) {
       opt1 = 0;
       for(star = 0; star < mefinfo->nstars; star++)
 	if(mefinfo->stars[star].medflux[meas] != 0.0 &&
@@ -319,40 +330,43 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  opt1++;
 	}
       
-      medsig(medbuf1, opt1, &medoff, &sigoff);
+      medsig(medbuf1, opt1, &(medoff[meas]), &(sigoff[meas]));
       
       if(verbose)
-	printf("  Calibration offset: %.3f %.3f\n", medoff, sigoff);
-
-      /* Apply offset */
-      for(pt = 0; pt < mefinfo->nf; pt++) {
-	/* Read in measurements for this frame */
-	if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
-	  goto error;
-	
-	for(star = 0; star < mefinfo->nstars; star++)
-	  if(ptbuf[star].flux != 0.0)
-	    ptbuf[star].flux -= medoff;
-	
-	/* Write out corrected fluxes */
-	if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
-	  goto error;
+	printf("  Aperture %ld calibration offset: %.3f %.3f\n",
+	       meas+1, medoff[meas], sigoff[meas]);
+    }
+    
+    /* Apply offset */
+    for(pt = 0; pt < mefinfo->nf; pt++) {
+      /* Read in measurements for this frame */
+      if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
+	goto error;
       
-	if(meas == meas1)
-	  mefinfo->frames[pt].extinc += medoff;
-      }
-
-      /* Compute final per-object median flux */
-      for(star = 0; star < mefinfo->nstars; star++) {
-	/* Read in measurements for this star */
-	if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
-	  goto error;
-	
+      for(meas = meas1; meas < meas2; meas++)
+	for(star = 0; star < mefinfo->nstars; star++)
+	  if(ptbuf[star].aper[meas].flux != 0.0)
+	    ptbuf[star].aper[meas].flux -= medoff[meas];
+      
+      /* Write out corrected fluxes */
+      if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
+	goto error;
+      
+      mefinfo->frames[pt].extinc += medoff[meas1];
+    }
+    
+    /* Compute final per-object median flux */
+    for(star = 0; star < mefinfo->nstars; star++) {
+      /* Read in measurements for this star */
+      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
+	goto error;
+      
+      for(meas = meas1; meas < meas2; meas++) {
 	/* Calculate median flux */
 	opt1 = 0;
 	for(pt = 0; pt < mefinfo->nf; pt++) {
-	  if(ptbuf[pt].flux != 0.0) {
-	    medbuf1[opt1] = ptbuf[pt].flux;
+	  if(ptbuf[pt].aper[meas].flux != 0.0) {
+	    medbuf1[opt1] = ptbuf[pt].aper[meas].flux;
 	    opt1++;
 	  }
 	}
@@ -364,9 +378,6 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     }
   }
 
-  if(verbose && isatty(1))
-    printf("\n");
-
   /* Aperture correct and choose default aperture */
   if(chooseap(buf, mefinfo, ptbuf, medbuf1, errstr))
     goto error;
@@ -377,14 +388,15 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Read in measurements for this star */
-    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, mefinfo->stars[star].iap, errstr))
+    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
       goto error;
     
     /* Calculate median flux */
     opt1 = 0;
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerrcom != 0.0) {
-	medbuf1[opt1] = ptbuf[pt].flux;
+      if(ptbuf[pt].aper[mefinfo->stars[star].iap].flux != 0.0 &&
+	 ptbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom != 0.0) {
+	medbuf1[opt1] = ptbuf[pt].aper[mefinfo->stars[star].iap].flux;
 	opt1++;
       }
     }
@@ -407,10 +419,11 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     nchisq = 0;
 
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerrcom != 0.0) {
-	tmp = ptbuf[pt].flux - mefinfo->stars[star].med;
+      if(ptbuf[pt].aper[mefinfo->stars[star].iap].flux != 0.0 &&
+	 ptbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom != 0.0) {
+	tmp = ptbuf[pt].aper[mefinfo->stars[star].iap].flux - mefinfo->stars[star].med;
 
-	chisq += tmp*tmp / (ptbuf[pt].fluxerrcom * ptbuf[pt].fluxerrcom);
+	chisq += tmp*tmp / (ptbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom * ptbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom);
 	nchisq++;
       }
     }
@@ -423,7 +436,8 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       opt1 = 0;
 
       for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(ptbuf[pt].flux != 0.0 && mefinfo->frames[pt].iseg == iseg) {
+	if(ptbuf[pt].aper[mefinfo->stars[star].iap].flux != 0.0 &&
+	   mefinfo->frames[pt].iseg == iseg) {
 	  medbuf1[opt1] = ptbuf[pt].x;
 	  medbuf2[opt1] = ptbuf[pt].y;
 	  opt1++;
@@ -447,7 +461,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   /* Compute positioning error for each frame */
   for(pt = 0; pt < mefinfo->nf; pt++) {
     /* Read in measurements for this frame */
-    if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, 0, errstr))
+    if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
       goto error;
 
     /* Compute transformation to ref. system */
@@ -458,7 +472,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     opt1 = 0;
 
     for(star = 0; star < mefinfo->nstars; star++)
-      if(ptbuf[star].flux != 0.0) {
+      if(ptbuf[star].aper[mefinfo->stars[star].iap].flux != 0.0) {
 	medbuf1[opt1] = ptbuf[star].x - mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].medx;
 	medbuf2[opt1] = ptbuf[star].y - mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].medy;
 	opt1++;
@@ -570,28 +584,26 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
     goto error;
   }
 
-  /* Loop through the various flux measures */
   meas1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
   meas2 = (mefinfo->aperture ? mefinfo->aperture : NFLUX);
 
-  for(meas = meas1; meas < meas2; meas++) {
-    /* Apply polynomial correction if requested */
-    if(mefinfo->degree >= 0) {
-      if(verbose && isatty(1))
-	printf("\r Processing aperture %ld of %d",
-	       meas+1, NFLUX);
-      
-      /* Compute 2-D correction for each frame */
-      for(pt = 0; pt < mefinfo->nf; pt++) {
-	/* Read in measurements for this frame */
-	if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
-	  goto error;
+  /* Apply polynomial correction if requested */
+  if(mefinfo->degree >= 0) {
+    if(verbose && isatty(1))
+      printf(" Computing frame corrections\n");
+    
+    /* Compute 2-D correction for each frame */
+    for(pt = 0; pt < mefinfo->nf; pt++) {
+      /* Read in measurements for this frame */
+      if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
+	goto error;
 	
+      for(meas = meas1; meas < meas2; meas++) {
 	/* Apply any meridian flip offsets */
 	if(mefinfo->domerid > 1) 
 	  for(star = 0; star < mefinfo->nstars; star++) 
-	    if(ptbuf[star].flux != 0.0)
-	      ptbuf[star].flux -= mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].corr[meas];
+	    if(ptbuf[star].aper[meas].flux != 0.0)
+	      ptbuf[star].aper[meas].flux -= mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].corr[meas];
 
 	/* Perform polynomial fit correction */
 	if(systematic_fit(ptbuf, mefinfo, pt, meas, medbuf, mefinfo->degree,
@@ -611,27 +623,30 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  /* Perform polynomial fit correction */
 	  if(systematic_apply(ptbuf, mefinfo, pt, meas, medbuf, sysbuf, errstr))
 	    goto error;
-	}	  
-	
-	if(sysbuf[pt].npt > 0 || mefinfo->domerid > 1) {
-	  /* Write out corrected fluxes */
-	  if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, meas, errstr))
-	    goto error;
 	}
       }
+      
+      /* Write out corrected fluxes */
+      if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
+	goto error;
     }
 
-    /* Compute final per-object, per-aperture median flux */
-    for(star = 0; star < mefinfo->nstars; star++) {
-      /* Read in measurements for this star */
-      if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, meas, errstr))
-	goto error;
-	
+    if(verbose && isatty(1))
+      printf("\n");
+  }
+
+  /* Compute final per-object, per-aperture median flux */
+  for(star = 0; star < mefinfo->nstars; star++) {
+    /* Read in measurements for this star */
+    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
+      goto error;
+    
+    for(meas = meas1; meas < meas2; meas++) {
       /* Calculate median flux and set "used" flag for comparison stars */
       opt = 0;
       for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(ptbuf[pt].flux != 0.0) {
-	  medbuf[opt] = ptbuf[pt].flux;
+	if(ptbuf[pt].aper[meas].flux != 0.0) {
+	  medbuf[opt] = ptbuf[pt].aper[meas].flux;
 	  opt++;
 	}
       }
@@ -642,23 +657,21 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
     }
   }
 
-  if(verbose && isatty(1))
-    printf("\n");
-
   /* Recompute per-object median flux (NEW POINTS ONLY) */
   if(verbose)
     printf(" Computing median fluxes\n");
 
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Read in measurements for this star */
-    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, mefinfo->stars[star].iap, errstr))
+    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
       goto error;
     
     /* Calculate median flux */
     opt = 0;
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerrcom != 0.0) {
-	medbuf[opt] = ptbuf[pt].flux;
+      if(ptbuf[pt].aper[mefinfo->stars[star].iap].flux != 0.0 &&
+	 ptbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom != 0.0) {
+	medbuf[opt] = ptbuf[pt].aper[mefinfo->stars[star].iap].flux;
 	opt++;
       }
     }
@@ -683,7 +696,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Read in measurements for this star */
-    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, mefinfo->stars[star].iap, errstr))
+    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
       goto error;
 
     /* Calculate chi-squared */
@@ -691,10 +704,11 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
     nchisq = 0;
 
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(ptbuf[pt].flux != 0.0 && ptbuf[pt].fluxerrcom != 0.0) {
-	tmp = ptbuf[pt].flux - mefinfo->stars[star].med;
+      if(ptbuf[pt].aper[mefinfo->stars[star].iap].flux != 0.0 &&
+	 ptbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom != 0.0) {
+	tmp = ptbuf[pt].aper[mefinfo->stars[star].iap].flux - mefinfo->stars[star].med;
 
-	chisq += tmp*tmp / (ptbuf[pt].fluxerrcom * ptbuf[pt].fluxerrcom);
+	chisq += tmp*tmp / (ptbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom * ptbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom);
 	nchisq++;
       }
     }
@@ -709,7 +723,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
   /* Compute positioning error for each frame */
   for(pt = 0; pt < mefinfo->nf; pt++) {
     /* Read in measurements for this frame */
-    if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, 0, errstr))
+    if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
       goto error;
 
     /* Compute transformation to ref. system */

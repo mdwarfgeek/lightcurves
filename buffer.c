@@ -60,7 +60,7 @@ int buffer_init (struct buffer_info *b, char *errstr) {
   return(1);
 }
 
-int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, int nflux, char *errstr) {
+int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, char *errstr) {
   off_t totsize;
   int rv;
 
@@ -68,7 +68,7 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, int nflux, char 
   /* Unmap the buffer */
   if(b->buf) {
     rv = munmap((void *) b->buf,
-		((off_t) b->nobj) * ((off_t) b->nmeas) * ((off_t) b->nflux) *
+		((off_t) b->nobj) * ((off_t) b->nmeas) *
 		sizeof(struct lc_point));
     if(rv < 0) {
       report_syserr(errstr, "munmap");
@@ -78,7 +78,7 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, int nflux, char 
 #endif
 
   /* Calculate total required file size */
-  totsize = ((off_t) nobj) * ((off_t) nmeas) * ((off_t) nflux) * sizeof(struct lc_point);
+  totsize = ((off_t) nobj) * ((off_t) nmeas) * sizeof(struct lc_point);
 
   /* Truncate the file to that size */
   rv = ftruncate(b->fd, totsize);
@@ -99,7 +99,6 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, int nflux, char 
 
   b->nobj = nobj;
   b->nmeas = nmeas;
-  b->nflux = nflux;
 
   return(0);
 
@@ -115,11 +114,10 @@ void buffer_close (struct buffer_info *b) {
 
 int buffer_fetch_frame (struct buffer_info *b, struct lc_point *buf,
 			long noff, long nelem,
-			long iframe, int iflux, char *errstr) {
+			long iframe, char *errstr) {
   off_t offset;
 
-  offset = ((off_t) b->nmeas) * ((off_t) b->nobj) * ((off_t) iflux) +
-           ((off_t) iframe) * ((off_t) b->nobj) +
+  offset = ((off_t) iframe) * ((off_t) b->nobj) +
            ((off_t) noff);
 
   if(buffer_read(b, buf, offset, nelem, errstr))
@@ -133,14 +131,12 @@ int buffer_fetch_frame (struct buffer_info *b, struct lc_point *buf,
 
 int buffer_fetch_object (struct buffer_info *b, struct lc_point *buf,
 			 long noff, long nelem,
-			 long ipoint, int iflux, char *errstr) {
-  off_t foff, offset;
+			 long ipoint, char *errstr) {
+  off_t offset;
   long iframe;
 
-  foff = ((off_t) b->nmeas) * ((off_t) b->nobj) * ((off_t) iflux);
-
   for(iframe = 0; iframe < nelem; iframe++) {
-    offset = foff + ((off_t) (iframe+noff)) * ((off_t) b->nobj) + ((off_t) ipoint);
+    offset = ((off_t) (iframe+noff)) * ((off_t) b->nobj) + ((off_t) ipoint);
 
     if(buffer_read(b, buf + iframe, offset, 1, errstr))
       goto error;
@@ -154,11 +150,10 @@ int buffer_fetch_object (struct buffer_info *b, struct lc_point *buf,
 
 int buffer_put_frame (struct buffer_info *b, struct lc_point *buf,
 		      long noff, long nelem,
-		      long iframe, int iflux, char *errstr) {
+		      long iframe, char *errstr) {
   off_t offset;
 
-  offset = ((off_t) b->nmeas) * ((off_t) b->nobj) * ((off_t) iflux) +
-           ((off_t) iframe) * ((off_t) b->nobj) +
+  offset = ((off_t) iframe) * ((off_t) b->nobj) +
            ((off_t) noff);
 
   if(buffer_write(b, buf, offset, nelem, errstr))
@@ -172,14 +167,12 @@ int buffer_put_frame (struct buffer_info *b, struct lc_point *buf,
 
 int buffer_put_object (struct buffer_info *b, struct lc_point *buf,
 		       long noff, long nelem,
-		       long ipoint, int iflux, char *errstr) {
-  off_t foff, offset;
+		       long ipoint, char *errstr) {
+  off_t offset;
   long iframe;
 
-  foff = ((off_t) b->nmeas) * ((off_t) b->nobj) * ((off_t) iflux);
-
   for(iframe = 0; iframe < nelem; iframe++) {
-    offset = foff + ((off_t) (iframe+noff)) * ((off_t) b->nobj) + ((off_t) ipoint);
+    offset = ((off_t) (iframe+noff)) * ((off_t) b->nobj) + ((off_t) ipoint);
 
     if(buffer_write(b, buf + iframe, offset, 1, errstr))
       goto error;

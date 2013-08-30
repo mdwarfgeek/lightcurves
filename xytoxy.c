@@ -151,11 +151,11 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
   opt = 0;
 
   for(star = 0; star < mefinfo->nstars; star++) {
-    if(data[star].flux > 0.0 &&          /* Has a flux measurement */
-       data[star].fluxerr > 0.0 &&       /* And a reliable error */
+    if(data[star].aper[0].flux > 0.0 &&          /* Has a flux measurement */
+       data[star].aper[0].fluxerr > 0.0 &&       /* And a reliable error */
        mefinfo->stars[star].sigflux[0] > 0 &&
-       data[star].flux < mefinfo->sysulim &&  /* Not saturated */
-       mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
+       data[star].aper[0].flux < mefinfo->sysulim &&  /* Not saturated */
+       mefinfo->stars[star].cls == -1) {   /* Is classified as stellar */
       wtbuf[star] = 1.0;
       rejbuf[star] = 0;
       opt++;

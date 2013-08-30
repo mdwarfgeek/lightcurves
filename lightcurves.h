@@ -37,12 +37,16 @@ struct instvers {
 struct lc_point {
   double x;
   double y;
-  float flux;
-  float fluxerr;
-  float fluxerrcom;  /* combined uncertainty including fit */
+
+  struct {
+    float flux;
+    float fluxerr;
+    float fluxerrcom;  /* combined uncertainty including fit */
+    float wt;  /* weight given in computing polynomial corr. */
+  } aper[NFLUX];
+
   float airmass;
   float ha;
-  float wt;  /* weight given in computing polynomial corr. */
   float sky;   /* local sky */
   float peak;  /* peak counts including sky */
   unsigned char satur : 1;
@@ -68,7 +72,7 @@ struct lc_star {
   int bflag;
   long cflag;
 
-  struct lc_point ref[NFLUX];
+  struct lc_point ref;
 
   /* Reference magnitude to which to tie the photometry */
   float refmag;  /* in aperture REFAP */
@@ -170,7 +174,8 @@ struct lc_segment {
 struct lc_mef {
   /* Star info */
   struct lc_star *stars;
-  long nstars;
+  long nstars;  /* number of stars from table */
+  long nrows;  /* original number of rows in table */
 
   /* Degree of polynomial fit to be applied, zero for none */
   int degree;
@@ -253,7 +258,6 @@ struct buffer_info {
   /* Buffer sizing */
   long nobj;
   long nmeas;
-  int nflux;
 
   /* Memory-mapped array */
   unsigned char *buf;
@@ -279,22 +283,22 @@ extern int verbose;
 
 /* Disk buffer management: buffer.c */
 int buffer_init (struct buffer_info *b, char *errstr);
-int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, int nflux, char *errstr);
+int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, char *errstr);
 void buffer_close (struct buffer_info *b);
 
 int buffer_fetch_frame (struct buffer_info *b, struct lc_point *buf,
 			long noff, long nelem,
-			long iframe, int iflux, char *errstr);
+			long iframe, char *errstr);
 int buffer_fetch_object (struct buffer_info *b, struct lc_point *buf,
 			 long noff, long nelem,
-			 long ipoint, int iflux, char *errstr);
+			 long ipoint, char *errstr);
 
 int buffer_put_frame (struct buffer_info *b, struct lc_point *buf,
 		      long noff, long nelem,
-		      long iframe, int iflux, char *errstr);
+		      long iframe, char *errstr);
 int buffer_put_object (struct buffer_info *b, struct lc_point *buf,
 		       long noff, long nelem,
-		       long ipoint, int iflux, char *errstr);
+		       long ipoint, char *errstr);
 
 /* Aperture combination: chooseap.c */
 int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
@@ -342,12 +346,13 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 	     char *errstr);
 int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	      int diffmode, float satlev,
+	      int outcls, int wantoutcls,
 	      char *errstr);
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
 	      int doinstvers, struct instvers *instverslist, int ninstvers,
-	      int diffmode, float satlev, int checkrows,
+	      int diffmode, float satlev,
 	      char *errstr);
 
 /* Utility functions: dsolve.c, dmatinv.c, linear.c, medsig.c, sortfloat.c */

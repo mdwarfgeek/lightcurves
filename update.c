@@ -350,7 +350,7 @@ int main (int argc, char *argv[]) {
       fatal(1, "read_lc: HDU %d: %s", mef+2, errstr);
 
     /* Get disk buffer */
-    if(buffer_alloc(&buf, meflist[mef].nstars, nf, NFLUX, errstr))
+    if(buffer_alloc(&buf, meflist[mef].nstars, nf, errstr))
       fatal(1, "buffer_alloc: %s", errstr);
 
     /* Allocate buffer for frame info */
@@ -366,7 +366,7 @@ int main (int argc, char *argv[]) {
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
 		  dointra, &(intralist[mef]),
 		  doinstvers, instverslist, ninstvers,
-		  diffmode, satlev, 0, errstr))
+		  diffmode, satlev, errstr))
 	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
     }
 
@@ -1256,7 +1256,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     }
 
     /* Get lightcurve */
-    if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, mefinfo->stars[star].iap, errstr))
+    if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, errstr))
       goto error;
 
     /* Fill in buffer */
@@ -1264,12 +1264,12 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     for(pt = 0; pt < mefinfo->nf; pt++) {
       flags = 0;
 
-      if(lcbuf[pt].flux != 0.0) {
-	fluxbuf[nmeasexist+pt] = mefinfo->zp - lcbuf[pt].flux;
+      if(lcbuf[pt].aper[mefinfo->stars[star].iap].flux != 0.0) {
+	fluxbuf[nmeasexist+pt] = mefinfo->zp - lcbuf[pt].aper[mefinfo->stars[star].iap].flux;
 
-	if(abs(lcbuf[pt].flux > 20)) {
+	if(abs(lcbuf[pt].aper[mefinfo->stars[star].iap].flux > 20)) {
 	  printf("Warning: daft-looking flux for star %ld point %ld: %.2g\n",
-		 star+1, pt+1, lcbuf[pt].flux);
+		 star+1, pt+1, lcbuf[pt].aper[mefinfo->stars[star].iap].flux);
 	}
 
 	/* Unset the all saturated flag if not saturated */
@@ -1280,8 +1280,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	  satflag++;
 	}
 
-	if(lcbuf[pt].fluxerrcom > 0.0)
-	  fluxerrbuf[nmeasexist+pt] = lcbuf[pt].fluxerrcom;
+	if(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom > 0.0)
+	  fluxerrbuf[nmeasexist+pt] = lcbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom;
 	else
 	  fluxerrbuf[nmeasexist+pt] = -999.0;
       }
@@ -1295,7 +1295,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       ylcbuf[nmeasexist+pt] = lcbuf[pt].y;
       airbuf[nmeasexist+pt] = lcbuf[pt].airmass;
       habuf[nmeasexist+pt] = lcbuf[pt].ha;
-      wtbuf[nmeasexist+pt] = lcbuf[pt].wt;
+      wtbuf[nmeasexist+pt] = lcbuf[pt].aper[mefinfo->stars[star].iap].wt;
       locskybuf[nmeasexist+pt] = lcbuf[pt].sky;
       peakbuf[nmeasexist+pt] = lcbuf[pt].peak;
 
@@ -1312,21 +1312,17 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     for(ap = ap1; ap < ap2; ap++) {
       soff = (ap-ap1+1)*nmeasout + nmeasexist;
       
-      /* Get lightcurve */
-      if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, ap, errstr))
-	goto error;
-
       /* Fill in buffer */
       for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(lcbuf[pt].flux != 0.0) {
-	  fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].flux;
-	  if(lcbuf[pt].fluxerrcom > 0.0)
-	    fluxerrbuf[soff+pt] = lcbuf[pt].fluxerrcom;
+	if(lcbuf[pt].aper[ap].flux != 0.0) {
+	  fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].aper[ap].flux;
+	  if(lcbuf[pt].aper[ap].fluxerrcom > 0.0)
+	    fluxerrbuf[soff+pt] = lcbuf[pt].aper[ap].fluxerrcom;
 	  else
 	    fluxerrbuf[soff+pt] = -999.0;
 	}
 
-	wtbuf[soff+pt] = lcbuf[pt].wt;
+	wtbuf[soff+pt] = lcbuf[pt].aper[ap].wt;
       }
     }
 
