@@ -86,7 +86,10 @@ struct lc_star {
   float chiap[NFLUX];
   long nchiap[NFLUX];
 
-  /* Used as comparison star in how many apertures? */
+  /* Usable as comparison star? */
+  int compok;
+
+  /* Used in practice? */
   int used;
 
   /* Which aperture did we choose? */
@@ -318,9 +321,9 @@ float calc_intra (float x, float y, struct intra *corr);
 
 /* Main routine: lightcurves.c */
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
-		 int norenorm, char *errstr);
+		 int norenorm, int noastrom, char *errstr);
 int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
-			char *errstr);
+			int noastrom, char *errstr);
 
 /* Diagnostic plots: plots.c */
 int do_plots (struct lc_mef *meflist, int nmefs,
@@ -334,6 +337,7 @@ int plot_corr (float *beforehist, float *beforewthist,
 	       float medoff, float sigoff, char *errstr);
 
 /* Systematics correction: systematic.c */
+void systematic_select (struct lc_star *stars, long nstars, float fmin, float fmax);
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f, char *errstr);
 int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
@@ -348,6 +352,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 	     char *errstr);
 int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	      int diffmode, float satlev,
+	      float sysllim, float sysulim,
 	      int outcls, int wantoutcls,
 	      char *errstr);
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,

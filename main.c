@@ -48,7 +48,7 @@ static void usage (char *av) {
 	  "         -V file   Use 'instrument version' table from 'file' (MEarth only).\n\n"
 	  "Output:\n"
 	  "         -c cls    Write out only comparison stars and class==cls.\n"
-	  "         -g file   Writes good frames list to 'file'.\n"
+	  "         -g file   Writes good frames list to 'file'.  Cannot be used with -c.\n"
 	  "         -o file   Writes lightcurves to 'file'.\n"
 	  "         -p        Disables plots.\n"
 	  "         -q        Decreases the verbosity level of the program.\n"
@@ -356,7 +356,8 @@ int main (int argc, char *argv[]) {
     }
 
     /* Read it in */
-    if(read_ref(inf, &(meflist[mef]), diffmode, satlev, outcls, wantoutcls, errstr))
+    if(read_ref(inf, &(meflist[mef]), diffmode, satlev,
+		sysllim, sysulim, outcls, wantoutcls, errstr))
       fatal(1, "read_ref: HDU %d: %s", mef+2, errstr);
 
     /* Get disk buffer */
@@ -445,19 +446,8 @@ int main (int argc, char *argv[]) {
 
     nstartot += meflist[mef].nstars;
 
-    /* Calculate syslim for this frame */
-    if(sysulim < 0)
-      meflist[mef].sysulim = -1.0;  /* calculate it later */
-    else 
-      meflist[mef].sysulim = meflist[mef].zp - sysulim;  /* user-supplied */
-
-    if(sysllim < 0)
-      meflist[mef].sysllim = -1.0;  /* calculate it later */
-    else 
-      meflist[mef].sysllim = meflist[mef].zp - sysllim;  /* user-supplied */
-
     /* Call into the main part of the program */
-    if(lightcurves(&buf, &(meflist[mef]), norenorm, errstr))
+    if(lightcurves(&buf, &(meflist[mef]), norenorm, wantoutcls, errstr))
       fatal(1, "%s", errstr);
 
     /* Calculate average extinction */
@@ -580,36 +570,36 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   /* Column templates */
   char *tmpl_ttype[] = { "x", "y", "medflux", "rms", "chisq", "nchisq",
 			 "class", "bflag", "cflag", "sflag", "pointer",
-			 "offsets", "apnum", "apradius",
+			 "offsets", "apnum", "apradius", "compok",
 			 "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
 			 "weight", "sky", "peak", "flags",
-			 "ra", "dec" };
+			 "ra", "dec", "refmag" };
   char *tmpl_tform[] = { "1D", "1D", "1E", "1E", "1E", "1J",
 			 "1I", "1I", "1J", "1J", "1J",
-			 tsbuf, "1I", "1E",
+			 tsbuf, "1I", "1E", "1B",
 			 tdbuf, tfbuf, tfbuf, tdbuf, tdbuf, tfbuf, tfbuf,
 			 tfbuf, tfbuf, tfbuf, tbbuf,
-			 "1D", "1D" };
+			 "1D", "1D", "1E" };
   char *tmpl_tunit[] = { "pixels", "pixels", "mag", "mag", "", "",
 			 "", "", "", "", "",
-			 "mag", "", "pixels",
+			 "mag", "", "pixels", "",
 			 "days", "mag", "mag", "pixels", "pixels", "", "radians",
 			 "", "counts", "counts", "",
-			 "radians", "radians" };
+			 "radians", "radians", "mag" };
   char *tmpl_tdisp[] = { "F8.2", "F8.2", "F7.4", "F7.4", "F10.1", "I4",
 			 "I2", "I2", "I4", "I8", "I8",
-			 "F7.4", "", "F4.2",
+			 "F7.4", "", "F4.2", "I1",
 			 "F14.6", "F7.4", "F7.4", "F8.2", "F8.2", "F6.4", "F9.6",
 			 "F9.0", "F8.2", "F5.0", "I3",
-			 "F9.6", "F9.6" };
+			 "F9.6", "F9.6", "F7.4" };
 
   /* Repeat column for every aperture?  1 = always, 2 = only if writing all requested */
   unsigned char tpap[] = { 0, 0, 1, 1, 0, 0,
 			   0, 0, 0, 0, 0,
-			   1, 0, 0,
+			   1, 0, 0, 0,
 			   0, 2, 2, 0, 0, 0, 0,
 			   2, 0, 0, 0,
-			   0, 0 };
+			   0, 0, 0 };
 
   /* Real arrays, we build these later */
   char **ttype = (char **) NULL, **tform, **tunit, **tdisp;
@@ -626,10 +616,11 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   double *xbuf = (double *) NULL, *ybuf, *rabuf, *decbuf;
   float *medbuf = (float *) NULL, *rmsbuf;
-  float *apbuf = (float *) NULL, *chibuf;
+  float *apbuf = (float *) NULL, *chibuf, *refmagbuf;
   long *ptrbuf = (long *) NULL, *cfbuf, *sfbuf, *nchibuf;
   short *clsbuf = (short *) NULL, *bfbuf, *apnumbuf;
   float *offbuf = (float *) NULL;
+  unsigned char *compokbuf = (unsigned char *) NULL;
   float *fluxbuf = (float *) NULL, *fluxerrbuf, *wtbuf;
   float *airbuf = (float *) NULL, *habuf, *locskybuf, *peakbuf;
   double *hjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
@@ -746,7 +737,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   if(wantoutcls) {
     nstarout = 0;
     for(star = 0; star < mefinfo->nstars; star++) {
-      if(mefinfo->stars[star].used ||
+      if(mefinfo->stars[star].compok ||
 	 mefinfo->stars[star].cls == outcls)
 	nstarout++;
     }
@@ -1089,52 +1080,56 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       goto error;
     }
 
-    snprintf(kbuf, sizeof(kbuf), "LXX%ld", pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[0], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LXY%ld", pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[1], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LXD%ld", pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[2], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LYY%ld", pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[3], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LYX%ld", pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[4], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LYD%ld", pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[5], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
-      goto error;
+    /* Suppress output of frame transformation if we only had the
+       photometric comparison stars.  It really needs everything. */
+    if(!wantoutcls) {
+      snprintf(kbuf, sizeof(kbuf), "LXX%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[0], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LXY%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[1], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LXD%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[2], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LYY%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[3], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LYX%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[4], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LYD%ld", pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[5], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
     }
 
     /* Calculate Earth's heliocentric position at this MJD */
@@ -1201,15 +1196,16 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   /* Allocate output buffers */
   xbuf = (double *) malloc(4 * rblksz * sizeof(double));
   medbuf = (float *) malloc(2 * rblksz * napcol * sizeof(float));
-  apbuf = (float *) malloc(2 * rblksz * sizeof(float));
+  apbuf = (float *) malloc(3 * rblksz * sizeof(float));
   ptrbuf = (long *) malloc(4 * rblksz * sizeof(long));
   clsbuf = (short *) malloc(3 * rblksz * sizeof(short));
   offbuf = (float *) malloc(mefinfo->nseg * napcol * rblksz * sizeof(float));
+  compokbuf = (unsigned char *) malloc(rblksz * sizeof(unsigned char));
   hjdbuf = (double *) malloc(3 * rblksz * mefinfo->nf * sizeof(double));
   fluxbuf = (float *) malloc(3 * rblksz * mefinfo->nf * nlapcol * sizeof(float));
   airbuf = (float *) malloc(4 * rblksz * mefinfo->nf * sizeof(float));
   flagbuf = (unsigned char *) malloc(rblksz * mefinfo->nf * sizeof(unsigned char));
-  if(!xbuf || !medbuf || !apbuf || !ptrbuf || !clsbuf || !offbuf || !hjdbuf || !fluxbuf || !airbuf || !flagbuf) {
+  if(!xbuf || !medbuf || !apbuf || !ptrbuf || !clsbuf || !offbuf || !compokbuf || !hjdbuf || !fluxbuf || !airbuf || !flagbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
@@ -1217,6 +1213,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   rmsbuf = medbuf + napcol * rblksz;
 
   chibuf = apbuf + rblksz;
+  refmagbuf = apbuf + 2 * rblksz;
 
   ybuf = xbuf + rblksz;
   rabuf = xbuf + 2 * rblksz;
@@ -1268,6 +1265,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   FORAP WRITE_COL_NULL(ffpcne, offbuf+ap*rblksz*mefinfo->nseg, mefinfo->nseg, -999.0);	\
   WRITE_COL(ffpcli, apnumbuf, 1);					\
   WRITE_COL(ffpcle, apbuf, 1);						\
+  WRITE_COL(ffpclb, compokbuf, 1);		       			\
   WRITE_COL_NULL(ffpcnd, hjdbuf, mefinfo->nf, -999.0);			\
   FORLAP WRITE_COL_NULL(ffpcne, fluxbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
   FORLAP WRITE_COL_NULL(ffpcne, fluxerrbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
@@ -1281,6 +1279,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   WRITE_COL(ffpclb, flagbuf, mefinfo->nf);				\
   WRITE_COL(ffpcld, rabuf, 1);						\
   WRITE_COL(ffpcld, decbuf, 1);						\
+  WRITE_COL_NULL(ffpcne, refmagbuf, 1, -999.0);	       			\
   if(status) {								\
     fitsio_err(errstr, status, "ffpcl");				\
     goto error;								\
@@ -1292,7 +1291,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   for(star = 0; star < mefinfo->nstars; star++) {
     if(wantoutcls &&
-       !mefinfo->stars[star].used &&
+       !mefinfo->stars[star].compok &&
        mefinfo->stars[star].cls != outcls)
       continue;  /* skip star */
 
@@ -1329,8 +1328,11 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
     apnumbuf[r] = mefinfo->stars[star].iap+1;
     apbuf[r] = mefinfo->stars[star].apradius;
+    compokbuf[r] = mefinfo->stars[star].compok;
     rabuf[r] = mefinfo->stars[star].ra;
     decbuf[r] = mefinfo->stars[star].dec;
+    refmagbuf[r] = (mefinfo->stars[star].refmag > 0.0 ?
+		    mefinfo->zp - mefinfo->stars[star].refmag : -999.0);
 
     /* Get lightcurve */
     if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, errstr))
@@ -1436,6 +1438,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   clsbuf = (short *) NULL;
   free((void *) offbuf);
   offbuf = (float *) NULL;
+  free((void *) compokbuf);
+  compokbuf = (unsigned char *) NULL;
   free((void *) fluxbuf);
   fluxbuf = (float *) NULL;
   free((void *) airbuf);
@@ -1481,6 +1485,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     free((void *) clsbuf);
   if(offbuf)
     free((void *) offbuf);
+  if(compokbuf)
+    free((void *) compokbuf);
   if(fluxbuf)
     free((void *) fluxbuf);
   if(airbuf)

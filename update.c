@@ -405,7 +405,8 @@ int main (int argc, char *argv[]) {
     nstartot += meflist[mef].nstars;
 
     /* Call into the main part of the program */
-    if(lightcurves_append(&buf, &(meflist[mef]), errstr))
+    if(lightcurves_append(&buf, &(meflist[mef]),
+			  meflist[mef].nstars != meflist[mef].nrows, errstr))
       fatal(1, "%s", errstr);
 
     /* Calculate average extinction */
@@ -988,52 +989,56 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       goto error;
     }
 
-    snprintf(kbuf, sizeof(kbuf), "LXX%ld", nmeasexist+pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[0], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LXY%ld", nmeasexist+pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[1], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LXD%ld", nmeasexist+pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[2], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LYY%ld", nmeasexist+pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[3], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LYX%ld", nmeasexist+pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[4], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
-      goto error;
-    }
-
-    snprintf(kbuf, sizeof(kbuf), "LYD%ld", nmeasexist+pt+1);
-    snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
-    ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[5], 12, cbuf, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
-      goto error;
+    /* Suppress output of frame transformation if we only had the
+       photometric comparison stars.  It really needs everything. */
+    if(mefinfo->nstars == mefinfo->nrows) {
+      snprintf(kbuf, sizeof(kbuf), "LXX%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[0], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LXY%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[1], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LXD%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[2], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LYY%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[3], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LYX%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[4], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyd: %s", kbuf);
+	goto error;
+      }
+      
+      snprintf(kbuf, sizeof(kbuf), "LYD%ld", nmeasexist+pt+1);
+      snprintf(cbuf, sizeof(cbuf), "Linear transformation to ref. for frame %ld", nmeasexist+pt+1);
+      ffpkyd(fits, kbuf, mefinfo->frames[pt].tr[5], 12, cbuf, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffpkyj: %s", kbuf);
+	goto error;
+      }
     }
 
     /* Calculate Earth's heliocentric position at this MJD */

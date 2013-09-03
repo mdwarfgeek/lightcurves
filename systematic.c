@@ -110,6 +110,30 @@ static float percentile (float *list, long nn, long num, long div) {
   return(list[ii]);
 }
 
+/* This routine flags potential reference stars.  Called from read_lc
+   or read_ref in readfits.c when the star list is read in.  This
+   allows unused stars to be stripped out at the earliest possible
+   stage in read_ref for performance reasons, when the "-c" command
+   line option is given. */
+
+void systematic_select (struct lc_star *stars, long nstars, float fmin, float fmax) {
+  long star;
+
+  if(fmax >= 0 && fmin < 0)
+    fmin = fmax - USEMAG;
+
+  for(star = 0; star < nstars; star++) {
+    if(stars[star].ref.aper[REFAP].flux > 0 &&
+       stars[star].ref.aper[REFAP].fluxerr > 0 &&
+       stars[star].cls == -1 &&
+       (fmin < 0 || stars[star].refmag > fmin) &&
+       (fmax < 0 || stars[star].refmag < fmax))
+      stars[star].compok = 1;
+    else
+      stars[star].compok = 0;
+  }
+}
+
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f,
 		    char *errstr) {
@@ -155,10 +179,10 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   for(star = 0; star < mefinfo->nstars; star++) {
     if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
        data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
-       !data[star].satur &&              /* Not saturated */
-       mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
-      if(mfirst || data[star].aper[meas].flux > fmax) {
-	fmax = data[star].aper[meas].flux;
+       !data[star].satur &&                         /* Not saturated */
+       mefinfo->stars[star].compok) {               /* OK for comp */
+      if(mfirst || mefinfo->stars[star].refmag > fmax) {
+	fmax = mefinfo->stars[star].refmag;
 	mfirst = 0;
       }
     }
@@ -208,9 +232,9 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
        data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
        mefinfo->stars[star].sigflux[meas] > 0 &&
-       data[star].aper[meas].flux > fmin &&
-       data[star].aper[meas].flux < fmax &&         /* Not saturated */
-       mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
+       mefinfo->stars[star].refmag > fmin &&
+       mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
+       mefinfo->stars[star].compok) {               /* OK for comp */
       medbuf[opt] = mefinfo->stars[star].sigflux[meas];
       opt++;
     }
@@ -230,9 +254,9 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
        data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
        mefinfo->stars[star].sigflux[meas] > 0 &&
        mefinfo->stars[star].sigflux[meas] < rmsclip &&
-       data[star].aper[meas].flux > fmin &&
-       data[star].aper[meas].flux < fmax &&         /* Not saturated */
-       mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
+       mefinfo->stars[star].refmag > fmin &&
+       mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
+       mefinfo->stars[star].compok) {               /* OK for comp */
       val = data[star].aper[meas].flux - mefinfo->stars[star].medflux[meas];
 
       medbuf[opt] = val;
@@ -296,9 +320,9 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	 data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
-	 data[star].aper[meas].flux > fmin &&
-	 data[star].aper[meas].flux < fmax &&         /* Not saturated */
-	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
+	 mefinfo->stars[star].refmag > fmin &&
+	 mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
+	 mefinfo->stars[star].compok) {               /* OK for comp */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
 	wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
@@ -336,9 +360,9 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	 data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
-	 data[star].aper[meas].flux > fmin &&
-	 data[star].aper[meas].flux < fmax &&         /* Not saturated */
-	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
+	 mefinfo->stars[star].refmag > fmin &&
+	 mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
+	 mefinfo->stars[star].compok) {               /* OK for comp */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
 	dx = mefinfo->stars[star].x - xbar;
@@ -411,9 +435,9 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	 data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
-	 data[star].aper[meas].flux > fmin &&
-	 data[star].aper[meas].flux < fmax &&         /* Not saturated */
-	 mefinfo->stars[star].cls == -1) { /* Is classified as stellar */
+	 mefinfo->stars[star].refmag > fmin &&
+	 mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
+	 mefinfo->stars[star].compok) {               /* OK for comp */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
 	dx = mefinfo->stars[star].x - xbar;

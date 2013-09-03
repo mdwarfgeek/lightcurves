@@ -16,7 +16,7 @@
 #define NITER 3
 
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
-		 int norenorm, char *errstr) {
+		 int norenorm, int noastrom, char *errstr) {
   struct lc_point *ptbuf = (struct lc_point *) NULL;
   float *medbuf1 = (float *) NULL, *medbuf2;
   long nmedbuf;
@@ -319,8 +319,9 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       for(star = 0; star < mefinfo->nstars; star++)
 	if(mefinfo->stars[star].medflux[meas] != 0.0 &&
 	   mefinfo->stars[star].sigflux[meas] != 0.0 &&
-	   mefinfo->stars[star].medflux[meas] >= mefinfo->sysllim &&
-	   mefinfo->stars[star].medflux[meas] <= mefinfo->sysulim) {
+	   mefinfo->stars[star].compok &&
+	   mefinfo->stars[star].refmag >= mefinfo->sysllim &&
+	   mefinfo->stars[star].refmag <= mefinfo->sysulim) {
 	  medbuf1[opt1] = mefinfo->stars[star].medflux[meas] - mefinfo->stars[star].refmag;
 	  opt1++;
 	}
@@ -433,49 +434,54 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     mefinfo->stars[star].nchisq = mefinfo->stars[star].nchiap[mefinfo->stars[star].iap];
   }
 
-  if(verbose)
-    printf(" Recomputing astrometric transformations\n");
-
-  /* Compute positioning error for each frame */
-  for(pt = 0; pt < mefinfo->nf; pt++) {
-    /* Read in measurements for this frame */
-    if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
-      goto error;
-
-    /* Compute transformation to ref. system */
-    if(xytoxy(ptbuf, mefinfo, mefinfo->frames[pt].tr, errstr))
-      goto error;
-
-    /* OLD: */
-    opt1 = 0;
-
-    for(star = 0; star < mefinfo->nstars; star++)
-      if(ptbuf[star].aper[0].flux != 0.0) {
-	medbuf1[opt1] = ptbuf[star].x - mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].medx;
-	medbuf2[opt1] = ptbuf[star].y - mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].medy;
-	opt1++;
-      }
-  
-    if(opt1 > 0) {
-      medsig(medbuf1, opt1, &(mefinfo->frames[pt].xoff), &(mefinfo->frames[pt].xsig));
-      medsig(medbuf2, opt1, &(mefinfo->frames[pt].yoff), &(mefinfo->frames[pt].ysig));
-    }
-  }
-
-  /* Compute median positioning errors (should be zero) and rms */
-  for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
-    opt1 = 0;
+  if(!noastrom) {
+    if(verbose)
+      printf(" Recomputing astrometric transformations\n");
     
+    /* Compute positioning error for each frame */
     for(pt = 0; pt < mefinfo->nf; pt++) {
-      if(mefinfo->frames[pt].iseg == iseg) {
-	medbuf1[opt1] = mefinfo->frames[pt].xoff;
-	medbuf2[opt1] = mefinfo->frames[pt].yoff;
-	opt1++;
+      /* Read in measurements for this frame */
+      if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
+	goto error;
+      
+      /* Compute transformation to ref. system */
+      if(xytoxy(ptbuf, mefinfo, mefinfo->frames[pt].tr, errstr))
+	goto error;
+      
+      /* OLD: */
+      opt1 = 0;
+      
+      for(star = 0; star < mefinfo->nstars; star++)
+	if(ptbuf[star].aper[0].flux > 0.0 &&              /* Has a flux measurement */
+	   ptbuf[star].aper[0].fluxerr > 0.0 &&           /* And a reliable error */
+	   ptbuf[star].aper[0].flux < mefinfo->sysulim && /* Not saturated */
+	   mefinfo->stars[star].cls == -1) {              /* Stellar */
+	  medbuf1[opt1] = ptbuf[star].x - mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].medx;
+	  medbuf2[opt1] = ptbuf[star].y - mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].medy;
+	  opt1++;
+	}
+      
+      if(opt1 > 0) {
+	medsig(medbuf1, opt1, &(mefinfo->frames[pt].xoff), &(mefinfo->frames[pt].xsig));
+	medsig(medbuf2, opt1, &(mefinfo->frames[pt].yoff), &(mefinfo->frames[pt].ysig));
       }
     }
     
-    medsig(medbuf1, opt1, &(mefinfo->segs[iseg].medxoff), &(mefinfo->segs[iseg].sigxoff));
-    medsig(medbuf2, opt1, &(mefinfo->segs[iseg].medyoff), &(mefinfo->segs[iseg].sigyoff));
+    /* Compute median positioning errors (should be zero) and rms */
+    for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
+      opt1 = 0;
+      
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+	if(mefinfo->frames[pt].iseg == iseg) {
+	  medbuf1[opt1] = mefinfo->frames[pt].xoff;
+	  medbuf2[opt1] = mefinfo->frames[pt].yoff;
+	  opt1++;
+	}
+      }
+      
+      medsig(medbuf1, opt1, &(mefinfo->segs[iseg].medxoff), &(mefinfo->segs[iseg].sigxoff));
+      medsig(medbuf2, opt1, &(mefinfo->segs[iseg].medyoff), &(mefinfo->segs[iseg].sigyoff));
+    }
   }
 
   /* Free workspace */
@@ -504,7 +510,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 }
 
 int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
-			char *errstr) {
+			int noastrom, char *errstr) {
   struct lc_point *ptbuf = (struct lc_point *) NULL;
   float *medbuf = (float *) NULL;
   long nmedbuf;
@@ -659,18 +665,20 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
     mefinfo->stars[star].nchisq = mefinfo->stars[star].nchiap[mefinfo->stars[star].iap];
   }
 
-  if(verbose)
-    printf(" Recomputing astrometric transformations\n");
-
-  /* Compute positioning error for each frame */
-  for(pt = 0; pt < mefinfo->nf; pt++) {
-    /* Read in measurements for this frame */
-    if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
-      goto error;
-
-    /* Compute transformation to ref. system */
-    if(xytoxy(ptbuf, mefinfo, mefinfo->frames[pt].tr, errstr))
-      goto error;
+  if(!noastrom) {
+    if(verbose)
+      printf(" Recomputing astrometric transformations\n");
+    
+    /* Compute positioning error for each frame */
+    for(pt = 0; pt < mefinfo->nf; pt++) {
+      /* Read in measurements for this frame */
+      if(buffer_fetch_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
+	goto error;
+      
+      /* Compute transformation to ref. system */
+      if(xytoxy(ptbuf, mefinfo, mefinfo->frames[pt].tr, errstr))
+	goto error;
+    }
   }
 
   /* Free workspace */

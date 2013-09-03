@@ -151,11 +151,11 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   int status = 0, anynull;
 
   char *colnames[] = { "x", "y", "class", "pointer", "bflag", "cflag",
-		       "medflux", "rms", "offsets", "apnum", "apradius",
-		       "ra", "dec" };
+		       "medflux", "rms", "offsets", "apnum", "apradius", "compok",
+		       "ra", "dec", "refmag" };
   unsigned char tpap[] = { 0, 0, 0, 0, 0, 0,
-			   1, 1, 1, 0, 0,
-			   0, 0 };
+			   1, 1, 1, 0, 0, 0,
+			   0, 0, 0 };
 
   char cn[FLEN_VALUE+1];
   int *gcols = (int *) NULL;
@@ -173,10 +173,11 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   int noexp = 0;
 
-  float *apbuf = (float *) NULL;
+  float *apbuf = (float *) NULL, *refmagbuf;
   double *xbuf = (double *) NULL, *ybuf, *rabuf, *decbuf;
   short *clsbuf = (short *) NULL, *bfbuf, *apnumbuf;
   long *ptrbuf = (long *) NULL, *cfbuf;
+  unsigned char *compokbuf = (unsigned char *) NULL;
   float *apmedbuf = (float *) NULL, *aprmsbuf, *apoffbuf;
 
   struct lc_star *stars = (struct lc_star *) NULL;
@@ -589,15 +590,18 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
   
   /* Allocate column buffers */
-  apbuf = (float *) malloc(rblksz * sizeof(float));
+  apbuf = (float *) malloc(2 * rblksz * sizeof(float));
   xbuf = (double *) malloc(4 * rblksz * sizeof(double));
   clsbuf = (short *) malloc(3 * rblksz * sizeof(short));
   ptrbuf = (long *) malloc(2 * rblksz * sizeof(long));
+  compokbuf = (unsigned char *) malloc(rblksz * sizeof(unsigned char));
   apmedbuf = (float *) malloc((2+mefinfo->nseg) * rblksz * napcol * sizeof(float));
-  if(!apbuf || !xbuf || !clsbuf || !ptrbuf || !apmedbuf) {
+  if(!apbuf || !xbuf || !clsbuf || !ptrbuf || !compokbuf || !apmedbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
+
+  refmagbuf = apbuf + rblksz;
   
   ybuf = xbuf + rblksz;
   rabuf = xbuf + 2 * rblksz;
@@ -655,10 +659,12 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
     ffgcvi(fits, gcols[icol++], roff + 1, 1, rread, 0, apnumbuf, &anynull, &status);
     ffgcve(fits, gcols[icol++], roff + 1, 1, rread, -999.0, apbuf, &anynull, &status);
+    ffgcvb(fits, gcols[icol++], roff + 1, 1, rread, 0, compokbuf, &anynull, &status);
     ffgcvd(fits, gcols[icol++], roff + 1, 1, rread, -999.0, rabuf, &anynull,
 	   &status);
     ffgcvd(fits, gcols[icol++], roff + 1, 1, rread, -999.0, decbuf, &anynull,
 	   &status);
+    ffgcve(fits, gcols[icol++], roff + 1, 1, rread, -999.0, refmagbuf, &anynull, &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
       goto error;
@@ -694,12 +700,14 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
       stars[rr].iap = apnumbuf[r]-1;
       stars[rr].apradius = apbuf[r];
+      stars[rr].compok = compokbuf[r];
+      stars[rr].refmag = (refmagbuf[r] > 0.0 ? mefinfo->zp - refmagbuf[r] : -999.0);
     }
     
     roff += rread;
     remain -= rread;
   }
-  
+
   mefinfo->stars = stars;
   mefinfo->nstars = nrows;
   mefinfo->nrows = nrowmast;  /* so we can check for mismatches */
@@ -726,6 +734,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   clsbuf = (short *) NULL;
   free((void *) ptrbuf);
   ptrbuf = (long *) NULL;
+  free((void *) compokbuf);
+  compokbuf = (unsigned char *) NULL;
   free((void *) apmedbuf);
   apmedbuf = (float *) NULL;
 
@@ -742,6 +752,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     free((void *) clsbuf);
   if(ptrbuf)
     free((void *) ptrbuf);
+  if(compokbuf)
+    free((void *) compokbuf);
   if(apmedbuf)
     free((void *) apmedbuf);
   if(stars)
@@ -752,6 +764,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
 int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	      int diffmode, float satlev,
+	      float sysllim, float sysulim,
 	      int outcls, int wantoutcls,
 	      char *errstr) {
   int status = 0;
@@ -773,10 +786,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float tpi;
   float apcor[NFLUX];
 
-  long nrows, rblksz, roff, routoff, rin, rout, rrin, rrout, remain, rread;
+  long nrows, nstars, rblksz, roff, routoff, rin, rout, rrin, remain, rread;
   float satflux;
-
-  int cls;
 
   char filter[FLEN_VALUE];
   float airmass = 1.0, extinct = 0.0;
@@ -1219,6 +1230,17 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   else
     mefinfo->zp = magzpt + 2.5 * log10f(exptime) - (airmass - 1.0)*extinct;
 
+  /* Calculate syslim for this frame */
+  if(sysulim < 0)
+    mefinfo->sysulim = -1.0;  /* calculate it later */
+  else 
+    mefinfo->sysulim = mefinfo->zp - sysulim;  /* user-supplied */
+  
+  if(sysllim < 0)
+    mefinfo->sysllim = -1.0;  /* calculate it later */
+  else 
+    mefinfo->sysllim = mefinfo->zp - sysllim;  /* user-supplied */
+
   tpi = 2.0 * M_PI;
 
   /* Telescope/instrument-specific kludges */
@@ -1273,7 +1295,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   /* Read catalogue */
   roff = 0L;
   remain = nrows;
-  routoff = 0L;
+  rout = 0L;
 
   satflux = 0.0;
 
@@ -1298,41 +1320,30 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       goto error;
     }
     
-    rout = 0;
-
     for(rin = 0; rin < rread; rin++) {
       rrin = roff + rin;
-      rrout = routoff + rout;
 
-      cls = NINT(clsbuf[rin]);
+      stars[rout].ptr = rrin + 1;
+      stars[rout].x = xbuf[rin];
+      stars[rout].y = ybuf[rin];
 
-      /* Do we want this row? */
-      if(wantoutcls &&
-	 cls != outcls &&
-	 cls != -1)  /* required for comp stars */
-	continue;  /* nope, so skip to save time */
+      RADECZP(xbuf[rin], ybuf[rin], stars[rout].ra, stars[rout].dec);
 
-      stars[rrout].ptr = rrin + 1;
-      stars[rrout].x = xbuf[rin];
-      stars[rrout].y = ybuf[rin];
+      stars[rout].cls = NINT(clsbuf[rin]);
+      stars[rout].bflag = (a7buf[rin] < 0.0 ? 1 : 0);
+      stars[rout].cflag = 0;
 
-      RADECZP(xbuf[rin], ybuf[rin], stars[rrout].ra, stars[rrout].dec);
+      stars[rout].used = 0;
 
-      stars[rrout].cls = cls;
-      stars[rrout].bflag = (a7buf[rin] < 0.0 ? 1 : 0);
-      stars[rrout].cflag = 0;
+      stars[rout].apradius = 1.0;  /* default = rcore */
 
-      stars[rrout].used = 0;
-
-      stars[rrout].apradius = 1.0;  /* default = rcore */
-
-      stars[rrout].ref.sky = locskybuf[rin]-pedestal;
-      stars[rrout].ref.peak = pkhtbuf[rin]+locskybuf[rin]-pedestal;
+      stars[rout].ref.sky = locskybuf[rin]-pedestal;
+      stars[rout].ref.peak = pkhtbuf[rin]+locskybuf[rin]-pedestal;
       
-      if(stars[rrout].ref.peak > 0.95*satlev)
-	stars[rrout].ref.satur = 1;
+      if(stars[rout].ref.peak > 0.95*satlev)
+	stars[rout].ref.satur = 1;
       else
-	stars[rrout].ref.satur = 0;
+	stars[rout].ref.satur = 0;
       
       XIXNZP(xbuf[rin], ybuf[rin], xi, xn);
 
@@ -1344,17 +1355,17 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	  fluxbuf[rin] *= powf(10.0, 0.4 * scatcoeff * (xi*xi + xn*xn) * RAD_TO_DEG * RAD_TO_DEG);
 	}
 
-	stars[rrout].ref.aper[col].flux = fluxbuf[rin] * apcor[col] * percorr;
-	stars[rrout].ref.aper[col].fluxerr = fabsf(fluxbuf[rin]) * apcor[col] / gain;
+	stars[rout].ref.aper[col].flux = fluxbuf[rin] * apcor[col] * percorr;
+	stars[rout].ref.aper[col].fluxerr = fabsf(fluxbuf[rin]) * apcor[col] / gain;
 	/* sky contribution ? only affects normalisation I think but not sure */
 
 	/* Store reference magnitude for this star */
 	if(col == REFAP)
-	  stars[rrout].refmag = 2.5 * log10f(MAX(1.0, stars[rrout].ref.aper[col].flux));
+	  stars[rout].refmag = 2.5 * log10f(MAX(1.0, stars[rout].ref.aper[col].flux));
       }
 
       if(pkhtbuf[rin]+locskybuf[rin]-pedestal > 0.95*satlev) {
-	sattmp[nsattmp] = stars[rrout].ref.aper[REFAP].flux;
+	sattmp[nsattmp] = stars[rout].ref.aper[REFAP].flux;
 	nsattmp++;
       }
 
@@ -1372,24 +1383,44 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   free((void *) allfluxbuf);
   allfluxbuf = (float *) NULL;
 
-  /* Release any unused star list space.  No free on zero is a kludge
-     to avoid creating a null pointer. */
-  if(routoff > 0 && routoff < nrows) {
-    stars = (struct lc_star *) realloc(stars, routoff * sizeof(struct lc_star));
-    if(!stars) {
-      report_syserr(errstr, "realloc");
-      goto error;
-    }
-  }
-
   /* Determine saturation level robustly - 10%ile */
   if(nsattmp > 0) {
     sortfloat(sattmp, nsattmp);
     satflux = sattmp[nsattmp/4];
   }
 
+  /* Decide which are usable as comparison stars */
+  systematic_select(stars, nrows, mefinfo->sysllim, mefinfo->sysulim);
+
+  /* Consolidate the list if requested */
+  if(wantoutcls) {
+    rout = 0;
+
+    for(rin = 0; rin < nrows; rin++)
+      if(stars[rin].compok ||
+	 stars[rin].cls == outcls) {
+	/* Keep */
+	memmove(&(stars[rout]), &(stars[rin]), sizeof(struct lc_star));
+	rout++;
+      }
+
+    nstars = rout;
+
+    /* Release any unused star list space.  No free on zero is a kludge
+       to avoid creating a null pointer. */
+    if(nstars > 0 && nstars < nrows) {
+      stars = (struct lc_star *) realloc(stars, nstars * sizeof(struct lc_star));
+      if(!stars) {
+	report_syserr(errstr, "realloc");
+	goto error;
+      }
+    }
+  }
+  else
+    nstars = nrows;
+
   mefinfo->stars = stars;
-  mefinfo->nstars = routoff;
+  mefinfo->nstars = nstars;
   mefinfo->nrows = nrows;
   if(satflux > 0.0)
     mefinfo->satmag = mefinfo->zp - 2.5 * log10f(satflux);
