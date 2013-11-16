@@ -149,7 +149,7 @@ int main (int argc, char *argv[]) {
       break;
     case 'g':
       strncpy(goodfile, optarg, sizeof(goodfile)-1);
-      outfile[sizeof(goodfile)-1] = '\0';
+      goodfile[sizeof(goodfile)-1] = '\0';
       dogood = 1;
       break;
     case 'i':
