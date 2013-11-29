@@ -928,7 +928,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     ffgkyd(fits, "PROJP3", &projp3, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      projp3 = 220.0;
+      projp3 = 0.0;
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkyd: PROJP3");
@@ -1691,7 +1691,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     ffgkyd(fits, "PROJP3", &projp3, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
-      projp3 = 220.0;
+      projp3 = 0.0;
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkyd: PROJP3");
