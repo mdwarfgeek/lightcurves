@@ -3,6 +3,8 @@
 
 #include <fitsio.h>
 
+#include "lfa.h"
+
 #ifndef NFLUX
 /* Default number of flux measures */
 #define NFLUX  3
@@ -370,5 +372,7 @@ void medsig (float *a, long n, float *median_r, float *sigma_r);
 
 void sortfloat (float *ia, long n);
 void sortlong (long *ia, long n);
+
+char **read_file_list (int argc, char **argv, long *nf_r, char *errstr);
 
 #endif  /* __LIGHTCURVES_H__ */

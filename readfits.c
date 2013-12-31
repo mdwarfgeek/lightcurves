@@ -15,6 +15,7 @@
 
 #include "sla.h"
 #include "cvtunit.h"
+#include "fitsutil.h"
 #include "floatmath.h"
 #include "util.h"
 
@@ -62,84 +63,6 @@ static struct {
   { "i+z",         0.10 },  /* MEarth */
   { "I_Burke",     0.05 }
 };
-
-#define RADECZP(x1, y1, ra, dec) {					\
-  double x, y, xi, xn, rv, rfac;					\
-  double denom, aa, alpha, delta;					\
-									\
-  x = x1 - c;								\
-  y = y1 - f;								\
-									\
-  xi = a * x + b * y;							\
-  xn = d * x + e * y;							\
-  rv = sqrt(xi * xi + xn * xn);						\
-									\
-  /* NB this is only a 1st order approx */				\
-  rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;	\
-  rv /= rfac;								\
-									\
-  /* now 2nd order correction						\
-   * accurate to few 100ths of pixel */					\
-  rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;   	\
-  xi /= rfac;								\
-  xn /= rfac;								\
-									\
-  denom = cosd - xn * sind;						\
-									\
-  aa    = atan2(xi, denom);						\
-  alpha = aa + tpa;							\
-  delta = atan2(sind + xn * cosd, sqrt(xi*xi + denom*denom));		\
-									\
-  if(alpha > tpi)							\
-    alpha -= tpi;							\
-									\
-  if(alpha < 0.0)							\
-    alpha += tpi;							\
-									\
-  (ra)  = alpha;							\
-  (dec) = delta;							\
-}
-
-#define XYZP(ra, dec, x, y) {						\
-  double xi, xn, rfac, denom, rp;					\
-									\
-  xi = secd * sin(ra - tpa) / (tand * tan(dec) + cos(ra - tpa));	\
-  xn = (tan(dec) - tand * cos(ra - tpa)) / (tand * tan(dec) + cos(ra - tpa)); \
-									\
-  rp = sqrt(xi * xi + xn * xn);						\
-  rfac = projp1 + projp3 * rp * rp + projp5 * rp * rp * rp * rp;	\
-  xi *= rfac;								\
-  xn *= rfac;								\
-									\
-  denom = a * e - d * b;						\
-									\
-  x = (xi * e - xn * b) / denom + c;					\
-  y = (xn * a - xi * d) / denom + f;					\
-}
-
-#define XIXNZP(x1, y1, xi, xn) {					\
-  double x, y, xit, xnt, rv, rfac;					\
-									\
-  x = x1 - c;								\
-  y = y1 - f;								\
-									\
-  xit = a * x + b * y;							\
-  xnt = d * x + e * y;							\
-  rv = sqrt(xit * xit + xnt * xnt);					\
-									\
-  /* NB this is only a 1st order approx */				\
-  rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;	\
-  rv /= rfac;								\
-									\
-  /* now 2nd order correction						\
-   * accurate to few 100ths of pixel */					\
-  rfac = projp1 + projp3 * rv * rv + projp5 * rv * rv * rv * rv;   	\
-  xi /= rfac;								\
-  xn /= rfac;								\
-									\
-  (xi) = xit;								\
-  (xn) = xnt;								\
-}
 
 /* Reconstruct internal state from a lightcurve file.  This routine
  * should work in the normal case, but we still need the reference
@@ -780,8 +703,9 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float *sattmp = (float *) NULL;
   long nsattmp;
 
-  double tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5;
-  double sind, cosd, secd, tand, fang;
+  struct wcs_info wcs;
+  double fang;
+
   float skylev, pedestal = 0, skynoise, exptime, rcore, gain, magzpt, percorr;
   float tpi;
   float apcor[NFLUX];
@@ -847,132 +771,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   /* Read WCS info */
-  ffgkyd(fits, "CRVAL1", &tpa, (char *) NULL, &status);
-  ffgkyd(fits, "CRVAL2", &tpd, (char *) NULL, &status);
-  if(status) {
-    fitsio_err(errstr, status, "ffgkyd: CRVAL[12]");
+  if(read_wcs(fits, &wcs, 0, errstr))
     goto error;
-  }
 
-  ffgkyd(fits, "CRPIX1", &c, (char *) NULL, &status);
-  ffgkyd(fits, "CRPIX2", &f, (char *) NULL, &status);
-  if(status) {
-    fitsio_err(errstr, status, "ffgkyd: CRPIX[12]");
-    goto error;
-  }
-
-  ffgkyd(fits, "CD1_1", &a, (char *) NULL, &status);
-  ffgkyd(fits, "CD1_2", &b, (char *) NULL, &status);
-  ffgkyd(fits, "CD2_1", &d, (char *) NULL, &status);
-  ffgkyd(fits, "CD2_2", &e, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-
-    /* Try for obsolescent one */
-    ffgkyd(fits, "CDELT1", &scl1, (char *) NULL, &status);
-    ffgkyd(fits, "CDELT2", &scl2, (char *) NULL, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffgkyd: CDELT[12]");
-      goto error;
-    }
-
-    ffgkyd(fits, "PC1_1", &a, (char *) NULL, &status);
-    ffgkyd(fits, "PC1_2", &b, (char *) NULL, &status);
-    ffgkyd(fits, "PC2_1", &d, (char *) NULL, &status);
-    ffgkyd(fits, "PC2_2", &e, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-
-      /* Defaults */
-      a = 1.0;
-      b = 0.0;
-      d = 0.0;
-      e = 1.0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyd: PC[12]_[12]");
-      goto error;
-    }
-
-    a *= scl1;
-    b *= scl1;
-    d *= scl2;
-    e *= scl2;
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkyd: CD[12]_[12]");
-    goto error;
-  }
-
-  ffgkyd(fits, "PV2_1", &projp1, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    ffgkyd(fits, "PROJP1", &projp1, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      projp1 = 1.0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyd: PROJP1");
-      goto error;
-    }
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkyd: PV2_1");
-    goto error;
-  }
-
-  ffgkyd(fits, "PV2_3", &projp3, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    ffgkyd(fits, "PROJP3", &projp3, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      projp3 = 0.0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyd: PROJP3");
-      goto error;
-    }
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkyd: PV2_3");
-    goto error;
-  }
-
-  ffgkyd(fits, "PV2_5", &projp5, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    ffgkyd(fits, "PROJP5", &projp5, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      projp5 = 0.0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyd: PROJP5");
-      goto error;
-    }
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkyd: PV2_5");
-    goto error;
-  }
-
-  tpa *= DEG_TO_RAD;
-  tpd *= DEG_TO_RAD;
-
-  a *= DEG_TO_RAD;
-  b *= DEG_TO_RAD;
-  d *= DEG_TO_RAD;
-  e *= DEG_TO_RAD;
-
-  sind = sin(tpd);
-  cosd = cos(tpd);
-
-  secd = 1.0 / cos(tpd);
-  tand = tan(tpd);
-
-  fang = atan2(b, a);
+  fang = atan2(wcs.b, wcs.a);
 
   if(satlev < 0) {
     /* Get saturation level - tries SATLEV first, on MEarth this
@@ -1327,7 +1129,9 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       stars[rout].x = xbuf[rin];
       stars[rout].y = ybuf[rin];
 
-      RADECZP(xbuf[rin], ybuf[rin], stars[rout].ra, stars[rout].dec);
+      wcs_xy2ad(&wcs,
+		xbuf[rin], ybuf[rin],
+		&(stars[rout].ra), &(stars[rout].dec));
 
       stars[rout].cls = NINT(clsbuf[rin]);
       stars[rout].bflag = (a7buf[rin] < 0.0 ? 1 : 0);
@@ -1345,7 +1149,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       else
 	stars[rout].ref.satur = 0;
       
-      XIXNZP(xbuf[rin], ybuf[rin], xi, xn);
+      wcs_xy2tp(&wcs, xbuf[rin], ybuf[rin], &xi, &xn);
 
       for(col = 0; col < NFLUX; col++) {
 	fluxbuf = allfluxbuf + col*rblksz;
@@ -1479,8 +1283,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float *allfluxbuf = (float *) NULL, *pkhtbuf, *locskybuf, *skyrmsbuf, *badpixbuf;
   float *fluxbuf;
 
-  double tpa, tpd, a, b, c, d, e, f, scl1, scl2, projp1, projp3, projp5;
-  double sind, cosd, secd, tand, fang;
+  struct wcs_info wcs;
+  double fang;
+
   float seeing, ellipt, pedestal, skylev, skynoise, exptime, rcore, gain, percorr;
   float skyvar, area, tpi, tmp, expfac;
   double mjd, fd;
@@ -1493,7 +1298,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
   float scatcoeff = 0.0;
-  double xi, xn, xexpect, yexpect;
+  double xi, xn;
 
   char latstr[FLEN_VALUE] = { '\0' }, lonstr[FLEN_VALUE] = { '\0' };
   char heightstr[FLEN_VALUE] = { '\0' };
@@ -1610,132 +1415,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   /* Read WCS info */
-  ffgkyd(fits, "CRVAL1", &tpa, (char *) NULL, &status);
-  ffgkyd(fits, "CRVAL2", &tpd, (char *) NULL, &status);
-  if(status) {
-    fitsio_err(errstr, status, "ffgkyd: CRVAL[12]");
+  if(read_wcs(fits, &wcs, 0, errstr))
     goto error;
-  }
 
-  ffgkyd(fits, "CRPIX1", &c, (char *) NULL, &status);
-  ffgkyd(fits, "CRPIX2", &f, (char *) NULL, &status);
-  if(status) {
-    fitsio_err(errstr, status, "ffgkyd: CRPIX[12]");
-    goto error;
-  }
-
-  ffgkyd(fits, "CD1_1", &a, (char *) NULL, &status);
-  ffgkyd(fits, "CD1_2", &b, (char *) NULL, &status);
-  ffgkyd(fits, "CD2_1", &d, (char *) NULL, &status);
-  ffgkyd(fits, "CD2_2", &e, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-
-    /* Try for obsolescent one */
-    ffgkyd(fits, "CDELT1", &scl1, (char *) NULL, &status);
-    ffgkyd(fits, "CDELT2", &scl2, (char *) NULL, &status);
-    if(status) {
-      fitsio_err(errstr, status, "ffgkyd: CDELT[12]");
-      goto error;
-    }
-
-    ffgkyd(fits, "PC1_1", &a, (char *) NULL, &status);
-    ffgkyd(fits, "PC1_2", &b, (char *) NULL, &status);
-    ffgkyd(fits, "PC2_1", &d, (char *) NULL, &status);
-    ffgkyd(fits, "PC2_2", &e, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-
-      /* Defaults */
-      a = 1.0;
-      b = 0.0;
-      d = 0.0;
-      e = 1.0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyd: PC[12]_[12]");
-      goto error;
-    }
-
-    a *= scl1;
-    b *= scl1;
-    d *= scl2;
-    e *= scl2;
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkyd: CD[12]_[12]");
-    goto error;
-  }
-
-  ffgkyd(fits, "PV2_1", &projp1, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    ffgkyd(fits, "PROJP1", &projp1, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      projp1 = 1.0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyd: PROJP1");
-      goto error;
-    }
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkyd: PV2_1");
-    goto error;
-  }
-
-  ffgkyd(fits, "PV2_3", &projp3, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    ffgkyd(fits, "PROJP3", &projp3, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      projp3 = 0.0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyd: PROJP3");
-      goto error;
-    }
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkyd: PV2_3");
-    goto error;
-  }
-
-  ffgkyd(fits, "PV2_5", &projp5, (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    ffgkyd(fits, "PROJP5", &projp5, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      projp5 = 0.0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyd: PROJP5");
-      goto error;
-    }
-  }
-  else if(status) {
-    fitsio_err(errstr, status, "ffgkyd: PV2_5");
-    goto error;
-  }
-
-  tpa *= DEG_TO_RAD;
-  tpd *= DEG_TO_RAD;
-
-  a *= DEG_TO_RAD;
-  b *= DEG_TO_RAD;
-  d *= DEG_TO_RAD;
-  e *= DEG_TO_RAD;
-
-  sind = sin(tpd);
-  cosd = cos(tpd);
-
-  secd = 1.0 / cos(tpd);
-  tand = tan(tpd);
-
-  fang = atan2(b, a);
+  fang = atan2(wcs.b, wcs.a);
 
   if(satlev < 0) {
     /* Get saturation level - tries SATLEV first.  On MEarth this
@@ -2391,13 +2074,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	 mefinfo->stars[rrout].ptr != rrin+1)
 	continue;
 
-      /* Where should the star be? */
-      XYZP(mefinfo->stars[rrout].ra, mefinfo->stars[rrout].dec, xexpect, yexpect);
-
-      /* Store difference - gives offset of centroid */
-      /* Changed back to simple x and y positions */
-      points[rout].x = xbuf[rin]; //- xexpect;
-      points[rout].y = ybuf[rin]; //- yexpect;
+      /* Store x, y positions */
+      points[rout].x = xbuf[rin];
+      points[rout].y = ybuf[rin];
 
       /* Compute airmass */
       if(doairm) {
@@ -2446,7 +2125,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       else
 	points[rout].conf = 0;
 
-      XIXNZP(xbuf[rin], ybuf[rin], xi, xn);
+      wcs_xy2tp(&wcs, xbuf[rin], ybuf[rin], &xi, &xn);
 
       for(col = 0; col < NFLUX; col++) {
 	fluxbuf = allfluxbuf + col*rblksz;

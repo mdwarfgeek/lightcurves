@@ -15,6 +15,7 @@
 
 #include "sla.h"
 #include "cvtunit.h"
+#include "fitsutil.h"
 #include "floatmath.h"
 #include "util.h"
 
