@@ -151,12 +151,13 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
   int ilast;
 
-  float xmin = 0.0, xmax = 0.0, ymin = 0.0, ymax = 0.0, xrange, yrange;
+  float xmin = 0.0, xmax = 0.0, ymin = 0.0, ymax = 0.0;
   float lastsig;  /* kludge to capture sigma of last star used for npt=1 case */
 
   float chisq = 0.0, newchisq, varscale;
 
 #ifdef DEBUG
+  float xrange, yrange;
   float tmpx[2], tmpy[2], xcord, ycord;
   char title[1024];
 #endif
@@ -266,9 +267,11 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
   medsig(medbuf, opt, &medoff, &sigoff);
 
+#ifdef DEBUG
   /* Calculate ranges */
   xrange = xmax - xmin;
   yrange = ymax - ymin;
+#endif
 
   /* Initialise master set of coefficients and covariance */
   for(k = 0; k < ncoeff; k++) {
