@@ -574,25 +574,25 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 			 "offsets", "apnum", "apradius", "compok",
 			 "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
 			 "weight", "sky", "peak", "flags",
-			 "ra", "dec", "refmag" };
+			 "ra", "dec", "pmra", "pmdec", "refmag" };
   char *tmpl_tform[] = { "1D", "1D", "1E", "1E", "1E", "1J",
 			 "1I", "1I", "1J", "1J", "1J",
 			 tsbuf, "1I", "1E", "1B",
 			 tdbuf, tfbuf, tfbuf, tdbuf, tdbuf, tfbuf, tfbuf,
 			 tfbuf, tfbuf, tfbuf, tbbuf,
-			 "1D", "1D", "1E" };
+			 "1D", "1D", "1E", "1E", "1E" };
   char *tmpl_tunit[] = { "pixels", "pixels", "mag", "mag", "", "",
 			 "", "", "", "", "",
 			 "mag", "", "pixels", "",
 			 "days", "mag", "mag", "pixels", "pixels", "", "radians",
 			 "", "counts", "counts", "",
-			 "radians", "radians", "mag" };
+			 "radians", "radians", "arcsec/yr", "arcsec/yr", "mag" };
   char *tmpl_tdisp[] = { "F8.2", "F8.2", "F7.4", "F7.4", "F10.1", "I4",
 			 "I2", "I2", "I4", "I8", "I8",
 			 "F7.4", "", "F4.2", "I1",
 			 "F14.6", "F7.4", "F7.4", "F8.2", "F8.2", "F6.4", "F9.6",
 			 "F9.0", "F8.2", "F5.0", "I3",
-			 "F9.6", "F9.6", "F7.4" };
+			 "F9.6", "F9.6", "F7.3", "F7.3", "F7.4" };
 
   /* Repeat column for every aperture?  1 = always, 2 = only if writing all requested */
   unsigned char tpap[] = { 0, 0, 1, 1, 0, 0,
@@ -600,7 +600,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 			   1, 0, 0, 0,
 			   0, 2, 2, 0, 0, 0, 0,
 			   2, 0, 0, 0,
-			   0, 0, 0 };
+			   0, 0, 0, 0, 0 };
 
   /* Real arrays, we build these later */
   char **ttype = (char **) NULL, **tform, **tunit, **tdisp;
@@ -617,7 +617,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   double *xbuf = (double *) NULL, *ybuf, *rabuf, *decbuf;
   float *medbuf = (float *) NULL, *rmsbuf;
-  float *apbuf = (float *) NULL, *chibuf, *refmagbuf;
+  float *apbuf = (float *) NULL, *chibuf, *refmagbuf, *pmabuf, *pmdbuf;
   long *ptrbuf = (long *) NULL, *cfbuf, *sfbuf, *nchibuf;
   short *clsbuf = (short *) NULL, *bfbuf, *apnumbuf;
   float *offbuf = (float *) NULL;
@@ -1197,7 +1197,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   /* Allocate output buffers */
   xbuf = (double *) malloc(4 * rblksz * sizeof(double));
   medbuf = (float *) malloc(2 * rblksz * napcol * sizeof(float));
-  apbuf = (float *) malloc(3 * rblksz * sizeof(float));
+  apbuf = (float *) malloc(5 * rblksz * sizeof(float));
   ptrbuf = (long *) malloc(4 * rblksz * sizeof(long));
   clsbuf = (short *) malloc(3 * rblksz * sizeof(short));
   offbuf = (float *) malloc(mefinfo->nseg * napcol * rblksz * sizeof(float));
@@ -1215,6 +1215,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   chibuf = apbuf + rblksz;
   refmagbuf = apbuf + 2 * rblksz;
+  pmabuf = apbuf + 3 * rblksz;
+  pmdbuf = apbuf + 4 * rblksz;
 
   ybuf = xbuf + rblksz;
   rabuf = xbuf + 2 * rblksz;
@@ -1280,6 +1282,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   WRITE_COL(ffpclb, flagbuf, mefinfo->nf);				\
   WRITE_COL(ffpcld, rabuf, 1);						\
   WRITE_COL(ffpcld, decbuf, 1);						\
+  WRITE_COL_NULL(ffpcne, pmabuf, 1, -999.0);                            \
+  WRITE_COL_NULL(ffpcne, pmdbuf, 1, -999.0);                            \
   WRITE_COL_NULL(ffpcne, refmagbuf, 1, -999.0);	       			\
   if(status) {								\
     fitsio_err(errstr, status, "ffpcl");				\
@@ -1332,6 +1336,16 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     compokbuf[r] = mefinfo->stars[star].compok;
     rabuf[r] = mefinfo->stars[star].ra;
     decbuf[r] = mefinfo->stars[star].dec;
+
+    if(mefinfo->stars[star].havepm) {
+      pmabuf[r] = mefinfo->stars[star].pmra * RAD_TO_AS;
+      pmdbuf[r] = mefinfo->stars[star].pmdec * RAD_TO_AS;
+    }
+    else {
+      pmabuf[r] = -999.0;
+      pmdbuf[r] = -999.0;
+    }
+
     refmagbuf[r] = (mefinfo->stars[star].refmag > 0.0 ?
 		    mefinfo->zp - mefinfo->stars[star].refmag : -999.0);
 

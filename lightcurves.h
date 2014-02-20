@@ -70,6 +70,9 @@ struct lc_star {
   double y;
   double ra;
   double dec;
+  float pmra;
+  float pmdec;
+  int havepm;
   int cls;
   int bflag;
   long cflag;

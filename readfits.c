@@ -694,12 +694,14 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
   char *colnames[6] = { "X_coordinate", "Y_coordinate", "Peak_height",
 			"Classification", "Areal_7_profile", "Skylev" };
-  int gcols[6+NFLUX], col, collim;
+  char *optcolnames[2] = { "PMRA", "PMDec" };
+  int gcols[8+NFLUX], col, collim, optcollim;
 
   struct lc_star *stars = (struct lc_star *) NULL;
 
   double *xbuf = (double *) NULL, *ybuf;
   float *allfluxbuf = (float *) NULL, *pkhtbuf, *clsbuf, *a7buf, *locskybuf, *fluxbuf;
+  float *pmabuf, *pmdbuf;
   float *sattmp = (float *) NULL;
   long nsattmp;
 
@@ -757,6 +759,23 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       goto error;
     }
   }
+
+  optcollim = sizeof(optcolnames) / sizeof(optcolnames[0]);
+  for(col = 0; col < optcollim; col++) {
+    ffgcno(fits, CASEINSEN, optcolnames[col], &(gcols[collim+col]), &status);
+    if(status == COL_NOT_UNIQUE)
+      status = 0;  /* ignore */
+    else if(status == COL_NOT_FOUND) {
+      status = 0;
+      gcols[collim+col] = 0;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgcno: %s", optcolnames[col]);
+      goto error;
+    }
+  }
+
+  collim += optcollim;
 
   for(col = 0; col < NFLUX; col++) {
     ffgcno(fits, CASEINSEN, cats_are_80 ? flux_keys_80[col] : flux_keys_32[col],
@@ -1073,7 +1092,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   
   /* Allocate column buffers */
   xbuf = (double *) malloc(2 * rblksz * sizeof(double));
-  allfluxbuf = (float *) malloc((4+NFLUX) * rblksz * sizeof(float));
+  allfluxbuf = (float *) malloc((6+NFLUX) * rblksz * sizeof(float));
   if(!xbuf || !allfluxbuf) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -1085,6 +1104,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   clsbuf = pkhtbuf + rblksz;
   a7buf = pkhtbuf + 2 * rblksz;
   locskybuf = pkhtbuf + 3 * rblksz;
+  pmabuf = pkhtbuf + 4*rblksz;
+  pmdbuf = pkhtbuf + 5*rblksz;
   
   /* Allocate memory for catalogue stars */
   stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
@@ -1112,8 +1133,13 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     ffgcve(fits, gcols[4], roff + 1L, 1L, rread, 0.0, a7buf, (int *) NULL, &status);
     ffgcve(fits, gcols[5], roff + 1L, 1L, rread, 0.0, locskybuf, (int *) NULL, &status);
 
+    if(gcols[6])
+      ffgcve(fits, gcols[6], roff + 1L, 1L, rread, 0.0, pmabuf, (int *) NULL, &status);
+    if(gcols[7])
+      ffgcve(fits, gcols[7], roff + 1L, 1L, rread, 0.0, pmdbuf, (int *) NULL, &status);
+
     for(col = 0; col < NFLUX; col++) {
-      ffgcve(fits, gcols[6+col], roff + 1L, 1L, rread, 0.0, allfluxbuf + col*rblksz,
+      ffgcve(fits, gcols[8+col], roff + 1L, 1L, rread, 0.0, allfluxbuf + col*rblksz,
 	     (int *) NULL, &status);
     }
 
@@ -1132,6 +1158,18 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       wcs_xy2ad(&wcs,
 		xbuf[rin], ybuf[rin],
 		&(stars[rout].ra), &(stars[rout].dec));
+
+      if(gcols[6] && gcols[7] &&
+         pmabuf[rin] != 0.0 && pmdbuf[rin] != 0.0) {
+        stars[rout].pmra = pmabuf[rin];
+        stars[rout].pmdec = pmdbuf[rin];
+        stars[rout].havepm = 1;
+      }
+      else {
+        stars[rout].pmra = 0.0;
+        stars[rout].pmdec = 0.0;
+        stars[rout].havepm = 0;
+      }
 
       stars[rout].cls = lrintf(clsbuf[rin]);
       stars[rout].bflag = (a7buf[rin] < 0.0 ? 1 : 0);
