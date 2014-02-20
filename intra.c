@@ -7,10 +7,10 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <assert.h>
+#include <math.h>
 
 #include "lightcurves.h"
 
-#include "floatmath.h"
 #include "util.h"
 
 int read_intra (char *filename, struct intra *intralist, int nmefs,
@@ -114,8 +114,8 @@ float calc_intra (float x, float y, struct intra *corr) {
   int xbin, ybin, arg1, arg2, arg3, arg4;
 
   /* Calculate fractional parts of pixel values */
-  fracx = x - NINT(x);
-  fracy = y - NINT(y);
+  fracx = x - rintf(x);
+  fracy = y - rintf(y);
 
   /* Find bins */
   xbin = (int) ((fracx + 0.5) / corr->binsize);

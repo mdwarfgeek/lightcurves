@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include <cpgplot.h>
 
 #include "lightcurves.h"
 
-#include "floatmath.h"
 #include "util.h"
 
 /* Parameters: k-sigma for clipping and number of iterations of polynomial fit */

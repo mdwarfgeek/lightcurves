@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "lightcurves.h"
 
-#include "floatmath.h"
 #include "util.h"
 
 void medsig (float *a, long n, float *median_r, float *sigma_r) {

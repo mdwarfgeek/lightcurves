@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <math.h>
 
 #include <fitsio.h>
 #include <cpgplot.h>
@@ -16,7 +17,6 @@
 #include "sla.h"
 #include "cvtunit.h"
 #include "fitsutil.h"
-#include "floatmath.h"
 #include "util.h"
 
 /* Flux keywords and aperture sizes in terms of rcore.  These have no declared
@@ -1133,7 +1133,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 		xbuf[rin], ybuf[rin],
 		&(stars[rout].ra), &(stars[rout].dec));
 
-      stars[rout].cls = NINT(clsbuf[rin]);
+      stars[rout].cls = lrintf(clsbuf[rin]);
       stars[rout].bflag = (a7buf[rin] < 0.0 ? 1 : 0);
       stars[rout].cflag = 0;
 
@@ -2260,7 +2260,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].fang = fang;
 
   if(mefinfo->havefang)
-    mefinfo->frames[iframe].iang = NINT(slaRanorm(fang - mefinfo->reffang)/M_PI) % 2;
+    mefinfo->frames[iframe].iang = lrintf(slaRanorm(fang - mefinfo->reffang)/M_PI) % 2;
   else
     mefinfo->frames[iframe].iang = iha;  /* old, incorrect, method */
 

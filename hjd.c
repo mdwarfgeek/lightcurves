@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "hjd.h"
 
 #include "sla.h"
-#include "floatmath.h"
 #include "util.h"
 
 /* Conversion factor AU to light seconds */

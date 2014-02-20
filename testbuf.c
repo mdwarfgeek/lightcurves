@@ -3,11 +3,11 @@
 #include <string.h>
 #include <limits.h>
 #include <ctype.h>
+#include <math.h>
 
 #include "lightcurves.h"
 
 #include "cvtunit.h"
-#include "floatmath.h"
 #include "util.h"
 
 int main (int argc, char *argv[]) {

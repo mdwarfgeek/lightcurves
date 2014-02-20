@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <math.h>
 
 #include <fitsio.h>
 #include <cpgplot.h>
@@ -16,7 +17,6 @@
 #include "sla.h"
 #include "cvtunit.h"
 #include "fitsutil.h"
-#include "floatmath.h"
 #include "util.h"
 
 static int write_lc (fitsfile *reff, fitsfile *fits,

@@ -11,10 +11,10 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <errno.h>
+#include <math.h>
 
 #include "lightcurves.h"
 
-#include "floatmath.h"
 #include "util.h"
 
 static int buffer_read (struct buffer_info *b, struct lc_point *rbuf,

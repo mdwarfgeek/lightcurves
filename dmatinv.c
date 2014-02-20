@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
-#include "floatmath.h"
 #include "util.h"
 
 void dmatinv (double a[50][50], int m) {

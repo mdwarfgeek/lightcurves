@@ -6,11 +6,11 @@
 #include <limits.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "lightcurves.h"
 
 #include "cvtunit.h"
-#include "floatmath.h"
 #include "util.h"
 
 #define NITER 3

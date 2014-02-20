@@ -7,10 +7,10 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <assert.h>
+#include <math.h>
 
 #include "lightcurves.h"
 
-#include "floatmath.h"
 #include "util.h"
 
 int read_instvers (char *filename, struct instvers **instverslist_r, int *ninstvers_r,
