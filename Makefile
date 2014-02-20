@@ -4,17 +4,17 @@
 ### Constants: edit to suit your system ####
 
 # CFITSIO include and library paths
-CFITSIO_INC=/usr/local/include
-CFITSIO_LIB=/usr/local/lib
+CFITSIO_INC:=`pkg-config cfitsio --cflags`
+CFITSIO_LIB:=`pkg-config cfitsio --libs`
 
 # PGPLOT and X11 directories
-PGPLOT_INC=/usr/local/pgplot
-PGPLOT_LIB=/usr/local/pgplot
-X11_LIB=/usr/X11R6/lib
+PGPLOT_INC=-I$(PGPLOT_DIR)
+PGPLOT_LIB=-L$(PGPLOT_DIR) -lcpgplot -lpgplot
+X11_LIB=-L/usr/X11R6/lib -lX11
 
 # SLALIB include and library paths
-SLA_INC=/usr/local/include
-SLA_LIB=/usr/local/lib
+SLA_INC=-I/usr/local/include
+SLA_LIB=-L/usr/local/lib -lsla
 
 # C compiler
 #CC=gcc
@@ -24,10 +24,10 @@ SLA_LIB=/usr/local/lib
 OPT=-g -O3 -ffast-math
 
 # Compiler flags
-CFLAGS=-std=gnu99 $(OPT) -Wall -I../lib -I$(CFITSIO_INC) -I$(PGPLOT_INC) -I$(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DCSLALIB -DHAVE_MMAP
+CFLAGS=-std=gnu99 $(OPT) -Wall -I../lib $(CFITSIO_INC) $(PGPLOT_INC) $(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DCSLALIB -DHAVE_MMAP
 
 # Linker flags
-LIBS=-L$(CFITSIO_LIB) -lcfitsio -L$(PGPLOT_LIB) -lcpgplot -lpgplot -L$(SLA_LIB) -lsla -lg2c -L$(X11_LIB) -lX11 -lm
+LIBS=$(CFITSIO_LIB) $(PGPLOT_LIB) $(SLA_LIB) $(X11_LIB) -lX11 -lg2c -lm
 
 #### End constants section ####
 
