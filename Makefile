@@ -12,9 +12,11 @@ PGPLOT_INC=-I$(PGPLOT_DIR)
 PGPLOT_LIB=-L$(PGPLOT_DIR) -lcpgplot -lpgplot
 X11_LIB=-L/usr/X11R6/lib -lX11
 
-# SLALIB include and library paths
-SLA_INC=-I/usr/local/include
-SLA_LIB=-L/usr/local/lib -lsla
+# SLALIB is now needed only for HJD (backwards compatibility) support.
+# Uncomment these lines and adjust accordingly if you need it.
+#SLA_INC=-I/usr/local/include -DHJD
+#SLA_LIB=-L/usr/local/lib -lsla
+#SLA_SRCS=hjd.c sla.c
 
 # C compiler
 #CC=gcc
@@ -31,14 +33,14 @@ LIBS=$(CFITSIO_LIB) $(PGPLOT_LIB) $(SLA_LIB) $(X11_LIB) -lX11 -lg2c -lm
 
 #### End constants section ####
 
-LIGHTCURVES_SRCS=main.c buffer.c chooseap.c instvers.c intra.c lightcurves.c plots.c systematic.c xytoxy.c \
-	readfits.c hjd.c sla.c \
+COMMON_SRCS=buffer.c chooseap.c instvers.c intra.c lightcurves.c \
+	plots.c readfits.c systematic.c xytoxy.c \
 	dsolve.c dmatinv.c filelist.c medsig.c sortfloat.c sortlong.c
+
+LIGHTCURVES_SRCS=main.c $(COMMON_SRCS) $(SLA_SRCS)
 LIGHTCURVES_OBJS=${LIGHTCURVES_SRCS:%.c=%.o}
 
-UPDATE_SRCS=update.c buffer.c chooseap.c instvers.c intra.c lightcurves.c plots.c systematic.c xytoxy.c \
-	readfits.c hjd.c sla.c \
-	dsolve.c dmatinv.c filelist.c medsig.c sortfloat.c sortlong.c
+UPDATE_SRCS=update.c $(COMMON_SRCS) $(SLA_SRCS)
 UPDATE_OBJS=${UPDATE_SRCS:%.c=%.o}
 
 TESTBUF_SRCS=testbuf.c buffer.c
