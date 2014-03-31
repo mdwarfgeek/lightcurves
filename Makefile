@@ -14,7 +14,7 @@ X11_LIB=-L/usr/X11R6/lib -lX11
 
 # SLALIB is now needed only for HJD (backwards compatibility) support.
 # Uncomment these lines and adjust accordingly if you need it.
-#SLA_INC=-I/usr/local/include -DHJD
+#SLA_INC=-I/usr/local/include -DHJD -DCSLALIB
 #SLA_LIB=-L/usr/local/lib -lsla
 #SLA_SRCS=hjd.c sla.c
 
@@ -26,7 +26,7 @@ X11_LIB=-L/usr/X11R6/lib -lX11
 OPT=-g -O3 -ffast-math
 
 # Compiler flags
-CFLAGS=-std=gnu99 $(OPT) -Wall -I../lib $(CFITSIO_INC) $(PGPLOT_INC) $(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DCSLALIB -DHAVE_MMAP
+CFLAGS=-std=gnu99 $(OPT) -Wall -I../lib $(CFITSIO_INC) $(PGPLOT_INC) $(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DHAVE_MMAP
 
 # Linker flags
 LIBS=$(CFITSIO_LIB) $(PGPLOT_LIB) $(SLA_LIB) $(X11_LIB) -lX11 -lg2c -lm
