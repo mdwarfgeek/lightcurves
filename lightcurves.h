@@ -378,7 +378,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 /* Utility functions: dsolve.c, dmatinv.c, linear.c, medsig.c, sortfloat.c */
 void dsolve (double a[50][50], double b[50], int m);
 void dmatinv (double a[50][50], int m);
-int hanning (float xbuf[], int npt, char *errstr);
 void medsig (float *a, long n, float *median_r, float *sigma_r);
 
 void sortfloat (float *ia, long n);
