@@ -12,9 +12,11 @@
 #include <cpgplot.h>
 
 #include "lightcurves.h"
-#include "hjd.h"
 
-#include "sla.h"
+#ifdef HJD
+#include "hjd.h"
+#endif
+
 #include "cvtunit.h"
 #include "fitsutil.h"
 #include "util.h"
@@ -85,6 +87,10 @@ int main (int argc, char *argv[]) {
   int doinstvers = 0;
   struct instvers *instverslist = (struct instvers *) NULL;
   int ninstvers = 0;
+
+  struct dtai_table dtab, *dtptr = NULL;
+  struct iers_table itab, *itptr = NULL;
+  struct jpleph_table jtab, ttab, *ttptr = NULL;
 
   int len, maxflen, fspc;
   float *medbuf1 = (float *) NULL, *medbuf2, medsat, medlim;
@@ -168,6 +174,43 @@ int main (int argc, char *argv[]) {
   fnlist = read_file_list(argc, argv, &nf, errstr);
   if(!fnlist)
     fatal(1, "%s", errstr);
+
+  /* Setup Earth orientation data and JPL ephemerides */
+  rv = dtai_read(&dtab, (char *) NULL);
+  if(rv == -2) {
+    printf("Could not find leap second file, continuing without\n");
+    dtptr = NULL;
+  }
+  else if(rv)
+    fatal(1, "dtai_open: error %d", rv);
+  else
+    dtptr = &dtab;
+
+  rv = iers_open(&itab, &dtab, (char *) NULL);
+  if(rv == -2) {
+    printf("Could not find UT1-UTC file, continuing without\n");
+    itptr = NULL;
+  }
+  else if(rv)
+    fatal(1, "iers_open: %d", rv);
+  else
+    itptr = &itab;
+
+  rv = jpleph_open(&jtab, 0, (char *) NULL);
+  if(rv)
+    fatal(1, "jpleph_open: %d", rv);
+
+  if(!jtab.has_time) {
+    rv = jpleph_open(&ttab, 1, (char *) NULL);
+    if(rv == -2) {
+      printf("Time ephemeris problem, continuing without\n");
+      ttptr = NULL;
+    }
+    else if(rv)
+      fatal(1, "jpleph_open: %d", rv);
+    else
+      ttptr = &ttab;
+  }
 
   /* Make stdout unbuffered */
   setvbuf(stdout, (char *) NULL, _IONBF, 0);
@@ -365,6 +408,7 @@ int main (int argc, char *argv[]) {
 	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
+		  dtptr, itptr, &jtab, ttptr,
 		  dointra, &(intralist[mef]),
 		  doinstvers, instverslist, ninstvers,
 		  diffmode, satlev, errstr))
@@ -548,15 +592,27 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   int status = 0, icol, ntmpl, ncoluse, anynull;
 
   char *colnames[] = { "pointer",
-		       "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
+		       "bjd",
+#ifdef HJD
+                       "hjd",
+#endif
+                       "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
 		       "weight", "sky", "peak", "flags",
 		       "medflux", "rms", "chisq", "nchisq" };
   unsigned char tpap[] = { 0,
-			   0, 1, 1, 0, 0, 0, 0,
+			   0,
+#ifdef HJD
+			   0,
+#endif
+                           1, 1, 0, 0, 0, 0,
 			   1, 0, 0, 0,
 			   1, 1, 0, 0 };
   unsigned char tvec[] = { 0,
-			   1, 1, 1, 1, 1, 1, 1,
+			   1,
+#ifdef HJD
+			   1,
+#endif
+                           1, 1, 1, 1, 1, 1,
 			   1, 1, 1, 1,
 			   0, 0, 0, 0 };
 
@@ -574,12 +630,17 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   struct lc_point *lcbuf = (struct lc_point *) NULL;
 
+#ifdef HJD
   double *epos = (double *) NULL;
+#endif
 
   float *medfluxbuf = (float *) NULL, *rmsbuf;
   float *fluxbuf = (float *) NULL, *fluxerrbuf, *wtbuf;
   float *airbuf = (float *) NULL, *habuf, *locskybuf, *peakbuf;
-  double *hjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
+  double *bjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
+#ifdef HJD
+  double *hjdbuf;
+#endif
   unsigned char *flagbuf = (unsigned char *) NULL;
 
   int ikey, nkeys, keylen;
@@ -735,12 +796,14 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     }
   }
 
+#ifdef HJD
   /* Allocate buffer for earth positions */
   epos = (double *) malloc(3 * mefinfo->nf * sizeof(double));
   if(!epos) {
     report_syserr(errstr, "malloc");
     goto error;
   }
+#endif
 
   /* Update number of measurements and number of updates */
   nmeasout = nmeasexist+mefinfo->nf;
@@ -769,7 +832,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   for(pt = 0; pt < mefinfo->nf; pt++) {
     snprintf(kbuf, sizeof(kbuf), "TV%ld", nmeasexist+pt+1);
     snprintf(cbuf, sizeof(cbuf), "Time value for datapoint %ld", nmeasexist+pt+1);
-    ffpkyg(fits, kbuf, mefinfo->frames[pt].mjd, 7, cbuf, &status);
+    ffpkyg(fits, kbuf, mefinfo->frames[pt].mjd, 14, cbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpkyg: %s", kbuf);
       goto error;
@@ -1042,8 +1105,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
+#ifdef HJD
     /* Calculate Earth's heliocentric position at this MJD */
     getearth(mefinfo->mjdref + mefinfo->frames[pt].mjd, epos + 3*pt);
+#endif
   }
 
   if(allast >= 0) {
@@ -1191,10 +1256,14 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   medfluxbuf = (float *) malloc(2 * napcol * sizeof(float));
   fluxbuf = (float *) malloc(3 * nmeasout * napcol * sizeof(float));
   airbuf = (float *) malloc(5 * nmeasout * sizeof(float));
-  hjdbuf = (double *) malloc(3 * nmeasout * sizeof(double));
+#ifdef HJD
+  bjdbuf = (double *) malloc(4 * nmeasout * sizeof(double));
+#else
+  bjdbuf = (double *) malloc(3 * nmeasout * sizeof(double));
+#endif
   flagbuf = (unsigned char *) malloc(nmeasout * sizeof(unsigned char));
   rawbuf = (unsigned char *) malloc(rowsize * sizeof(unsigned char));
-  if(!medfluxbuf || !fluxbuf || !airbuf || !hjdbuf || !flagbuf || !rawbuf) {
+  if(!medfluxbuf || !fluxbuf || !airbuf || !bjdbuf || !flagbuf || !rawbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
@@ -1209,8 +1278,11 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   peakbuf = airbuf + 3 * nmeasout;
   medlist = airbuf + 4 * nmeasout;
 
-  xlcbuf = hjdbuf + nmeasout;
-  ylcbuf = hjdbuf + 2 * nmeasout;
+  xlcbuf = bjdbuf + nmeasout;
+  ylcbuf = bjdbuf + 2 * nmeasout;
+#ifdef HJD
+  hjdbuf = bjdbuf + 3 * nmeasout;
+#endif
 
   /* Loop through all stars */
   starout = 0;
@@ -1237,7 +1309,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     /* Read existing lightcurve info */
     icol = 1;
 
+    ffgcvd(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, bjdbuf, &anynull, &status);
+#ifdef HJD
     ffgcvd(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, hjdbuf, &anynull, &status);
+#endif
 
     for(ap = 0; ap < napcol; ap++)
       ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, fluxbuf+ap*nmeasout, &anynull, &status);
@@ -1307,11 +1382,14 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
       flagbuf[nmeasexist+pt] = flags;
 
+#ifdef HJD
       /* Calculate HJD (as UTC) */
       hjdbuf[nmeasexist+pt] = mefinfo->mjdref + mefinfo->frames[pt].mjd +
 	                      hjdcorr(epos + 3*pt,
 				      mefinfo->stars[star].ra,
 				      mefinfo->stars[star].dec);
+#endif
+      bjdbuf[nmeasexist+pt] = lcbuf[pt].bjd;
     }
 
     /* Do other apertures */
@@ -1402,7 +1480,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     icol = 0;
 
     ffpclj(fits, gcols[icol++], starout+1, 1, 1, &pointer, &status);
+    ffpcnd(fits, gcols[icol++], starout+1, 1, nmeasout, bjdbuf, -999.0, &status);
+#ifdef HJD
     ffpcnd(fits, gcols[icol++], starout+1, 1, nmeasout, hjdbuf, -999.0, &status);
+#endif
 
     for(ap = 0; ap < napcol; ap++)
       ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, fluxbuf+ap*nmeasout, -999.0, &status);
@@ -1442,8 +1523,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   gcols = (int *) NULL;
   free((void *) lcbuf);
   lcbuf = (struct lc_point *) NULL;
+#ifdef HJD
   free((void *) epos);
   epos = (double *) NULL;
+#endif
   free((void *) copysect);
   copysect = (struct table_section *) NULL;
   free((void *) medfluxbuf);
@@ -1452,8 +1535,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   fluxbuf = (float *) NULL;
   free((void *) airbuf);
   airbuf = (float *) NULL;
-  free((void *) hjdbuf);
-  hjdbuf = (double *) NULL;
+  free((void *) bjdbuf);
+  bjdbuf = (double *) NULL;
   free((void *) flagbuf);
   flagbuf = (unsigned char *) NULL;
   free((void *) rawbuf);
@@ -1466,8 +1549,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     free((void *) gcols);
   if(lcbuf)
     free((void *) lcbuf);
+#ifdef HJD
   if(epos)
     free((void *) epos);
+#endif
   if(copysect)
     free((void *) copysect);
   if(medfluxbuf)
@@ -1476,8 +1561,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     free((void *) fluxbuf);
   if(airbuf)
     free((void *) airbuf);
-  if(hjdbuf)
-    free((void *) hjdbuf);
+  if(bjdbuf)
+    free((void *) bjdbuf);
   if(flagbuf)
     free((void *) flagbuf);
   if(rawbuf)

@@ -37,6 +37,7 @@ struct instvers {
 };
 
 struct lc_point {
+  double bjd;
   double x;
   double y;
 
@@ -78,6 +79,9 @@ struct lc_star {
   long cflag;
 
   struct lc_point ref;
+
+  /* LFA source structure for this star */
+  struct source src;
 
   /* Reference magnitude to which to tie the photometry */
   float refmag;  /* in aperture REFAP */
@@ -362,6 +366,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	      char *errstr);
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
+	      struct dtai_table *dtab,
+	      struct iers_table *itab,
+	      struct jpleph_table *jtab,
+	      struct jpleph_table *ttab,
 	      int dointra, struct intra *icorr,
 	      int doinstvers, struct instvers *instverslist, int ninstvers,
 	      int diffmode, float satlev,

@@ -12,9 +12,11 @@
 #include <cpgplot.h>
 
 #include "lightcurves.h"
-#include "hjd.h"
 
-#include "sla.h"
+#ifdef HJD
+#include "hjd.h"
+#endif
+
 #include "cvtunit.h"
 #include "fitsutil.h"
 #include "util.h"
@@ -96,6 +98,11 @@ int main (int argc, char *argv[]) {
 
   int outcls = 0;
   int wantoutcls = 0;
+
+  int rv;
+  struct dtai_table dtab, *dtptr = NULL;
+  struct iers_table itab, *itptr = NULL;
+  struct jpleph_table jtab, ttab, *ttptr = NULL;
 
   int len, maxflen, fspc;
   float *medbuf1 = (float *) NULL, *medbuf2, medsat, medlim;
@@ -226,6 +233,43 @@ int main (int argc, char *argv[]) {
   fnlist = read_file_list(argc, argv, &nf, errstr);
   if(!fnlist)
     fatal(1, "%s", errstr);
+
+  /* Setup Earth orientation data and JPL ephemerides */
+  rv = dtai_read(&dtab, (char *) NULL);
+  if(rv == -2) {
+    printf("Could not find leap second file, continuing without\n");
+    dtptr = NULL;
+  }
+  else if(rv)
+    fatal(1, "dtai_open: error %d", rv);
+  else
+    dtptr = &dtab;
+
+  rv = iers_open(&itab, &dtab, (char *) NULL);
+  if(rv == -2) {
+    printf("Could not find UT1-UTC file, continuing without\n");
+    itptr = NULL;
+  }
+  else if(rv)
+    fatal(1, "iers_open: %d", rv);
+  else
+    itptr = &itab;
+
+  rv = jpleph_open(&jtab, 0, (char *) NULL);
+  if(rv)
+    fatal(1, "jpleph_open: %d", rv);
+
+  if(!jtab.has_time) {
+    rv = jpleph_open(&ttab, 1, (char *) NULL);
+    if(rv == -2) {
+      printf("Time ephemeris problem, continuing without\n");
+      ttptr = NULL;
+    }
+    else if(rv)
+      fatal(1, "jpleph_open: %d", rv);
+    else
+      ttptr = &ttab;
+  }
 
   /* Make stdout unbuffered */
   setvbuf(stdout, (char *) NULL, _IONBF, 0);
@@ -376,6 +420,7 @@ int main (int argc, char *argv[]) {
 	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
+		  dtptr, itptr, &jtab, ttptr,
 		  dointra, &(intralist[mef]),
 		  doinstvers, instverslist, ninstvers,
 		  diffmode, satlev, errstr))
@@ -572,25 +617,41 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   char *tmpl_ttype[] = { "x", "y", "medflux", "rms", "chisq", "nchisq",
 			 "class", "bflag", "cflag", "sflag", "pointer",
 			 "offsets", "apnum", "apradius", "compok",
-			 "hjd", "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
+			 "bjd",
+#ifdef HJD
+                         "hjd",
+#endif
+                         "flux", "fluxerr", "xlc", "ylc", "airmass", "ha",
 			 "weight", "sky", "peak", "flags",
 			 "ra", "dec", "pmra", "pmdec", "refmag" };
   char *tmpl_tform[] = { "1D", "1D", "1E", "1E", "1E", "1J",
 			 "1I", "1I", "1J", "1J", "1J",
 			 tsbuf, "1I", "1E", "1B",
-			 tdbuf, tfbuf, tfbuf, tdbuf, tdbuf, tfbuf, tfbuf,
+			 tdbuf,
+#ifdef HJD
+			 tdbuf,
+#endif
+                         tfbuf, tfbuf, tdbuf, tdbuf, tfbuf, tfbuf,
 			 tfbuf, tfbuf, tfbuf, tbbuf,
 			 "1D", "1D", "1E", "1E", "1E" };
   char *tmpl_tunit[] = { "pixels", "pixels", "mag", "mag", "", "",
 			 "", "", "", "", "",
 			 "mag", "", "pixels", "",
-			 "days", "mag", "mag", "pixels", "pixels", "", "radians",
+			 "days",
+#ifdef HJD
+			 "days",
+#endif
+                         "mag", "mag", "pixels", "pixels", "", "radians",
 			 "", "counts", "counts", "",
 			 "radians", "radians", "arcsec/yr", "arcsec/yr", "mag" };
   char *tmpl_tdisp[] = { "F8.2", "F8.2", "F7.4", "F7.4", "F10.1", "I4",
 			 "I2", "I2", "I4", "I8", "I8",
 			 "F7.4", "", "F4.2", "I1",
-			 "F14.6", "F7.4", "F7.4", "F8.2", "F8.2", "F6.4", "F9.6",
+			 "F14.6",
+#ifdef HJD
+			 "F14.6",
+#endif
+                         "F7.4", "F7.4", "F8.2", "F8.2", "F6.4", "F9.6",
 			 "F9.0", "F8.2", "F5.0", "I3",
 			 "F9.6", "F9.6", "F7.3", "F7.3", "F7.4" };
 
@@ -598,7 +659,11 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   unsigned char tpap[] = { 0, 0, 1, 1, 0, 0,
 			   0, 0, 0, 0, 0,
 			   1, 0, 0, 0,
-			   0, 2, 2, 0, 0, 0, 0,
+			   0,
+#ifdef HJD
+			   0,
+#endif
+                           2, 2, 0, 0, 0, 0,
 			   2, 0, 0, 0,
 			   0, 0, 0, 0, 0 };
 
@@ -613,7 +678,9 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   struct lc_point *lcbuf = (struct lc_point *) NULL;
 
+#ifdef HJD
   double *epos = (double *) NULL;
+#endif
 
   double *xbuf = (double *) NULL, *ybuf, *rabuf, *decbuf;
   float *medbuf = (float *) NULL, *rmsbuf;
@@ -624,7 +691,10 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   unsigned char *compokbuf = (unsigned char *) NULL;
   float *fluxbuf = (float *) NULL, *fluxerrbuf, *wtbuf;
   float *airbuf = (float *) NULL, *habuf, *locskybuf, *peakbuf;
-  double *hjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
+  double *bjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
+#ifdef HJD
+  double *hjdbuf;
+#endif
   unsigned char *flagbuf = (unsigned char *) NULL;
 
   int ikey, nkeys, kclass;
@@ -784,12 +854,14 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   free((void *) ttype);
   ttype = (char **) NULL;
 
+#ifdef HJD
   /* Allocate buffer for earth positions */
   epos = (double *) malloc(3 * mefinfo->nf * sizeof(double));
   if(!epos) {
     report_syserr(errstr, "malloc");
     goto error;
   }
+#endif
 
   /* Write out frame information */
   ffpkyj(fits, "NMEAS", mefinfo->nf,
@@ -860,7 +932,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   for(pt = 0; pt < mefinfo->nf; pt++) {
     snprintf(kbuf, sizeof(kbuf), "TV%ld", pt+1);
     snprintf(cbuf, sizeof(cbuf), "Time value for datapoint %ld", pt+1);
-    ffpkyg(fits, kbuf, mefinfo->frames[pt].mjd, 7, cbuf, &status);
+    ffpkyg(fits, kbuf, mefinfo->frames[pt].mjd, 14, cbuf, &status);
     if(status) {
       fitsio_err(errstr, status, "ffpkyg: %s", kbuf);
       goto error;
@@ -1133,8 +1205,10 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       }
     }
 
+#ifdef HJD
     /* Calculate Earth's heliocentric position at this MJD */
     getearth(mefinfo->mjdref + mefinfo->frames[pt].mjd, epos + 3*pt);
+#endif
   }
 
   /* Write out astrometry flag for web page */
@@ -1202,11 +1276,15 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   clsbuf = (short *) malloc(3 * rblksz * sizeof(short));
   offbuf = (float *) malloc(mefinfo->nseg * napcol * rblksz * sizeof(float));
   compokbuf = (unsigned char *) malloc(rblksz * sizeof(unsigned char));
-  hjdbuf = (double *) malloc(3 * rblksz * mefinfo->nf * sizeof(double));
+#ifdef HJD
+  bjdbuf = (double *) malloc(4 * rblksz * mefinfo->nf * sizeof(double));
+#else
+  bjdbuf = (double *) malloc(3 * rblksz * mefinfo->nf * sizeof(double));
+#endif
   fluxbuf = (float *) malloc(3 * rblksz * mefinfo->nf * nlapcol * sizeof(float));
   airbuf = (float *) malloc(4 * rblksz * mefinfo->nf * sizeof(float));
   flagbuf = (unsigned char *) malloc(rblksz * mefinfo->nf * sizeof(unsigned char));
-  if(!xbuf || !medbuf || !apbuf || !ptrbuf || !clsbuf || !offbuf || !compokbuf || !hjdbuf || !fluxbuf || !airbuf || !flagbuf) {
+  if(!xbuf || !medbuf || !apbuf || !ptrbuf || !clsbuf || !offbuf || !compokbuf || !bjdbuf || !fluxbuf || !airbuf || !flagbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
@@ -1236,8 +1314,11 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   locskybuf = airbuf + 2 * rblksz * mefinfo->nf;
   peakbuf = airbuf + 3 * rblksz * mefinfo->nf;
 
-  xlcbuf = hjdbuf + rblksz * mefinfo->nf;
-  ylcbuf = hjdbuf + 2 * rblksz * mefinfo->nf;
+  xlcbuf = bjdbuf + rblksz * mefinfo->nf;
+  ylcbuf = bjdbuf + 2 * rblksz * mefinfo->nf;
+#ifdef HJD
+  hjdbuf = bjdbuf + 3 * rblksz * mefinfo->nf;
+#endif
 
   /* Loop through all stars - read in the lightcurve points one
    * at a time and write out blocks of 'rblksz' objects.
@@ -1251,6 +1332,11 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   func(fits, ++ocol, frow, 1, r*(len), buf, &status)
 #define WRITE_COL_NULL(func, buf, len, nullval)		\
   func(fits, ++ocol, frow, 1, r*(len), buf, nullval, &status)
+#ifdef HJD
+#define WRITE_HJD WRITE_COL_NULL(ffpcnd, hjdbuf, mefinfo->nf, -999.0);
+#else
+#define WRITE_HJD
+#endif
 
 #define TABLE_FLUSH() {							\
   ocol = 0;								\
@@ -1269,7 +1355,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   WRITE_COL(ffpcli, apnumbuf, 1);					\
   WRITE_COL(ffpcle, apbuf, 1);						\
   WRITE_COL(ffpclb, compokbuf, 1);		       			\
-  WRITE_COL_NULL(ffpcnd, hjdbuf, mefinfo->nf, -999.0);			\
+  WRITE_COL_NULL(ffpcnd, bjdbuf, mefinfo->nf, -999.0);			\
+  WRITE_HJD                                           			\
   FORLAP WRITE_COL_NULL(ffpcne, fluxbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
   FORLAP WRITE_COL_NULL(ffpcne, fluxerrbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
   WRITE_COL_NULL(ffpcnd, xlcbuf, mefinfo->nf, -999.0);			\
@@ -1397,11 +1484,14 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
       flagbuf[soff+pt] = flags;
 
+#ifdef HJD
       /* Calculate HJD (as UTC) */
       hjdbuf[soff+pt] = mefinfo->mjdref + mefinfo->frames[pt].mjd +
 	                hjdcorr(epos + 3*pt,
 				mefinfo->stars[star].ra,
 				mefinfo->stars[star].dec);
+#endif
+      bjdbuf[soff+pt] = lcbuf[pt].bjd;
     }
 
     sfbuf[r] = satflag;
@@ -1439,8 +1529,10 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   free((void *) lcbuf);
   lcbuf = (struct lc_point *) NULL;
+#ifdef HJD
   free((void *) epos);
   epos = (double *) NULL;
+#endif
   free((void *) medbuf);
   medbuf = (float *) NULL;
   free((void *) apbuf);
@@ -1459,8 +1551,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   fluxbuf = (float *) NULL;
   free((void *) airbuf);
   airbuf = (float *) NULL;
-  free((void *) hjdbuf);
-  hjdbuf = (double *) NULL;
+  free((void *) bjdbuf);
+  bjdbuf = (double *) NULL;
   free((void *) flagbuf);
   flagbuf = (unsigned char *) NULL;
 
@@ -1486,8 +1578,10 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   }
   if(lcbuf)
     free((void *) lcbuf);
+#ifdef HJD
   if(epos)
     free((void *) epos);
+#endif
   if(medbuf)
     free((void *) medbuf);
   if(apbuf)
@@ -1506,8 +1600,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     free((void *) fluxbuf);
   if(airbuf)
     free((void *) airbuf);
-  if(hjdbuf)
-    free((void *) hjdbuf);
+  if(bjdbuf)
+    free((void *) bjdbuf);
   if(flagbuf)
     free((void *) flagbuf);
 

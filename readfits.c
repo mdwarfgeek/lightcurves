@@ -12,9 +12,7 @@
 #include <cpgplot.h>
 
 #include "lightcurves.h"
-#include "hjd.h"
 
-#include "sla.h"
 #include "cvtunit.h"
 #include "fitsutil.h"
 #include "util.h"
@@ -709,7 +707,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   double fang;
 
   float skylev, pedestal = 0, skynoise, exptime, rcore, gain, magzpt, percorr;
-  float tpi;
   float apcor[NFLUX];
 
   long nrows, nstars, rblksz, roff, routoff, rin, rout, rrin, remain, rread;
@@ -719,11 +716,13 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float airmass = 1.0, extinct = 0.0;
   int l1, l2, i, ilim;
 
+  double mjd;
+
   int noexp = 0;
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
   float scatcoeff = 0.0;
-  double xi, xn;
+  double v[3], dvdt[3], xi, xn, rr;
 
   int cats_are_80 = 0;
 
@@ -1062,7 +1061,32 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   else 
     mefinfo->sysllim = mefinfo->zp - sysllim;  /* user-supplied */
 
-  tpi = 2.0 * M_PI;
+  ffgkyd(fits, "MJD-OBS", &mjd, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkyd(fits, "MJD", &mjd, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      ffgkyd(fits, "JD", &mjd, (char *) NULL, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffgkyd: JD");
+	goto error;
+      }
+      else
+	mjd -= 2400000.5;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkyd: MJD");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkyd: MJD-OBS");
+    goto error;
+  }
+
+  /* Correct to midpoint of observation */
+  mjd += 0.5 * exptime / 86400.0;
 
   /* Telescope/instrument-specific kludges */
   ffgkys(fits, "INSTRUME", inst, (char *) NULL, &status);
@@ -1155,21 +1179,45 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       stars[rout].x = xbuf[rin];
       stars[rout].y = ybuf[rin];
 
-      wcs_xy2ad(&wcs,
-		xbuf[rin], ybuf[rin],
-		&(stars[rout].ra), &(stars[rout].dec));
+      wcs_xy2vec(&wcs, xbuf[rin], ybuf[rin], v);
+
+      rr = sqrt(v[0]*v[0]+v[1]*v[1]);
 
       if(gcols[6] && gcols[7] &&
          pmabuf[rin] != 0.0 && pmdbuf[rin] != 0.0) {
         stars[rout].pmra = pmabuf[rin];
         stars[rout].pmdec = pmdbuf[rin];
         stars[rout].havepm = 1;
+
+        if(rr > 0) {
+          dvdt[0] = -(pmabuf[rin]*v[1] + pmdbuf[rin]*v[0]*v[2])/(JYR*rr);
+          dvdt[1] =  (pmabuf[rin]*v[0] - pmdbuf[rin]*v[1]*v[2])/(JYR*rr);
+        }
+        else {
+          dvdt[0] = 0;
+          dvdt[1] = 0;
+        }
+
+        dvdt[2] = pmdbuf[rin]*rr/JYR;
       }
       else {
         stars[rout].pmra = 0.0;
         stars[rout].pmdec = 0.0;
         stars[rout].havepm = 0;
+
+        dvdt[0] = 0;
+        dvdt[1] = 0;
+        dvdt[2] = 0;
       }
+
+      /* UTC epoch is used rather than the correct TDB, not likely to matter. */
+      source_star_vec(&(stars[rout].src), v, dvdt, 0, 2000.0 + (mjd-J2K)/JYR);
+
+      stars[rout].ra = atan2(v[1], v[0]);
+      if(stars[rout].ra < 0.0)
+	stars[rout].ra += TWOPI;
+
+      stars[rout].dec = atan2(v[2], rr);
 
       stars[rout].cls = lrintf(clsbuf[rin]);
       stars[rout].bflag = (a7buf[rin] < 0.0 ? 1 : 0);
@@ -1304,6 +1352,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
+	      struct dtai_table *dtab,
+	      struct iers_table *itab,
+	      struct jpleph_table *jtab,
+	      struct jpleph_table *ttab,
 	      int dointra, struct intra *icorr,
 	      int doinstvers, struct instvers *instverslist, int ninstvers,
 	      int diffmode, float satlev,
@@ -1325,9 +1377,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   double fang;
 
   float seeing, ellipt, pedestal, skylev, skynoise, exptime, rcore, gain, percorr;
-  float skyvar, area, tpi, tmp, expfac;
-  double mjd, fd;
-  int iy, im, id;
+  float skyvar, area, tmp, expfac;
+  double mjd;
+  int lmjd, iy, im, id;
 
   float apcor[NFLUX];
 
@@ -1340,9 +1392,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   char latstr[FLEN_VALUE] = { '\0' }, lonstr[FLEN_VALUE] = { '\0' };
   char heightstr[FLEN_VALUE] = { '\0' };
-  double lat, lon, height = 0, apra, apdec, aob, zob, hob, dob, rob;
-  double amprms[21], aoprms[14];
+  double lat, lon, height = 0;
   unsigned char doairm;
+
+  struct observer obs;
+  int utcdn;
+  double utcdf, dtt;
+
+  double s[3], pr, seq[3];
 
   float diam, rms, var, sc, scrms, avskyfiterr, avscint;
   float *skyfiterrbuf = (float *) NULL;
@@ -1364,7 +1421,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   char schtype[FLEN_VALUE];
 
   struct instvers *instvers = (struct instvers *) NULL;
-  int rv;
 
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
@@ -1737,8 +1793,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   else
     zpcorr = 2.5 * log10f(exptime/mefinfo->refexp) - (airmass - 1.0)*extinct + (mefinfo->refairmass - 1.0)*mefinfo->refextinct;
 
-  tpi = 2.0 * M_PI;
-
   ffgkyd(fits, "MJD-OBS", &mjd, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
@@ -2013,7 +2067,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
      * but it's not a perfect replica because we use MJD here and
      * the observing system uses zone time.
      */
-    slaDjcl(mjd + lon*RAD_TO_HR/24 - 0.5, &iy, &im, &id, &fd, &rv);
+    lmjd = floor(mjd + lon*RAD_TO_HR/24 - 0.5);
+    mjd2date(lmjd, &iy, &im, &id);
     id += iy*10000 + im*100;
 
     /* Now look for it in the table */
@@ -2026,16 +2081,31 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   if(doairm) {
-    /* Pre-compute mean-to-apt parameters for frame */
-    slaMappa(2000.0, mjd+slaDtt(mjd)/86400.0, amprms);
+    /* Create observer structure */
+    observer_init(&obs, lon, lat, height);
 
-    /* Pre-compute apt-to-obs parameters for frame */
-    slaAoppa(mjd, 0.0, lon, lat, height, 0.0, 0.0,
-	     tamb != -999 ? 273.16+tamb : 283.0,
-	     press != -999 ? press : 1013.25*expf(-height/(29.3*273.0)),
-	     humid != -999 ? humid/100 : 0.5,
-	     0.80, 0.0065, aoprms);
+    refract_const(tamb != -999 ? 273.16+tamb : 283.0,
+		  humid != -999 ? humid/100 : 0.5,
+		  press != -999 ? press : 1013.25*exp(-height/(29.3*273.0)),
+		  0.80,  /* wavelength, microns */
+		  height,
+		  obs.refco);
   }
+  else
+    observer_geoc(&obs);  /* geocentric corrections only */
+
+  if(dtab) {
+    /* Look up delta(TT) */
+    utcdn = floor(mjd);
+    utcdf = mjd - utcdn;
+    
+    dtt = dtai(dtab, utcdn, utcdf) + DTT;
+  }
+  else
+    dtt = DTT;  /* assumes TAI=UTC */
+  
+  /* Compute time-dependent quantities */
+  observer_update(&obs, jtab, ttab, itab, mjd, dtt, OBSERVER_UPDATE_ALL);
 
   /* Get block size for row I/O */
   ffgrsz(fits, &rblksz, &status);
@@ -2116,18 +2186,28 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       points[rout].x = xbuf[rin];
       points[rout].y = ybuf[rin];
 
+      /* Apply space motion */
+      source_place(&obs, &(mefinfo->stars[rrout].src),
+		   jtab, TR_MOTION, s, NULL, &pr);
+      
+      /* Modified BJD(TDB) */
+      points[rout].bjd = obs.tt + (obs.dtdb + bary_delay(&obs, s, pr)) / DAY;
+
       /* Compute airmass */
       if(doairm) {
-	slaMapqkz(mefinfo->stars[rrout].ra, mefinfo->stars[rrout].dec,
-		  amprms, &apra, &apdec);
-	slaAopqk(apra, apdec, aoprms, &aob, &zob, &hob, &dob, &rob);
-	points[rout].airmass = slaAirmas(zob);
-	points[rout].ha = hob;
+	/* Observed place - parallax left out, we don't have it anyway */
+	observer_ast2obs(&obs, s, NULL, pr, TR_TO_OBS_AZ);
+
+	points[rout].airmass = v_airmass(s);
+
+	mt_x_v(obs.phm, s, seq);
+	points[rout].ha = -atan2(seq[1], seq[0]);
 	
-	if(hob > 0)
+	if(points[rout].ha > 0)
 	  iha = 1;  /* "average" HA in some sense - will NOT work for wide-field */
       }
       else {
+	points[rout].bjd = 0;
 	points[rout].airmass = -999.0;  /* flag unusability */
 	points[rout].ha = -999.0;
       }
@@ -2298,7 +2378,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].fang = fang;
 
   if(mefinfo->havefang)
-    mefinfo->frames[iframe].iang = lrintf(slaRanorm(fang - mefinfo->reffang)/M_PI) % 2;
+    mefinfo->frames[iframe].iang = lrintf(ranorm(fang - mefinfo->reffang)/M_PI) % 2;
   else
     mefinfo->frames[iframe].iang = iha;  /* old, incorrect, method */
 
