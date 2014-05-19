@@ -21,8 +21,12 @@ X11_LIB=-L/usr/X11R6/lib -lX11
 # C compiler
 #CC=gcc
 
-# Opt/debug flags
-#OPT=-g  # NO OPT FOR DEBUG
+# Optimization flags
+
+# DEBUG:
+#OPT=-g
+
+# OPT:
 OPT=-g -O3 -ffast-math
 
 # Compiler flags
