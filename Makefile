@@ -46,7 +46,7 @@ UPDATE_OBJS=${UPDATE_SRCS:%.c=%.o}
 TESTBUF_SRCS=testbuf.c buffer.c
 TESTBUF_OBJS=${TESTBUF_SRCS:%.c=%.o}
 
-LIB_OBJS=../lib/cvtunit.o ../lib/fitsutil.o ../lib/util.o ../lib/liblfa.a
+LIB_OBJS=../lib/fitsutil.o ../lib/liblfa.a
 
 # Rules for building C
 
@@ -60,14 +60,8 @@ all: lightcurves update
 ../lib/liblfa.a:
 	(cd ../lib && $(MAKE) liblfa.a)
 
-../lib/cvtunit.o:
-	(cd ../lib && $(MAKE) cvtunit.o)
-
 ../lib/fitsutil.o:
 	(cd ../lib && $(MAKE) fitsutil.o)
-
-../lib/util.o:
-	(cd ../lib && $(MAKE) util.o)
 
 # Rules for lightcurves
 
