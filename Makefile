@@ -54,7 +54,7 @@ LIB_OBJS=../lib/fitsutil.o ../lib/liblfa.a
 
 # Rules for building C
 
-.SUFFIXES: .c
+.SUFFIXES: .c .o
 
 .c.o:
 	$(CC) $(CFLAGS) -c $< -o $@
