@@ -1832,7 +1832,15 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       ffgkys(fits, "LAT-OBS", latstr, (char *) NULL, &status);
       if(status == KEY_NO_EXIST) {
 	status = 0;
-	doairm = 0;
+	ffgkys(fits, "SITELAT", latstr, (char *) NULL, &status);
+	if(status == KEY_NO_EXIST) {
+	  status = 0;
+	  doairm = 0;
+	}
+	else if(status) {
+	  fitsio_err(errstr, status, "ffgkys: SITELAT");
+	  goto error;
+	}
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkys: LAT-OBS");
@@ -1866,7 +1874,15 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       ffgkys(fits, "LONG-OBS", lonstr, (char *) NULL, &status);
       if(status == KEY_NO_EXIST) {
 	status = 0;
-	doairm = 0;
+	ffgkys(fits, "SITELONG", lonstr, (char *) NULL, &status);
+	if(status == KEY_NO_EXIST) {
+	  status = 0;
+	  doairm = 0;
+	}
+	else if(status) {
+	  fitsio_err(errstr, status, "ffgkys: SITELONG");
+	  goto error;
+	}
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkys: LONG-OBS");
@@ -1900,7 +1916,15 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       ffgkys(fits, "ALT-OBS", heightstr, (char *) NULL, &status);
       if(status == KEY_NO_EXIST) {
 	status = 0;
-	height = 0;
+	ffgkys(fits, "SITEALT", heightstr, (char *) NULL, &status);
+	if(status == KEY_NO_EXIST) {
+	  status = 0;
+	  height = 0;
+	}
+	else if(status) {
+	  fitsio_err(errstr, status, "ffgkys: SITEALT");
+	  goto error;
+	}
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkys: ALT-OBS");
