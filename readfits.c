@@ -1834,8 +1834,17 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	status = 0;
 	ffgkys(fits, "SITELAT", latstr, (char *) NULL, &status);
 	if(status == KEY_NO_EXIST) {
-	  status = 0;
-	  doairm = 0;
+          status = 0;
+          ffgkys(fits, "HIERARCH ESO TEL GEOLAT", latstr, (char *) NULL,
+                 &status);
+          if(status == KEY_NO_EXIST) {
+            status = 0;
+            doairm = 0;
+          }
+          else if(status) {
+            fitsio_err(errstr, status, "ffgkys: HIERARCH ESO TEL GEOLAT");
+            goto error;
+          }
 	}
 	else if(status) {
 	  fitsio_err(errstr, status, "ffgkys: SITELAT");
@@ -1876,8 +1885,17 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	status = 0;
 	ffgkys(fits, "SITELONG", lonstr, (char *) NULL, &status);
 	if(status == KEY_NO_EXIST) {
-	  status = 0;
-	  doairm = 0;
+          status = 0;
+          ffgkys(fits, "HIERARCH ESO TEL GEOLON", lonstr, (char *) NULL,
+                 &status);
+          if(status == KEY_NO_EXIST) {
+            status = 0;
+            doairm = 0;
+          }
+          else if(status) {
+            fitsio_err(errstr, status, "ffgkys: HIERARCH ESO TEL GEOLON");
+            goto error;
+          }
 	}
 	else if(status) {
 	  fitsio_err(errstr, status, "ffgkys: SITELONG");
@@ -1918,8 +1936,17 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	status = 0;
 	ffgkys(fits, "SITEALT", heightstr, (char *) NULL, &status);
 	if(status == KEY_NO_EXIST) {
-	  status = 0;
-	  height = 0;
+          status = 0;
+          ffgkys(fits, "HIERARCH ESO TEL GEOELEV", heightstr, (char *) NULL,
+                 &status);
+          if(status == KEY_NO_EXIST) {
+            status = 0;
+            height = 0;
+          }
+          else if(status) {
+            fitsio_err(errstr, status, "ffgkys: HIERARCH ESO TEL GEOELEV");
+            goto error;
+          }
 	}
 	else if(status) {
 	  fitsio_err(errstr, status, "ffgkys: SITEALT");
