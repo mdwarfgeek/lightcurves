@@ -4,22 +4,25 @@
 ### Constants: edit to suit your system ####
 
 # CFITSIO include and library paths
-CFITSIO_INC:=`pkg-config cfitsio --cflags`
-CFITSIO_LIB:=`pkg-config cfitsio --libs`
+CFITSIO_INC=`pkg-config cfitsio --cflags`
+CFITSIO_LIB=`pkg-config cfitsio --libs`
 
 # PGPLOT and X11 directories
+PGPLOT_DIR?=/usr/local/pgplot
 PGPLOT_INC=-I$(PGPLOT_DIR)
-PGPLOT_LIB=-L$(PGPLOT_DIR) -lcpgplot -lpgplot
-X11_LIB=-L/usr/X11R6/lib -lX11
+PGPLOT_LIB=-L$(PGPLOT_DIR) -lcpgplot -lpgplot -L/usr/X11R6/lib -lX11
 
 # SLALIB is now needed only for HJD (backwards compatibility) support.
 # Uncomment these lines and adjust accordingly if you need it.
-#SLA_INC=-I/usr/local/include -DHJD -DCSLALIB
+#SLA_INC=-I/usr/local/include -DHJD
 #SLA_LIB=-L/usr/local/lib -lsla
 #SLA_SRCS=hjd.c sla.c
 
 # C compiler
 #CC=gcc
+
+# Fortran compiler
+#FC=gfortran
 
 # Optimization flags
 
@@ -33,7 +36,7 @@ OPT=-g -O3 -ffast-math
 CFLAGS=-std=gnu99 $(OPT) -Wall -I../lib $(CFITSIO_INC) $(PGPLOT_INC) $(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DHAVE_MMAP
 
 # Linker flags
-LIBS=$(CFITSIO_LIB) $(PGPLOT_LIB) $(SLA_LIB) $(X11_LIB) -lX11 -lg2c -lm
+LIBS=$(CFITSIO_LIB) $(PGPLOT_LIB) $(SLA_LIB) -lm
 
 #### End constants section ####
 
@@ -70,13 +73,13 @@ all: lightcurves update
 # Rules for lightcurves
 
 lightcurves: $(LIGHTCURVES_OBJS) $(LIB_OBJS)
-	$(CC) -o $@ $(LIGHTCURVES_OBJS) $(LIB_OBJS) $(LIBS)
+	$(FC) -o $@ $(LIGHTCURVES_OBJS) $(LIB_OBJS) $(LIBS)
 
 update: $(UPDATE_OBJS) $(LIB_OBJS)
-	$(CC) -o $@ $(UPDATE_OBJS) $(LIB_OBJS) $(LIBS)
+	$(FC) -o $@ $(UPDATE_OBJS) $(LIB_OBJS) $(LIBS)
 
 testbuf: $(TESTBUF_OBJS) $(LIB_OBJS)
-	$(CC) -o $@ $(TESTBUF_OBJS) $(LIB_OBJS) $(LIBS)
+	$(FC) -o $@ $(TESTBUF_OBJS) $(LIB_OBJS) $(LIBS)
 
 clean:
 	rm -f $(LIGHTCURVES_OBJS) lightcurves
