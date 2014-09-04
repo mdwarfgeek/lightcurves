@@ -73,10 +73,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   char *colnames[] = { "x", "y", "class", "pointer", "bflag", "cflag",
 		       "medflux", "rms", "offsets", "apnum", "apradius", "compok",
-		       "ra", "dec", "refmag" };
+		       "ra", "dec", "pmra", "pmdec", "refmag" };
   unsigned char tpap[] = { 0, 0, 0, 0, 0, 0,
 			   1, 1, 1, 0, 0, 0,
-			   0, 0, 0 };
+			   0, 0, 0, 0, 0 };
 
   char cn[FLEN_VALUE+1];
   int *gcols = (int *) NULL;
@@ -94,7 +94,9 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   int noexp = 0;
 
-  float *apbuf = (float *) NULL, *refmagbuf;
+  double mjd;
+
+  float *apbuf = (float *) NULL, *refmagbuf, *pmabuf, *pmdbuf;
   double *xbuf = (double *) NULL, *ybuf, *rabuf, *decbuf;
   short *clsbuf = (short *) NULL, *bfbuf, *apnumbuf;
   long *ptrbuf = (long *) NULL, *cfbuf;
@@ -439,6 +441,34 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     }
   }
 
+  ffgkyd(fits, "MJD-OBS", &mjd, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    ffgkyd(fits, "MJD", &mjd, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      ffgkyd(fits, "JD", &mjd, (char *) NULL, &status);
+      if(status) {
+	fitsio_err(errstr, status, "ffgkyd: JD");
+	goto error;
+      }
+      else
+	mjd -= 2400000.5;
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkyd: MJD");
+      goto error;
+    }
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkyd: MJD-OBS");
+    goto error;
+  }
+
+  /* Correct to midpoint of observation */
+  if(!noexp)
+    mjd += 0.5 * exptime / 86400.0;
+
   /* Read number of rows */
   ffgnrw(fits, &nrows, &status);
   if(status) {
@@ -511,7 +541,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
   
   /* Allocate column buffers */
-  apbuf = (float *) malloc(2 * rblksz * sizeof(float));
+  apbuf = (float *) malloc(4 * rblksz * sizeof(float));
   xbuf = (double *) malloc(4 * rblksz * sizeof(double));
   clsbuf = (short *) malloc(3 * rblksz * sizeof(short));
   ptrbuf = (long *) malloc(2 * rblksz * sizeof(long));
@@ -523,7 +553,9 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   refmagbuf = apbuf + rblksz;
-  
+  pmabuf = apbuf + 2 * rblksz;
+  pmdbuf = apbuf + 3 * rblksz;
+
   ybuf = xbuf + rblksz;
   rabuf = xbuf + 2 * rblksz;
   decbuf = xbuf + 3 * rblksz;
@@ -585,6 +617,8 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 	   &status);
     ffgcvd(fits, gcols[icol++], roff + 1, 1, rread, -999.0, decbuf, &anynull,
 	   &status);
+    ffgcve(fits, gcols[icol++], roff + 1, 1, rread, -999.0, pmabuf, &anynull, &status);
+    ffgcve(fits, gcols[icol++], roff + 1, 1, rread, -999.0, pmdbuf, &anynull, &status);
     ffgcve(fits, gcols[icol++], roff + 1, 1, rread, -999.0, refmagbuf, &anynull, &status);
     if(status) {
       fitsio_err(errstr, status, "ffgcv");
@@ -602,6 +636,24 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
       stars[rr].cls = clsbuf[r];
       stars[rr].bflag = bfbuf[r];
       stars[rr].cflag = cfbuf[r];
+
+      if(pmabuf[r] == -999.0 && pmdbuf[r] == -999.0) {
+        stars[rr].pmra = 0;
+        stars[rr].pmdec = 0;
+        stars[rr].havepm = 0;
+      }
+      else {
+        stars[rr].pmra = pmabuf[r];
+        stars[rr].pmdec = pmdbuf[r];
+        stars[rr].havepm = 1;
+      }
+
+      /* UTC epoch is used rather than the correct TDB, not likely to matter. */
+      source_star(&(stars[rr].src), 
+                  stars[rr].ra, stars[rr].dec,
+                  stars[rr].pmra, stars[rr].pmdec,
+                  0.0, 0.0,
+                  2000.0 + (mjd-J2K)/JYR);
 
       if(mefinfo->aperture) {
 	stars[rr].medflux[mefinfo->aperture-1] = (apmedbuf[r] > 0.0 ? mefinfo->zp - apmedbuf[r] : -999.0);
