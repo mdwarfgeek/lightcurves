@@ -241,8 +241,6 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   exptime = fabsf(exptime);
-  if(exptime < 1.0)
-    exptime = 1.0;
 
   ffgkye(fits, "PEDESTAL", &pedestal, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
@@ -896,8 +894,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   exptime = fabsf(exptime);
-  if(exptime < 1.0)
-    exptime = 1.0;
 
   ffgkye(fits, "PEDESTAL", &pedestal, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
@@ -1616,8 +1612,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   exptime = fabsf(exptime);
-  if(exptime < 1.0)
-    exptime = 1.0;
 
   expfac = mefinfo->refexp / exptime;
 
