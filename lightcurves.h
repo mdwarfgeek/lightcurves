@@ -334,9 +334,11 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 			int noastrom, char *errstr);
 
+#ifdef PLOTS
 /* Diagnostic plots: plots.c */
 int do_plots (struct lc_mef *meflist, int nmefs,
 	      float medsat, float medlim, float umlim, float lmlim, char *errstr);
+#endif
 
 int plot_corr (float *beforehist, float *beforewthist,
 	       float *corrhist, float *corrwthist,

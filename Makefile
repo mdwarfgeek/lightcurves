@@ -5,17 +5,19 @@
 
 # CFITSIO include and library paths
 CFITSIO_INC=`pkg-config cfitsio --cflags`
-CFITSIO_LIB=`pkg-config cfitsio --libs`
+CFITSIO_LIBS=`pkg-config cfitsio --libs`
 
-# PGPLOT and X11 directories
+# PGPLOT is is now optional.  Comment out these lines to disable plots
+# and remove the dependency.
 PGPLOT_DIR?=/usr/local/pgplot
-PGPLOT_INC=-I$(PGPLOT_DIR)
-PGPLOT_LIB=-L$(PGPLOT_DIR) -lcpgplot -lpgplot -L/usr/X11R6/lib -lX11
+PGPLOT_INC=-I$(PGPLOT_DIR) -DPLOTS
+PGPLOT_LIBS=-L$(PGPLOT_DIR) -lcpgplot -lpgplot -L/usr/X11R6/lib -lX11
+PGPLOT_SRCS=plots.c
 
 # SLALIB is now needed only for HJD (backwards compatibility) support.
 # Uncomment these lines and adjust accordingly if you need it.
 #SLA_INC=-I/usr/local/include -DHJD
-#SLA_LIB=-L/usr/local/lib -lsla
+#SLA_LIBS=-L/usr/local/lib -lsla
 #SLA_SRCS=hjd.c sla.c
 
 # C compiler
@@ -23,6 +25,13 @@ PGPLOT_LIB=-L$(PGPLOT_DIR) -lcpgplot -lpgplot -L/usr/X11R6/lib -lX11
 
 # Fortran compiler
 #FC=gfortran
+
+# Linking is done with the Fortran compiler in the standard configuration
+# because PGPLOT is a Fortran library, and this seems to be the most
+# portable way to bring in all the runtime libraries.  However, if plots
+# are disabled above, the C compiler can be used instead by changing this
+# line to CC (e.g. if there is no Fortran compiler available).
+LINK=$(FC)
 
 # Optimization flags
 
@@ -36,18 +45,18 @@ OPT=-g -O3 -ffast-math
 CFLAGS=-std=gnu99 $(OPT) -Wall -I../lib $(CFITSIO_INC) $(PGPLOT_INC) $(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DHAVE_MMAP
 
 # Linker flags
-LIBS=$(CFITSIO_LIB) $(PGPLOT_LIB) $(SLA_LIB) -lm
+LIBS=$(CFITSIO_LIBS) $(PGPLOT_LIBS) $(SLA_LIBS) -lm
 
 #### End constants section ####
 
 COMMON_SRCS=buffer.c chooseap.c instvers.c intra.c lightcurves.c \
-	plots.c readfits.c systematic.c xytoxy.c \
+	readfits.c systematic.c xytoxy.c \
 	dsolve.c dmatinv.c filelist.c medsig.c sortfloat.c sortlong.c
 
-LIGHTCURVES_SRCS=main.c $(COMMON_SRCS) $(SLA_SRCS)
+LIGHTCURVES_SRCS=main.c $(COMMON_SRCS) $(SLA_SRCS) $(PGPLOT_SRCS)
 LIGHTCURVES_OBJS=${LIGHTCURVES_SRCS:%.c=%.o}
 
-UPDATE_SRCS=update.c $(COMMON_SRCS) $(SLA_SRCS)
+UPDATE_SRCS=update.c $(COMMON_SRCS) $(SLA_SRCS) $(PGPLOT_SRCS)
 UPDATE_OBJS=${UPDATE_SRCS:%.c=%.o}
 
 TESTBUF_SRCS=testbuf.c buffer.c
@@ -73,13 +82,13 @@ all: lightcurves update
 # Rules for lightcurves
 
 lightcurves: $(LIGHTCURVES_OBJS) $(LIB_OBJS)
-	$(FC) -o $@ $(LIGHTCURVES_OBJS) $(LIB_OBJS) $(LIBS)
+	$(LINK) -o $@ $(LIGHTCURVES_OBJS) $(LIB_OBJS) $(LIBS)
 
 update: $(UPDATE_OBJS) $(LIB_OBJS)
-	$(FC) -o $@ $(UPDATE_OBJS) $(LIB_OBJS) $(LIBS)
+	$(LINK) -o $@ $(UPDATE_OBJS) $(LIB_OBJS) $(LIBS)
 
 testbuf: $(TESTBUF_OBJS) $(LIB_OBJS)
-	$(FC) -o $@ $(TESTBUF_OBJS) $(LIB_OBJS) $(LIBS)
+	$(LINK) -o $@ $(TESTBUF_OBJS) $(LIB_OBJS) $(LIBS)
 
 clean:
 	rm -f $(LIGHTCURVES_OBJS) lightcurves

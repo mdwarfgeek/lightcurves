@@ -9,7 +9,6 @@
 #include <math.h>
 
 #include <fitsio.h>
-#include <cpgplot.h>
 
 #include "lightcurves.h"
 
@@ -1869,6 +1868,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   /* Get telescope location for airmass calculation */
   doairm = 1;
   
+  if(!jtab)  /* can't do without JPL at the moment */
+    doairm = 0;
+
   ffgkys(fits, "LATITUDE", latstr, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
@@ -2201,8 +2203,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   else
     dtt = DTT;  /* assumes TAI=UTC */
   
-  /* Compute time-dependent quantities */
-  observer_update(&obs, jtab, ttab, itab, mjd, dtt, OBSERVER_UPDATE_ALL);
+  if(jtab) {
+    /* Compute time-dependent quantities */
+    observer_update(&obs, jtab, ttab, itab, mjd, dtt, OBSERVER_UPDATE_ALL);
+  }
 
   /* Get block size for row I/O */
   ffgrsz(fits, &rblksz, &status);
@@ -2283,12 +2287,16 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       points[rout].x = xbuf[rin];
       points[rout].y = ybuf[rin];
 
-      /* Apply space motion */
-      source_place(&obs, &(mefinfo->stars[rrout].src),
-		   jtab, TR_MOTION, s, NULL, &pr);
-      
-      /* Modified BJD(TDB) */
-      points[rout].bjd = obs.tt + (obs.dtdb + bary_delay(&obs, s, pr)) / DAY;
+      if(jtab) {
+        /* Apply space motion */
+        source_place(&obs, &(mefinfo->stars[rrout].src),
+                     jtab, TR_MOTION, s, NULL, &pr);
+        
+        /* Modified BJD(TDB) */
+        points[rout].bjd = obs.tt + (obs.dtdb + bary_delay(&obs, s, pr)) / DAY;
+      }
+      else
+        points[rout].bjd = -999.0;  /* can't compute */
 
       /* Compute airmass */
       if(doairm) {
@@ -2304,7 +2312,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  iha = 1;  /* "average" HA in some sense - will NOT work for wide-field */
       }
       else {
-	points[rout].bjd = 0;
 	points[rout].airmass = -999.0;  /* flag unusability */
 	points[rout].ha = -999.0;
       }

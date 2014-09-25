@@ -9,7 +9,10 @@
 #include <math.h>
 
 #include <fitsio.h>
+
+#ifdef DEBUG
 #include <cpgplot.h>
+#endif
 
 #include "lightcurves.h"
 
@@ -90,7 +93,7 @@ int main (int argc, char *argv[]) {
 
   struct dtai_table dtab, *dtptr = NULL;
   struct iers_table itab, *itptr = NULL;
-  struct jpleph_table jtab, ttab, *ttptr = NULL;
+  struct jpleph_table jtab, ttab, *jtptr = NULL, *ttptr = NULL;
 
   int len, maxflen, fspc;
   float *medbuf1 = (float *) NULL, *medbuf2, medsat, medlim;
@@ -197,19 +200,27 @@ int main (int argc, char *argv[]) {
     itptr = &itab;
 
   rv = jpleph_open(&jtab, 0, (char *) NULL);
-  if(rv)
+  if(rv == -2) {
+    printf("Could not find JPL ephemeris, continuing without\n");
+    jtptr = NULL;
+    ttptr = NULL;
+  }
+  else if(rv)
     fatal(1, "jpleph_open: %d", rv);
+  else {
+    jtptr = &jtab;
 
-  if(!jtab.has_time) {
-    rv = jpleph_open(&ttab, 1, (char *) NULL);
-    if(rv == -2) {
-      printf("Time ephemeris problem, continuing without\n");
-      ttptr = NULL;
+    if(!jtab.has_time) {
+      rv = jpleph_open(&ttab, 1, (char *) NULL);
+      if(rv == -2) {
+        printf("Time ephemeris problem, continuing without\n");
+        ttptr = NULL;
+      }
+      else if(rv)
+        fatal(1, "jpleph_open: %d", rv);
+      else
+        ttptr = &ttab;
     }
-    else if(rv)
-      fatal(1, "jpleph_open: %d", rv);
-    else
-      ttptr = &ttab;
   }
 
   /* Make stdout unbuffered */
@@ -554,6 +565,7 @@ int main (int argc, char *argv[]) {
 	   "Median 5-sigma limit:    %.1f\n",
 	   nstartot, medsat, medlim);
 
+#ifdef PLOTS
   /* Do diagnostic plots */
   if(!noplots) {
     if(do_plots(meflist, nmefs, medsat, medlim,
@@ -562,6 +574,7 @@ int main (int argc, char *argv[]) {
 		errstr))
       fatal(1, "do_plots: %s");
   }
+#endif
 
   /* Free MEF info */
   for(mef = 0; mef < nmefs; mef++) {
