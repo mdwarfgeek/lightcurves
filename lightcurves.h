@@ -170,6 +170,9 @@ struct lc_frame {
   /* MEarth-specific: "instrument version" */
   struct instvers *instvers;
 
+  /* Kepler-specific: cadence number */
+  long cadencenum;
+
   /* Segment number */
   int iseg;
 };

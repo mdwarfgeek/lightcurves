@@ -1469,6 +1469,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   struct instvers *instvers = (struct instvers *) NULL;
 
+  long cadencenum = -999;
+
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
   if(status) {
@@ -2179,6 +2181,17 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       instvers = instverslist + i-1;
   }
 
+  /* Kepler-specific: cadence number */
+  ffgkyj(fits, "CADENCE", &cadencenum, (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    cadencenum = -999;  /* valid numbers should be positive */
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkyj: CADENCE");
+    goto error;
+  }
+
   if(doairm) {
     /* Create observer structure */
     observer_init(&obs, lon, lat, height);
@@ -2498,6 +2511,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   mefinfo->frames[iframe].schpri = schpri;
   mefinfo->frames[iframe].schcad = schcad;
   memcpy(mefinfo->frames[iframe].schtype, schtype, sizeof(mefinfo->frames[iframe].schtype));
+  mefinfo->frames[iframe].cadencenum = cadencenum;
 
   mefinfo->frames[iframe].zpdiff = magzpt - mefinfo->refmagzpt;
 
