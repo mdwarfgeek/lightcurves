@@ -224,7 +224,14 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkye(fits, "EXP_TIME", &exptime, (char *) NULL, &status);
-      if(status) {
+      if(status == KEY_NO_EXIST) {
+        status = 0;
+        exptime = 0;
+
+        if(verbose)
+          printf("Warning: no exposure time found\n");
+      }
+      else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EXP_TIME");
 	goto error;
       }
@@ -278,6 +285,9 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
       if(status == KEY_NO_EXIST) {
 	status = 0;
 	gain = 1.0;  /* !!! */
+
+        if(verbose)
+          printf("Warning: using default gain = %.1f\n", gain);
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EGAIN");
@@ -381,7 +391,11 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 	if(status == KEY_NO_EXIST) {
 	  status = 0;
 	  ffgkys(fits, "INSFILTE", filter, (char *) NULL, &status);
-	  if(status) {
+          if(status == KEY_NO_EXIST) {
+            status = 0;
+            filter[0] = '\0';
+          }
+	  else if(status) {
 	    fitsio_err(errstr, status, "ffgkye: INSFILTE");
 	    goto error;
 	  }
@@ -445,7 +459,14 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkyd(fits, "JD", &mjd, (char *) NULL, &status);
-      if(status) {
+      if(status == KEY_NO_EXIST) {
+        status = 0;
+        mjd = J2K;
+
+        if(verbose)
+          printf("Warning: no MJDs available, timestamps will be garbage\n");
+      }
+      else if(status) {
 	fitsio_err(errstr, status, "ffgkyd: JD");
 	goto error;
       }
@@ -463,8 +484,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   /* Correct to midpoint of observation */
-  if(!noexp)
-    mjd += 0.5 * exptime / 86400.0;
+  mjd += 0.5 * exptime / 86400.0;
 
   /* Read number of rows */
   ffgnrw(fits, &nrows, &status);
@@ -877,7 +897,14 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkye(fits, "EXP_TIME", &exptime, (char *) NULL, &status);
-      if(status) {
+      if(status == KEY_NO_EXIST) {
+        status = 0;
+        exptime = 0;
+
+        if(verbose)
+          printf("Warning: no exposure time found\n");
+      }
+      else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EXP_TIME");
 	goto error;
       }
@@ -932,6 +959,9 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       if(status == KEY_NO_EXIST) {
 	status = 0;
 	gain = 1.0;  /* !!! */
+
+        if(verbose)
+          printf("Warning: using default gain = %.1f\n", gain);
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EGAIN");
@@ -1035,7 +1065,11 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	if(status == KEY_NO_EXIST) {
 	  status = 0;
 	  ffgkys(fits, "INSFILTE", filter, (char *) NULL, &status);
-	  if(status) {
+          if(status == KEY_NO_EXIST) {
+            status = 0;
+            filter[0] = '\0';
+          }
+	  else if(status) {
 	    fitsio_err(errstr, status, "ffgkye: INSFILTE");
 	    goto error;
 	  }
@@ -1094,8 +1128,11 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
   if(noexp)
     mefinfo->zp = magzpt;
-  else
-    mefinfo->zp = magzpt + 2.5 * log10f(exptime) - (airmass - 1.0)*extinct;
+  else {
+    mefinfo->zp = magzpt - (airmass - 1.0)*extinct;
+    if(exptime)
+      mefinfo->zp += 2.5 * log10f(exptime);
+  }
 
   /* Calculate syslim for this frame */
   if(sysulim < 0)
@@ -1115,7 +1152,14 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkyd(fits, "JD", &mjd, (char *) NULL, &status);
-      if(status) {
+      if(status == KEY_NO_EXIST) {
+        status = 0;
+        mjd = J2K;
+
+        if(verbose)
+          printf("Warning: no MJDs available, timestamps will be garbage\n");
+      }
+      else if(status) {
 	fitsio_err(errstr, status, "ffgkyd: JD");
 	goto error;
       }
@@ -1597,7 +1641,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkye(fits, "EXP_TIME", &exptime, (char *) NULL, &status);
-      if(status) {
+      if(status == KEY_NO_EXIST) {
+        status = 0;
+        exptime = 0;
+
+        if(verbose)
+          printf("Warning: no exposure time found\n");
+      }
+      else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EXP_TIME");
 	goto error;
       }
@@ -1614,7 +1665,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   exptime = fabsf(exptime);
 
-  expfac = mefinfo->refexp / exptime;
+  if(exptime && mefinfo->refexp)
+    expfac = mefinfo->refexp / exptime;
+  else
+    expfac = 1.0;
 
   ffgkye(fits, "SEEING", &seeing, (char *) NULL, &status);
   if(status) {
@@ -1674,6 +1728,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       if(status == KEY_NO_EXIST) {
 	status = 0;
 	gain = 1.0;  /* !!! */
+
+        if(verbose)
+          printf("Warning: using default gain = %.1f\n", gain);
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EGAIN");
@@ -1777,7 +1834,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	if(status == KEY_NO_EXIST) {
 	  status = 0;
 	  ffgkys(fits, "INSFILTE", filter, (char *) NULL, &status);
-	  if(status) {
+          if(status == KEY_NO_EXIST) {
+            status = 0;
+            filter[0] = '\0';
+          }
+	  else if(status) {
 	    fitsio_err(errstr, status, "ffgkye: INSFILTE");
 	    goto error;
 	  }
@@ -1837,8 +1898,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   /* Correction required to account for differences in exposure and extinction */
   if(noexp)
     zpcorr = 0.0;
-  else
-    zpcorr = 2.5 * log10f(exptime/mefinfo->refexp) - (airmass - 1.0)*extinct + (mefinfo->refairmass - 1.0)*mefinfo->refextinct;
+  else {
+    zpcorr = (mefinfo->refairmass - 1.0)*mefinfo->refextinct - (airmass - 1.0)*extinct;
+    if(exptime && mefinfo->refexp)
+      zpcorr += 2.5 * log10f(exptime/mefinfo->refexp);
+  }
 
   ffgkyd(fits, "MJD-OBS", &mjd, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
@@ -1847,7 +1911,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkyd(fits, "JD", &mjd, (char *) NULL, &status);
-      if(status) {
+      if(status == KEY_NO_EXIST) {
+        status = 0;
+        mjd = J2K;
+
+        if(verbose)
+          printf("Warning: no MJDs available, timestamps will be garbage\n");
+      }
+      else if(status) {
 	fitsio_err(errstr, status, "ffgkyd: JD");
 	goto error;
       }
@@ -2405,7 +2476,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  var = rms*rms;
 
 	  /* Scintillation */
-	  if(diam > 0.0 && points[rout].airmass > 0.0) {
+	  if(diam > 0.0 && points[rout].airmass > 0.0 && exptime) {
 	    sc = 0.09 * powf(diam / 10.0, -2.0 / 3.0) *
  	                powf(points[rout].airmass, 3.0 / 2.0) *
  	                expf(-height / 8000.0) /
