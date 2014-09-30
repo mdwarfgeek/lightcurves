@@ -616,11 +616,15 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   apoffbuf = apmedbuf + 2 * napcol * rblksz;
 
   /* Allocate memory for catalogue stars */
-  stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
-  if(!stars) {
-    report_syserr(errstr, "malloc");
-    goto error;
+  if(nrows > 0) {
+    stars = (struct lc_star *) malloc(nrows * sizeof(struct lc_star));
+    if(!stars) {
+      report_syserr(errstr, "malloc");
+      goto error;
+    }
   }
+  else
+    stars = (struct lc_star *) NULL;
 
   for(rr = 0; rr < nrows; rr++) {
     stars[rr].segs = (struct lc_star_segment *) malloc(mefinfo->nseg * sizeof(struct lc_star_segment));
