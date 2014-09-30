@@ -49,6 +49,7 @@ static void usage (char *av) {
 	  "         -m        Allow for meridian offset in rms and weighting.\n"
 	  "         -mm       Same, only also removes it.\n"
 	  "         -n        Do not renormalise median to reference magnitude.\n"
+          "         -S        Use theoretical sky noise rather than empirical.\n"
 	  "         -s level  Override saturation level to 'level'.\n"
 	  "         -u mag    Set upper(,lower) mag limit for systematics correction.\n"
 	  "         -V file   Use 'instrument version' table from 'file' (MEarth only).\n\n"
@@ -96,6 +97,7 @@ int main (int argc, char *argv[]) {
   int apselmode = APSEL_SEL | APSEL_ALL;
 
   int domerid = 0;
+  int theosky = 0;
   int norenorm = 0;
   int polydeg = -1;
 
@@ -132,7 +134,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "a:c:df:g:i:mno:pqs:u:vV:")) != -1)
+  while((c = getopt(argc, argv, "a:c:df:g:i:mno:pqSs:u:vV:")) != -1)
     switch(c) {
     case 'a':
       if(!strncasecmp(optarg, "sel", 3))
@@ -184,6 +186,9 @@ int main (int argc, char *argv[]) {
       break;
     case 'q':
       verbose--;
+      break;
+    case 'S':
+      theosky++;
       break;
     case 's':
       satlev = (float) strtod(optarg, &ep);
@@ -391,6 +396,7 @@ int main (int argc, char *argv[]) {
     meflist[mef].nrows = 0;
 
     meflist[mef].warned = 0;
+    meflist[mef].theosky = theosky;
 
     meflist[mef].degree = polydeg;
     meflist[mef].aperture = aperture;
@@ -900,6 +906,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	 "Upper mag limit for fit", &status);
   ffpkyf(fits, "LMLIM", mefinfo->zp - mefinfo->sysllim, 4,
 	 "Lower mag limit for fit", &status);
+  ffpkyl(fits, "THEOSKY", mefinfo->theosky,
+         "T theoretical sky noise, F empirical", &status);
   ffpkyj(fits, "POLYDEG", mefinfo->degree,
 	 "Polynomial degree in fit", &status);
   ffpkyj(fits, "APSEL", mefinfo->aperture,

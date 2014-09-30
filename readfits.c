@@ -187,6 +187,16 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     goto error;
   }
 
+  ffgkyl(fits, "THEOSKY", &(mefinfo->theosky), (char *) NULL, &status);
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    mefinfo->theosky = 0;
+  }
+  else if(status) {
+    fitsio_err(errstr, status, "ffgkyl: THEOSKY");
+    goto error;
+  }
+
   /* Try for field angle - old files will not have it, in which case
    * fallback to the old, incorrect, HA-based method */
   ffgkye(fits, "REFFANG", &(mefinfo->reffang), (char *) NULL, &status);
@@ -723,7 +733,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   mefinfo->nrows = nrowmast;  /* so we can check for mismatches */
 
   mefinfo->refexp = exptime;
-  mefinfo->refsigma = skynoise;
+  mefinfo->refsigma = mefinfo->theosky ? sqrtf(skylev / gain) : skynoise;
   mefinfo->refextinct = noexp ? 0.0 : extinct;
   mefinfo->refairmass = airmass;
   mefinfo->refmagzpt = magzpt;
@@ -1461,7 +1471,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   mefinfo->refextinct = noexp ? 0.0 : extinct;
   mefinfo->refairmass = airmass;
   mefinfo->refmagzpt = magzpt;
-  mefinfo->refsigma = skynoise;
+  mefinfo->refsigma = mefinfo->theosky ? sqrtf(skylev / gain) : skynoise;
 
   tmp = 5.0 * sqrtf(M_PI * rcore * rcore) * skynoise * apcor[0];
   if(tmp > 0.0)
@@ -2526,8 +2536,13 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	}
 
 	area = M_PI * rcore * rcore * flux_apers[col] * flux_apers[col];
-	skyvar = skynoise * skynoise * area +
-	         skyfiterr * skyfiterr * area * area;
+
+        if(mefinfo->theosky)
+          skyvar = skylev * area / gain +
+                   skyfiterr * skyfiterr * area * area;
+        else
+          skyvar = skynoise * skynoise * area +
+                   skyfiterr * skyfiterr * area * area;
 
 	if(diffmode) {
 	  flux = fluxbuf[rin] * mefinfo->apcor[col] * mefinfo->percorr;
@@ -2623,7 +2638,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   /* Accumulate averages of noise contributions */
-  tmp = skynoise * skynoise * expfac;
+  if(mefinfo->theosky)
+    tmp = skylev * expfac / gain;
+  else
+    tmp = skynoise * skynoise * expfac;
   
   if(diffmode)
     mefinfo->avsigma += tmp + mefinfo->refsigma * mefinfo->refsigma;

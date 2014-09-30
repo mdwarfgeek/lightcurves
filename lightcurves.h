@@ -203,6 +203,9 @@ struct lc_mef {
 #define WARNED_MAGZPT   0x10
 #define WARNED_TIME     0x20
 
+  /* Use theoretical sky level calc? */
+  int theosky;
+
   /* Degree of polynomial fit to be applied, zero for none */
   int degree;
 
