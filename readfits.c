@@ -114,6 +114,13 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   long iver, jtmp;
   char kbuf[FLEN_KEYWORD];
 
+  /* Read number of rows */
+  ffgnrw(fits, &nrows, &status);
+  if(status) {
+    fitsio_err(errstr, status, "could not get table dimensions");
+    goto error;
+  }
+
   /* Get header information */
   ffgkyj(fits, "NMEAS", &nmeas, (char *) NULL, &status);
   ffgkyj(fits, "NROWMAST", &nrowmast, (char *) NULL, &status);
@@ -515,13 +522,6 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   /* Correct to midpoint of observation */
   mjd += 0.5 * exptime / 86400.0;
-
-  /* Read number of rows */
-  ffgnrw(fits, &nrows, &status);
-  if(status) {
-    fitsio_err(errstr, status, "could not get table dimensions");
-    goto error;
-  }
 
   if(mefinfo->aperture) {
     ap1 = mefinfo->aperture-1;
