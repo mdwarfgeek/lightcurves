@@ -1523,7 +1523,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float apcor[NFLUX];
 
   long nrows, rblksz, roff, remain, routoff, rin, rrin, rout, rrout, rread;
-  float flux, fluxerr, locsky, peak;
+  float flux, fluxerr, locsky, skyfiterr, peak;
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
   float scatcoeff = 0.0;
@@ -2498,7 +2498,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       points[rout].peak = peak;
 
       /* Accumulate sky fitting error */
-      skyfiterrbuf[navskyfiterr] = skyrmsbuf[rin];
+      skyfiterr = 0.0;  /* no good way to get this yet */
+
+      skyfiterrbuf[navskyfiterr] = skyfiterr;
       navskyfiterr++;
 
       /* Accumulate counts of frames with bad pixels */
@@ -2521,7 +2523,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
 	area = M_PI * rcore * rcore * flux_apers[col] * flux_apers[col];
 	skyvar = skynoise * skynoise * area +
-	         skyrmsbuf[rin] * skyrmsbuf[rin] * area * area;
+	         skyfiterr * skyfiterr * area * area;
 
 	if(diffmode) {
 	  flux = fluxbuf[rin] * mefinfo->apcor[col] * mefinfo->percorr;
