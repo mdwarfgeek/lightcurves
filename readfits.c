@@ -1385,8 +1385,12 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	/* sky contribution ? only affects normalisation I think but not sure */
 
 	/* Store reference magnitude for this star */
-	if(col == REFAP)
-	  stars[rout].refmag = 2.5 * log10f(MAX(1.0, stars[rout].ref.aper[col].flux));
+	if(col == REFAP) {
+          if(stars[rout].ref.aper[col].flux > 0.0)
+            stars[rout].refmag = 2.5 * log10f(stars[rout].ref.aper[col].flux);
+          else
+            stars[rout].refmag = -999.0;
+        }
       }
 
       if(pkhtbuf[rin]+locskybuf[rin]-pedestal > 0.95*satlev) {
@@ -2542,7 +2546,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	}
 
 	if(flux > 0.0) {
-	  points[rout].aper[col].flux = 2.5 * log10f(MAX(1.0, flux));
+	  points[rout].aper[col].flux = 2.5 * log10f(flux);
 
 	  if(!diffmode)
 	    points[rout].aper[col].flux -= zpcorr;
