@@ -17,7 +17,8 @@
 
 int do_plots (struct lc_mef *meflist, int nmefs,
 	      float medsat, float medlim, float umlim, float lmlim, char *errstr) {
-  float magmin, magmax, mag, rms, chi, photons, loge, area, tmp, tmpp, tmps;
+  float magmin, magmax, lrmin, lrmax;
+  float mag, rms, chi, photons, loge, area, tmp, tmpp, tmps;
   long star, pt;
   int mef;
 
@@ -55,40 +56,7 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   medbuf8 = medbuf1 + 7 * nmefs;
   medbuf9 = medbuf1 + 8 * nmefs;
 
-  /* RMS plot */
-  magmin = MIN(medsat, umlim);
-  magmax = medlim;
-
-  snprintf(xlab, sizeof(xlab), "%s magnitude", meflist[0].filter);
-
-  cpgenv(magmin, magmax, -0.1, 2.9, 0, 20);
-  cpglab(xlab, "RMS (millimag)", "");
-
   for(mef = 0; mef < nmefs; mef++) {
-    for(star = 0; star < meflist[mef].nstars; star++) {
-      /* Use only the ones classified as stars */
-      if(meflist[mef].stars[star].med > 0.0 &&
-	 meflist[mef].stars[star].rms > 0.0) {
-	mag = meflist[mef].zp - meflist[mef].stars[star].med;
-	rms = 3.0 + log10f(meflist[mef].stars[star].rms);
-
-	cpgsci(1+mef);
-
-	if(meflist[mef].stars[star].cls == -1 &&
-	   meflist[mef].stars[star].bflag == 0 &&
-	   meflist[mef].stars[star].cflag == 0) {  /* BODGE */
-	  cpgpt(1, &mag, &rms, 1);
-	}
-	else if(meflist[mef].stars[star].cls == 9) {
-	  cpgpt(1, &mag, &rms, 1);
-	  cpgsci(2);
-	  cpgpt(1, &mag, &rms, 22);
-	}
-
-	cpgsci(1);
-      }
-    }
-
     medbuf1[mef] = meflist[mef].refgain;
     medbuf2[mef] = meflist[mef].refrcore;
     medbuf3[mef] = meflist[mef].avsigma;
@@ -112,6 +80,10 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 
   free((void *) medbuf1);
   medbuf1 = (float *) NULL;
+
+  /* Plot x range */
+  magmin = MIN(medsat, umlim);
+  magmax = medlim;
 
   /* Apply average aperture and extinction correction to ZP */
   avzp -= 2.5*log10(avapcor*avextinc);
@@ -156,6 +128,59 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     theoys[t] = 3.0 + 0.5 * log10f(tmp*tmp + avsigm*avsigm + avscint*avscint);
   }
 
+  /* log(RMS) range */
+  lrmin = theoys[0];
+  lrmax = theoys[0];
+
+  for(t = 0; t < ntheo; t++) {
+    if(theoys[t] < lrmin)
+      lrmin = theoys[t];
+    if(theoys[t] > lrmax)
+      lrmax = theoys[t];
+  }
+
+  lrmin -= 0.05*(lrmax-lrmin);
+  lrmax += 0.05*(lrmax-lrmin);
+
+  lrmin = floor(lrmin);
+  if(lrmin > 0)
+    lrmin = 0;
+
+  lrmax = ceil(lrmax);
+  if(lrmax < lrmin + 3)
+    lrmax = lrmin + 3;
+
+  /* RMS plot */
+  snprintf(xlab, sizeof(xlab), "%s magnitude", meflist[0].filter);
+
+  cpgenv(magmin, magmax, lrmin, lrmax-1.0e-3, 0, 20);
+  cpglab(xlab, "RMS (millimag)", "");
+
+  for(mef = 0; mef < nmefs; mef++)
+    for(star = 0; star < meflist[mef].nstars; star++) {
+      /* Use only the ones classified as stars */
+      if(meflist[mef].stars[star].med > 0.0 &&
+	 meflist[mef].stars[star].rms > 0.0) {
+	mag = meflist[mef].zp - meflist[mef].stars[star].med;
+	rms = 3.0 + log10f(meflist[mef].stars[star].rms);
+
+	cpgsci(1+mef);
+
+	if(meflist[mef].stars[star].cls == -1 &&
+	   meflist[mef].stars[star].bflag == 0 &&
+	   meflist[mef].stars[star].cflag == 0) {  /* BODGE */
+	  cpgpt(1, &mag, &rms, 1);
+	}
+	else if(meflist[mef].stars[star].cls == 9) {
+	  cpgpt(1, &mag, &rms, 1);
+	  cpgsci(2);
+	  cpgpt(1, &mag, &rms, 22);
+	}
+
+	cpgsci(1);
+      }
+    }
+
   cpgsci(2);
   cpgslw(4);
   cpgsls(1);
@@ -190,30 +215,30 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 
   tmpx[0] = medsat;
   tmpx[1] = medsat;
-  tmpy[0] = -0.1;
-  tmpy[1] = 2.9;
+  tmpy[0] = lrmin;
+  tmpy[1] = lrmax;
   cpgline(2, tmpx, tmpy);
 
   cpgsls(2);
 
   tmpx[0] = umlim;
   tmpx[1] = umlim;
-  tmpy[0] = -0.1;
-  tmpy[1] = 2.9;
+  tmpy[0] = lrmin;
+  tmpy[1] = lrmax;
   cpgline(2, tmpx, tmpy);
 
   tmpx[0] = lmlim;
   tmpx[1] = lmlim;
-  tmpy[0] = -0.1;
-  tmpy[1] = 2.9;
+  tmpy[0] = lrmin;
+  tmpy[1] = lrmax;
   cpgline(2, tmpx, tmpy);
 
   cpgsls(1);
 
   tmpx[0] = medlim;
   tmpx[1] = medlim;
-  tmpy[0] = -0.1;
-  tmpy[1] = 2.9;
+  tmpy[0] = lrmin;
+  tmpy[1] = lrmax;
   cpgline(2, tmpx, tmpy);
 
   /* Chi squared plot */
