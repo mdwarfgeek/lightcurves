@@ -74,6 +74,8 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, char *errstr) {
       report_syserr(errstr, "munmap");
       goto error;
     }
+
+    b->buf = (unsigned char *) NULL;
   }
 #endif
 
@@ -87,15 +89,17 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, char *errstr) {
     goto error;
   }
 
+  if(totsize > 0) {
 #ifdef HAVE_MMAP
-  /* Map the buffer */
-  b->buf = (unsigned char *) mmap((void *) NULL, totsize,
-				  PROT_READ | PROT_WRITE, MAP_SHARED, b->fd, 0);
-  if(b->buf == ((unsigned char *) MAP_FAILED)) {
-    report_syserr(errstr, "mmap");
-    goto error;
-  }
+    /* Map the buffer */
+    b->buf = (unsigned char *) mmap((void *) NULL, totsize,
+                                    PROT_READ | PROT_WRITE, MAP_SHARED, b->fd, 0);
+    if(b->buf == ((unsigned char *) MAP_FAILED)) {
+      report_syserr(errstr, "mmap");
+      goto error;
+    }
 #endif
+  }
 
   b->nobj = nobj;
   b->nmeas = nmeas;
@@ -107,7 +111,18 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, char *errstr) {
 }
 
 void buffer_close (struct buffer_info *b) {
-  
+
+#ifdef HAVE_MMAP
+  /* Unmap the buffer */
+  if(b->buf) {
+    munmap((void *) b->buf,
+           ((off_t) b->nobj) * ((off_t) b->nmeas) *
+           sizeof(struct lc_point));
+
+    b->buf = (unsigned char *) NULL;
+  }
+#endif
+
   /* Close the file */
   close(b->fd);
 }

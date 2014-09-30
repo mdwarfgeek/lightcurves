@@ -388,6 +388,9 @@ int main (int argc, char *argv[]) {
     /* Read in reference info */
     meflist[mef].stars = (struct lc_star *) NULL;
     meflist[mef].nstars = 0;
+    meflist[mef].nrows = 0;
+
+    meflist[mef].warned = 0;
 
     meflist[mef].degree = polydeg;
     meflist[mef].aperture = aperture;
@@ -441,37 +444,42 @@ int main (int argc, char *argv[]) {
     if(verbose && isatty(1))
       printf("\n");
 
-    /* Sort out averages */
-    meflist[mef].avsigma = sqrtf(meflist[mef].avsigma / nf);
-    meflist[mef].avskyfit = sqrtf(meflist[mef].avskyfit / nf);
-    meflist[mef].avapcor /= nf;
-    meflist[mef].avscint /= nf;
+    if(meflist[mef].nstars > 0) {
+      /* Sort out averages */
+      meflist[mef].avsigma = sqrtf(meflist[mef].avsigma / nf);
+      meflist[mef].avskyfit = sqrtf(meflist[mef].avskyfit / nf);
+      meflist[mef].avapcor /= nf;
+      meflist[mef].avscint /= nf;
+      
+      /* Fix the cflag column - sometimes in difference imaging there
+       * are frames with zero confidence all-over, so subtract off
+       * the median cflag value.
+       */
+      tmpmed = (long *) malloc(meflist[mef].nstars * sizeof(long));
+      if(!tmpmed)
+        error(1, "malloc");
+      
+      for(star = 0; star < meflist[mef].nstars; star++)
+        tmpmed[star] = meflist[mef].stars[star].cflag;
+      
+      sortlong(tmpmed, meflist[mef].nstars);
+      cflagmed = meflist[mef].nstars % 2 ?
+                 tmpmed[meflist[mef].nstars/2] :
+                 (tmpmed[meflist[mef].nstars/2-1] +
+                  tmpmed[meflist[mef].nstars/2]) / 2;
 
-    /* Fix the cflag column - sometimes in difference imaging there
-     * are frames with zero confidence all-over, so subtract off
-     * the median cflag value.
-     */
-    tmpmed = (long *) malloc(meflist[mef].nstars * sizeof(long));
-    if(!tmpmed)
-      error(1, "malloc");
-
-    for(star = 0; star < meflist[mef].nstars; star++)
-      tmpmed[star] = meflist[mef].stars[star].cflag;
-
-    sortlong(tmpmed, meflist[mef].nstars);
-    cflagmed = meflist[mef].nstars % 2 ?
-               tmpmed[meflist[mef].nstars/2] :
-               (tmpmed[meflist[mef].nstars/2-1] +  tmpmed[meflist[mef].nstars/2]) / 2;
-
-    free((void *) tmpmed);
-    tmpmed = (long *) NULL;
-
-    for(star = 0; star < meflist[mef].nstars; star++) {
-      meflist[mef].stars[star].cflag -= cflagmed;
-
-      if(meflist[mef].stars[star].cflag < 0)
-	meflist[mef].stars[star].cflag = 0;
+      free((void *) tmpmed);
+      tmpmed = (long *) NULL;
+      
+      for(star = 0; star < meflist[mef].nstars; star++) {
+        meflist[mef].stars[star].cflag -= cflagmed;
+        
+        if(meflist[mef].stars[star].cflag < 0)
+          meflist[mef].stars[star].cflag = 0;
+      }
     }
+    else
+      cflagmed = 0;
 
     /* Change MJD to be relative to the first frame */
     meflist[mef].mjdref = floor(meflist[mef].frames[0].mjd);
@@ -490,7 +498,6 @@ int main (int argc, char *argv[]) {
       printf("  5-sigma limit:        %.1f\n"
 	     "  Median cflag:         %ld\n",
 	     meflist[mef].refflim, cflagmed);
-
     }
 
     if(meflist[mef].satmag != -999.0) {

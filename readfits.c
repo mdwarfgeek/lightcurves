@@ -228,8 +228,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
         status = 0;
         exptime = 0;
 
-        if(verbose)
+        if(verbose) {
           printf("Warning: no exposure time found\n");
+          mefinfo->warned |= WARNED_EXPTIME;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EXP_TIME");
@@ -259,19 +261,31 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   ffgkye(fits, "SKYLEVEL", &skylev, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST && nrows == 0) {
+    status = 0;
+    skylev = 0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: SKYLEVEL");
     goto error;
   }
 
   ffgkye(fits, "SKYNOISE", &skynoise, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST && nrows == 0) {
+    status = 0;
+    skynoise = 0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: SKYNOISE");
     goto error;
   }
 
   ffgkye(fits, "RCORE", &rcore, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST && nrows == 0) {
+    status = 0;
+    rcore = 0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: RCORE");
     goto error;
   }
@@ -286,8 +300,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 	status = 0;
 	gain = 1.0;  /* !!! */
 
-        if(verbose)
+        if(verbose) {
           printf("Warning: using default gain = %.1f\n", gain);
+          mefinfo->warned |= WARNED_GAIN;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EGAIN");
@@ -312,8 +328,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
       status = 0;
       magzpt = 25.0;
 
-      if(verbose)
+      if(verbose) {
 	printf("Warning: using default magzpt = %.1f\n", magzpt);
+        mefinfo->warned |= WARNED_MAGZPT;
+      }
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkye: ZMAG");
@@ -463,8 +481,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
         status = 0;
         mjd = J2K;
 
-        if(verbose)
+        if(verbose) {
           printf("Warning: no MJDs available, timestamps will be garbage\n");
+          mefinfo->warned |= WARNED_TIME;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkyd: JD");
@@ -795,6 +815,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
   int cats_are_80 = 0;
 
+  float tmp;
+
   /* Read number of rows */
   ffgnrw(fits, &nrows, &status);
   if(status) {
@@ -875,8 +897,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	status = 0;
 	satlev = 65535;
 	
-	if(verbose > 1)
+	if(verbose > 1) {
 	  printf("Warning: using default satlev = %.1f\n", satlev);
+          mefinfo->warned |= WARNED_SATLEV;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: SATURATE");
@@ -901,8 +925,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
         status = 0;
         exptime = 0;
 
-        if(verbose)
+        if(verbose) {
           printf("Warning: no exposure time found\n");
+          mefinfo->warned |= WARNED_EXPTIME;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EXP_TIME");
@@ -932,19 +958,31 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   ffgkye(fits, "SKYLEVEL", &skylev, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST && nrows == 0) {
+    status = 0;
+    skylev = 0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: SKYLEVEL");
     goto error;
   }
 
   ffgkye(fits, "SKYNOISE", &skynoise, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST && nrows == 0) {
+    status = 0;
+    skynoise = 0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: SKYNOISE");
     goto error;
   }
 
   ffgkye(fits, "RCORE", &rcore, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST && nrows == 0) {
+    status = 0;
+    rcore = 0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: RCORE");
     goto error;
   }
@@ -960,8 +998,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	status = 0;
 	gain = 1.0;  /* !!! */
 
-        if(verbose)
+        if(verbose) {
           printf("Warning: using default gain = %.1f\n", gain);
+          mefinfo->warned |= WARNED_GAIN;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EGAIN");
@@ -986,8 +1026,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       status = 0;
       magzpt = 25.0;
 
-      if(verbose)
+      if(verbose) {
 	printf("Warning: using default magzpt = %.1f\n", magzpt);
+        mefinfo->warned |= WARNED_MAGZPT;
+      }
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkye: ZMAG");
@@ -1156,8 +1198,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
         status = 0;
         mjd = J2K;
 
-        if(verbose)
+        if(verbose) {
           printf("Warning: no MJDs available, timestamps will be garbage\n");
+          mefinfo->warned |= WARNED_TIME;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkyd: JD");
@@ -1414,8 +1458,12 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   mefinfo->refairmass = airmass;
   mefinfo->refmagzpt = magzpt;
   mefinfo->refsigma = skynoise;
-  mefinfo->refflim = mefinfo->zp - 2.5 * log10f(5.0 * sqrtf(M_PI * rcore * rcore) *
-						skynoise * apcor[0]);
+
+  tmp = 5.0 * sqrtf(M_PI * rcore * rcore) * skynoise * apcor[0];
+  if(tmp > 0.0)
+    mefinfo->refflim = mefinfo->zp - 2.5 * log10f(tmp);
+  else
+    mefinfo->refflim = -999.0;
 
   mefinfo->refgain = gain;
   mefinfo->refrcore = rcore;
@@ -1540,7 +1588,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   if(nrows != mefinfo->nrows) {
     report_err(errstr,
 	       "number of stars does not match: %d != %d",
-	       nrows, mefinfo->nstars);
+	       nrows, mefinfo->nrows);
     goto error;
   }
 
@@ -1619,8 +1667,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	status = 0;
 	satlev = 65535;
 
-	if(verbose > 1 && !diffmode)
+	if(verbose > 1 && !diffmode &&
+           !(mefinfo->warned & WARNED_SATLEV)) {
 	  printf("Warning: using default satlev = %.1f\n", satlev);
+          mefinfo->warned |= WARNED_SATLEV;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: SATURATE");
@@ -1645,8 +1696,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
         status = 0;
         exptime = 0;
 
-        if(verbose)
+        if(verbose && !(mefinfo->warned & WARNED_EXPTIME)) {
           printf("Warning: no exposure time found\n");
+          mefinfo->warned |= WARNED_EXPTIME;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EXP_TIME");
@@ -1671,7 +1724,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     expfac = 1.0;
 
   ffgkye(fits, "SEEING", &seeing, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST) {
+    status = 0;
+    seeing = -1.0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: SEEING");
     goto error;
   }
@@ -1697,26 +1754,41 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   ffgkye(fits, "SKYLEVEL", &skylev, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST && nrows == 0) {
+    status = 0;
+    skylev = 0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: SKYLEVEL");
     goto error;
   }
 
   ffgkye(fits, "SKYNOISE", &skynoise, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST && nrows == 0) {
+    status = 0;
+    skynoise = 0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: SKYNOISE");
     goto error;
   }
 
   ffgkye(fits, "RCORE", &rcore, (char *) NULL, &status);
-  if(status) {
+  if(status == KEY_NO_EXIST && nrows == 0) {
+    status = 0;
+    rcore = 0;
+  }
+  else if(status) {
     fitsio_err(errstr, status, "ffgkye: RCORE");
     goto error;
   }
 
-  if(verbose > 0 && rcore != mefinfo->refrcore)
+  if(verbose > 0 && rcore != mefinfo->refrcore &&
+     !(mefinfo->warned & WARNED_RCORE)) {
     printf("Warning: rcore does not match reference: %.3f != %.3f\n",
 	   rcore, mefinfo->refrcore);
+    mefinfo->warned |= WARNED_RCORE;
+  }
 
   ffgkye(fits, "GAIN", &gain, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
@@ -1729,8 +1801,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	status = 0;
 	gain = 1.0;  /* !!! */
 
-        if(verbose)
+        if(verbose && !(mefinfo->warned & WARNED_GAIN)) {
           printf("Warning: using default gain = %.1f\n", gain);
+          mefinfo->warned |= WARNED_GAIN;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkye: EGAIN");
@@ -1755,8 +1829,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       status = 0;
       magzpt = 25.0;
 
-      if(verbose)
+      if(verbose && !(mefinfo->warned & WARNED_MAGZPT)) {
 	printf("Warning: using default magzpt = %.1f\n", magzpt);
+        mefinfo->warned |= WARNED_MAGZPT;
+      }
     }
     else if(status) {
       fitsio_err(errstr, status, "ffgkye: ZMAG");
@@ -1915,8 +1991,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
         status = 0;
         mjd = J2K;
 
-        if(verbose)
+        if(verbose && !(mefinfo->warned & WARNED_TIME)) {
           printf("Warning: no MJDs available, timestamps will be garbage\n");
+          mefinfo->warned |= WARNED_TIME;
+        }
       }
       else if(status) {
 	fitsio_err(errstr, status, "ffgkyd: JD");

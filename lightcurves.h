@@ -194,6 +194,15 @@ struct lc_mef {
   long nstars;  /* number of stars from table */
   long nrows;  /* original number of rows in table */
 
+  /* Warnings we have emitted */
+  unsigned char warned;
+#define WARNED_SATLEV   0x01
+#define WARNED_EXPTIME  0x02
+#define WARNED_RCORE    0x04
+#define WARNED_GAIN     0x08
+#define WARNED_MAGZPT   0x10
+#define WARNED_TIME     0x20
+
   /* Degree of polynomial fit to be applied, zero for none */
   int degree;
 

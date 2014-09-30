@@ -381,6 +381,9 @@ int main (int argc, char *argv[]) {
     /* Read in reference info */
     meflist[mef].stars = (struct lc_star *) NULL;
     meflist[mef].nstars = 0;
+    meflist[mef].nrows = 0;
+
+    meflist[mef].warned = 0;
 
     meflist[mef].avsigma = 0.0;
     meflist[mef].avapcor = 0.0;
