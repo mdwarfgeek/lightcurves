@@ -18,7 +18,7 @@
 int do_plots (struct lc_mef *meflist, int nmefs,
 	      float medsat, float medlim, float umlim, float lmlim, char *errstr) {
   float magmin, magmax, lrmin, lrmax;
-  float mag, rms, chi, photons, skyvar, loge, area, tmp, tmpp, tmps;
+  float mag, rms, chi, photons, skyvar, area, tmp, tmpp, tmps;
   long star, pt;
   int mef;
 
@@ -102,7 +102,6 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   theoy = theox + 3 * ntheo;
   theoys = theox + 4 * ntheo;
 
-  loge = log10f(expf(1.0));
   area = M_PI * rcore * rcore;
 
   if(verbose)
@@ -116,9 +115,9 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     skyvar = gain*gain*area * (sigma*sigma +
                                area*skyfiterr*skyfiterr);
 
-    tmp = 2.5 * loge * sqrtf(photons + skyvar) / photons;
-    tmpp = 2.5 * loge * sqrtf(photons) / photons;
-    tmps = 2.5 * loge * sqrtf(skyvar) / photons;
+    tmp = 2.5 * M_LOG10E * sqrtf(photons + skyvar) / photons;
+    tmpp = 2.5 * M_LOG10E * sqrtf(photons) / photons;
+    tmps = 2.5 * M_LOG10E * sqrtf(skyvar) / photons;
 
     theox[t] = mag;
     theop[t] = 3.0 + log10f(tmpp);
