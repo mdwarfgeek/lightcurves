@@ -124,7 +124,7 @@ void systematic_select (struct lc_star *stars, long nstars, float fmin, float fm
 
   for(star = 0; star < nstars; star++) {
     if(stars[star].ref.aper[REFAP].flux > 0 &&
-       stars[star].ref.aper[REFAP].fluxerr > 0 &&
+       stars[star].ref.aper[REFAP].fluxvar > 0 &&
        stars[star].cls == -1 &&
        (fmin < 0 || stars[star].refmag > fmin) &&
        (fmax < 0 || stars[star].refmag < fmax))
@@ -152,7 +152,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   int ilast;
 
   float xmin = 0.0, xmax = 0.0, ymin = 0.0, ymax = 0.0;
-  float lastsig;  /* kludge to capture sigma of last star used for npt=1 case */
+  float lastvar;  /* kludge to capture sigma of last star used for npt=1 case */
 
   float chisq = 0.0, newchisq, varscale;
 
@@ -179,7 +179,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
   for(star = 0; star < mefinfo->nstars; star++) {
     if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
-       data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
+       data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
        !data[star].satur &&                         /* Not saturated */
        mefinfo->stars[star].compok) {               /* OK for comp */
       if(mfirst || mefinfo->stars[star].refmag > fmax) {
@@ -231,7 +231,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   opt = 0;
   for(star = 0; star < mefinfo->nstars; star++) {
     if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
-       data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
+       data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
        mefinfo->stars[star].sigflux[meas] > 0 &&
        mefinfo->stars[star].refmag > fmin &&
        mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
@@ -252,7 +252,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   opt = 0;
   for(star = 0; star < mefinfo->nstars; star++) {
     if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
-       data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
+       data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
        mefinfo->stars[star].sigflux[meas] > 0 &&
        mefinfo->stars[star].sigflux[meas] < rmsclip &&
        mefinfo->stars[star].refmag > fmin &&
@@ -287,7 +287,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   /* Iteratively solve for best-fitting polynomial */
   ilast = 0;
 
-  lastsig = 0;
+  lastvar = 0;
 
   for(iter = 0; iter < NITERMAX && !ilast; iter++) {
 #ifdef DEBUG
@@ -320,7 +320,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
     for(star = 0; star < mefinfo->nstars; star++) {
       if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
-	 data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
+	 data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 mefinfo->stars[star].refmag > fmin &&
@@ -360,7 +360,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     /* Accumulate sums for polynomial fit */
     for(star = 0; star < mefinfo->nstars; star++) {
       if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
-	 data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
+	 data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 mefinfo->stars[star].refmag > fmin &&
@@ -435,7 +435,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     opt = 0;
     for(star = 0; star < mefinfo->nstars; star++) {
       if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
-	 data[star].aper[meas].fluxerr > 0.0 &&       /* And a reliable error */
+	 data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
 	 mefinfo->stars[star].sigflux[meas] > 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 mefinfo->stars[star].refmag > fmin &&
@@ -460,7 +460,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	  newchisq += (val - corr)*(val - corr) * wt;
 	  opt++;
 
-	  lastsig = data[star].aper[meas].fluxerr;
+	  lastvar = data[star].aper[meas].fluxvar;
 	
 #ifdef DEBUG
 	  tmpx[0] = mefinfo->stars[star].x;
@@ -510,7 +510,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   f->degree = degree;
   f->medoff = medoff;
   f->sigoff = sigoff;
-  f->sigm = (opt > 1 ? (opt > ncoeff ? sigoff / sqrt(opt-ncoeff) : 0.0) : lastsig);
+  f->sigm = (opt > 1 ? (opt > ncoeff ? sigoff / sqrt(opt-ncoeff) : 0.0) : sqrtf(lastvar));
   f->npt = opt;
 
   /* Print coeffs */
@@ -540,10 +540,10 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
 
       data[star].aper[meas].flux -= corr;
 
-      if(data[star].aper[meas].fluxerr > 0)
-	data[star].aper[meas].fluxerrcom = sqrt(data[star].aper[meas].fluxerr*data[star].aper[meas].fluxerr + var);
+      if(data[star].aper[meas].fluxvar > 0)
+	data[star].aper[meas].fluxvarcom = data[star].aper[meas].fluxvar + var;
       else
-	data[star].aper[meas].fluxerrcom = 0.0;
+	data[star].aper[meas].fluxvarcom = 0.0;
     }
   }
 

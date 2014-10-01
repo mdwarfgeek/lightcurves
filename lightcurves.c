@@ -301,7 +301,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	opt1 = 0;
 	for(pt = 0; pt < mefinfo->nf; pt++) {
 	  if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	     ptbuf[pt].aper[meas].fluxerrcom != 0.0) {
+	     ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
 	    medbuf1[opt1] = ptbuf[pt].aper[meas].flux;
 	    opt1++;
 	  }
@@ -365,7 +365,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       opt1 = 0;
       for(pt = 0; pt < mefinfo->nf; pt++) {
 	if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	   ptbuf[pt].aper[meas].fluxerrcom != 0.0) {
+	   ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
 	  medbuf1[opt1] = ptbuf[pt].aper[meas].flux;
 	  opt1++;
 	}
@@ -383,11 +383,9 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       
       for(pt = 0; pt < mefinfo->nf; pt++) {
 	if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	   ptbuf[pt].aper[meas].fluxerrcom != 0.0) {
+	   ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
 	  tmp = ptbuf[pt].aper[meas].flux - medflux;
-	  tmp /= ptbuf[pt].aper[meas].fluxerrcom;
-
-	  chisq += tmp*tmp;
+	  chisq += tmp*tmp / ptbuf[pt].aper[meas].fluxvarcom;
 	  nchisq++;
 	}
       }
@@ -453,7 +451,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       
       for(star = 0; star < mefinfo->nstars; star++)
 	if(ptbuf[star].aper[0].flux > 0.0 &&              /* Has a flux measurement */
-	   ptbuf[star].aper[0].fluxerr > 0.0 &&           /* And a reliable error */
+	   ptbuf[star].aper[0].fluxvar > 0.0 &&           /* And a reliable error */
 	   ptbuf[star].aper[0].flux < mefinfo->sysulim && /* Not saturated */
 	   mefinfo->stars[star].cls == -1) {              /* Stellar */
 	  medbuf1[opt1] = ptbuf[star].x - mefinfo->stars[star].segs[mefinfo->frames[pt].iseg].medx;
@@ -627,7 +625,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
       opt = 0;
       for(pt = 0; pt < mefinfo->nf; pt++) {
 	if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	   ptbuf[pt].aper[meas].fluxerrcom != 0.0) {
+	   ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
 	  medbuf[opt] = ptbuf[pt].aper[meas].flux;
 	  opt++;
 	}
@@ -643,11 +641,9 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
       
       for(pt = 0; pt < mefinfo->nf; pt++) {
 	if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	   ptbuf[pt].aper[meas].fluxerrcom != 0.0) {
+	   ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
 	  tmp = ptbuf[pt].aper[meas].flux - medflux;
-	  tmp /= ptbuf[pt].aper[meas].fluxerrcom;
-
-	  chisq += tmp*tmp;
+	  chisq += tmp*tmp / ptbuf[pt].aper[meas].fluxvarcom;
 	  nchisq++;
 	}
       }

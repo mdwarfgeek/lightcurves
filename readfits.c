@@ -1395,7 +1395,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	}
 
 	stars[rout].ref.aper[col].flux = fluxbuf[rin] * apcor[col] * percorr;
-	stars[rout].ref.aper[col].fluxerr = fabsf(fluxbuf[rin]) * apcor[col] / gain;
+	stars[rout].ref.aper[col].fluxvar = fabsf(fluxbuf[rin]) * apcor[col] / gain;
 	/* sky contribution ? only affects normalisation I think but not sure */
 
 	/* Store reference magnitude for this star */
@@ -1541,7 +1541,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   float apcor[NFLUX];
 
   long nrows, rblksz, roff, remain, routoff, rin, rrin, rout, rrout, rread;
-  float flux, fluxerr, locsky, skyfiterr, peak;
+  float flux, fluxvar, locsky, skyfiterr, peak;
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
   float scatcoeff = 0.0;
@@ -1558,7 +1558,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   double s[3], pr, seq[3];
 
-  float diam, rms, var, sc, scrms, avskyfiterr, avscint;
+  float diam, sc, err, var, avskyfiterr, avscint;
   float *skyfiterrbuf = (float *) NULL;
   long navskyfiterr, navscint;
 
@@ -2550,18 +2550,22 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
 	if(diffmode) {
 	  flux = fluxbuf[rin] * mefinfo->apcor[col] * mefinfo->percorr;
-	  fluxerr = (fabsf(fluxbuf[rin]) * mefinfo->apcor[col] / gain + skyvar);
+	  fluxvar = fabsf(fluxbuf[rin]) * mefinfo->apcor[col] / gain + skyvar;
 
+          /* A value of exactly zero is used to flag no measurement.
+             This is unfortunate for difference imaging because it
+             lies right in the middle of the expected range.  Is
+             there another way to detect this condition? */
 	  if(flux == 0.0 || mefinfo->stars[rrout].ref.aper[col].flux == 0.0)
 	    flux = 0.0;
 	  else
 	    flux += mefinfo->stars[rrout].ref.aper[col].flux;
 
-	  fluxerr += mefinfo->stars[rrout].ref.aper[col].fluxerr;
+	  fluxvar += mefinfo->stars[rrout].ref.aper[col].fluxvar;
 	}
 	else {
 	  flux = fluxbuf[rin] * apcor[col] * percorr;
-	  fluxerr = (fabsf(fluxbuf[rin]) * apcor[col] / gain + skyvar);
+	  fluxvar = fabsf(fluxbuf[rin]) * apcor[col] / gain + skyvar;
 	}
 
 	if(flux > 0.0) {
@@ -2574,9 +2578,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  if(dointra)
 	    points[rout].aper[col].flux += calc_intra(xbuf[rin], ybuf[rin], icorr);
 
-	  /* Compute uncertainty */
-	  rms = 2.5 * log10f(1.0 + sqrtf(fluxerr) / flux);
-	  var = rms*rms;
+          /* Relative variance */
+          var = fluxvar / (flux*flux);
 
 	  /* Scintillation */
 	  if(diam > 0.0 && points[rout].airmass > 0.0 && exptime) {
@@ -2584,22 +2587,25 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
  	                powf(points[rout].airmass, 3.0 / 2.0) *
  	                expf(-height / 8000.0) /
 	                sqrtf(2*exptime);
-	    scrms = 2.5 * log10f(1.0 + sc);
 
-	    avscint += scrms;
+	    avscint += 2.5 * M_LOG10E * sc;  /* flux to mag */
 	    navscint++;
 
-	    var += scrms*scrms;
+	    var += sc*sc;
 	  }
 
-	  /* Stash result */
-	  points[rout].aper[col].fluxerr = sqrtf(var);
-	  points[rout].aper[col].fluxerrcom = points[rout].aper[col].fluxerr;
+          /* Convert to magnitudes.  Bright side error bar, see
+             Naylor et al. 2002, MNRAS, 335, 291 section 10. */
+          err = 2.5*log10f(1.0 + sqrtf(var));
+
+	  /* Convert to "virtual variance" and stash result */
+	  points[rout].aper[col].fluxvar = err*err;
+	  points[rout].aper[col].fluxvarcom = points[rout].aper[col].fluxvar;
 	}
 	else {
 	  points[rout].aper[col].flux = 0.0;
-	  points[rout].aper[col].fluxerr = 0.0;
-	  points[rout].aper[col].fluxerrcom = 0.0;
+	  points[rout].aper[col].fluxvar = 0.0;
+	  points[rout].aper[col].fluxvarcom = 0.0;
 	}
 
 	points[rout].aper[col].wt = 0;

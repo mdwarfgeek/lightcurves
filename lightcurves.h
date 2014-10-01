@@ -43,8 +43,8 @@ struct lc_point {
 
   struct {
     float flux;
-    float fluxerr;
-    float fluxerrcom;  /* combined uncertainty including fit */
+    float fluxvar;
+    float fluxvarcom;  /* combined variance including fit */
     float wt;  /* weight given in computing polynomial corr. */
   } aper[NFLUX];
 

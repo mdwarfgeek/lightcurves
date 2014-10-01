@@ -1501,8 +1501,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	  satflag++;
 	}
 
-	if(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom > 0.0)
-	  fluxerrbuf[soff+pt] = lcbuf[pt].aper[mefinfo->stars[star].iap].fluxerrcom;
+	if(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvarcom > 0.0)
+	  fluxerrbuf[soff+pt] = sqrtf(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvarcom);
 	else
 	  fluxerrbuf[soff+pt] = -999.0;
       }
@@ -1542,8 +1542,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       for(pt = 0; pt < mefinfo->nf; pt++) {
 	if(lcbuf[pt].aper[ap].flux != 0.0) {
 	  fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].aper[ap].flux;
-	  if(lcbuf[pt].aper[ap].fluxerrcom > 0.0)
-	    fluxerrbuf[soff+pt] = lcbuf[pt].aper[ap].fluxerrcom;
+	  if(lcbuf[pt].aper[ap].fluxvarcom > 0.0)
+	    fluxerrbuf[soff+pt] = sqrtf(lcbuf[pt].aper[ap].fluxvarcom);
 	  else
 	    fluxerrbuf[soff+pt] = -999.0;
 	}

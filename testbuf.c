@@ -26,7 +26,7 @@ int main (int argc, char *argv[]) {
 
   for(i = 0; i < 3; i++) {
     data[i].aper[0].flux = i;
-    data[i].aper[0].fluxerr = i*2;
+    data[i].aper[0].fluxvar = i*2;
     data[i].satur = i % 2;
   }
 
@@ -42,7 +42,7 @@ int main (int argc, char *argv[]) {
     for(j = 0; j < NFLUX; j++) {
       for(i = 0; i < 3; i++)
 	printf("%d %d %f %f %d\n", k, j,
-	       newdata[i].aper[j].flux, newdata[i].aper[j].fluxerr, newdata[i].satur);
+	       newdata[i].aper[j].flux, newdata[i].aper[j].fluxvar, newdata[i].satur);
     }
   }
 

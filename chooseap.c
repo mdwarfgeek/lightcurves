@@ -51,8 +51,8 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	for(star = 0; star < mefinfo->nstars; star++)
 	  if(ptbuf[star].aper[REFAP].flux > 0.0 &&
 	     ptbuf[star].aper[aper].flux > 0.0 &&
-	     ptbuf[star].aper[REFAP].fluxerrcom > 0.0 &&
-	     ptbuf[star].aper[aper].fluxerrcom > 0.0 &&
+	     ptbuf[star].aper[REFAP].fluxvarcom > 0.0 &&
+	     ptbuf[star].aper[aper].fluxvarcom > 0.0 &&
 	     !ptbuf[star].satur &&
 	     mefinfo->stars[star].sigflux[aper] > 0 &&
 	     mefinfo->stars[star].medflux[aper] >= mefinfo->sysllim &&
@@ -132,7 +132,7 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	
 	/* Apply aperture correction */
 	for(pt = 0; pt < mefinfo->nf; pt++)
-	  if(ptbuf[pt].aper[aper].flux > 0.0 && ptbuf[pt].aper[aper].fluxerrcom > 0.0)
+	  if(ptbuf[pt].aper[aper].flux > 0.0 && ptbuf[pt].aper[aper].fluxvarcom > 0.0)
 	    ptbuf[pt].aper[aper].flux -= avapcor[aper];
 	
 	/* Correct median flux */
