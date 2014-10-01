@@ -1520,14 +1520,16 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   fitsfile *fits;
   int status = 0;
 
-  char *colnames[5] = { "X_coordinate", "Y_coordinate", "Peak_height", "Skylev", "Skyrms" };
+  char *colnames[7] = { "Isophotal_flux", "X_coordinate", "Y_coordinate",
+                        "Peak_height", "Areal_1_profile", "Skylev", "Skyrms" };
   char *optcolnames[1] = { "Bad_pixels" };
-  int gcols[6+NFLUX], col, collim, optcollim;
+  int gcols[8+NFLUX], col, collim, optcollim;
 
   struct lc_point *points = (struct lc_point *) NULL;
 
   double *xbuf = (double *) NULL, *ybuf;
-  float *allfluxbuf = (float *) NULL, *pkhtbuf, *locskybuf, *skyrmsbuf, *badpixbuf;
+  float *allfluxbuf = (float *) NULL;
+  float *isobuf, *pkhtbuf, *areal1buf, *locskybuf, *skyrmsbuf, *badpixbuf;
   float *fluxbuf;
 
   struct wcs_info wcs;
@@ -1542,6 +1544,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   long nrows, rblksz, roff, remain, routoff, rin, rrin, rout, rrout, rread;
   float flux, fluxvar, locsky, skyfiterr, peak;
+  unsigned char measured;
 
   char inst[FLEN_VALUE], tel[FLEN_VALUE];
   float scatcoeff = 0.0;
@@ -1621,8 +1624,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   else {
     cats_are_80 = 1;
 
-    colnames[3] = "Sky_level";  /* WHY were these changed? */
-    colnames[4] = "Sky_rms";
+    colnames[5] = "Sky_level";  /* these were changed in 80-col */
+    colnames[6] = "Sky_rms";
     optcolnames[0] = "Error_bit_flag";
   }
 
@@ -2397,7 +2400,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   
   /* Allocate column buffers */
   xbuf = (double *) malloc(2 * rblksz * sizeof(double));
-  allfluxbuf = (float *) malloc((4+NFLUX) * rblksz * sizeof(float));
+  allfluxbuf = (float *) malloc((6+NFLUX) * rblksz * sizeof(float));
   if(!xbuf || !allfluxbuf) {
     report_syserr(errstr, "malloc");
     goto error;
@@ -2405,10 +2408,12 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   
   ybuf = xbuf + rblksz;
 
-  pkhtbuf = allfluxbuf + NFLUX * rblksz;
-  locskybuf = pkhtbuf + rblksz;
-  skyrmsbuf = pkhtbuf + 2 * rblksz;
-  badpixbuf = pkhtbuf + 3 * rblksz;
+  isobuf = allfluxbuf + NFLUX * rblksz;
+  pkhtbuf = isobuf + rblksz;
+  areal1buf = isobuf + 2 * rblksz;
+  locskybuf = isobuf + 3 * rblksz;
+  skyrmsbuf = isobuf + 4 * rblksz;
+  badpixbuf = isobuf + 5 * rblksz;
 
   /* Allocate memory for lightcurve points */
   points = (struct lc_point *) malloc(rblksz * sizeof(struct lc_point));
@@ -2437,17 +2442,19 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   while(remain > 0) {
     rread = (remain > rblksz ? rblksz : remain);
     
-    ffgcvd(fits, gcols[0], roff + 1L, 1L, rread, 0.0, xbuf, (int *) NULL, &status);
-    ffgcvd(fits, gcols[1], roff + 1L, 1L, rread, 0.0, ybuf, (int *) NULL, &status);
-    ffgcve(fits, gcols[2], roff + 1L, 1L, rread, 0.0, pkhtbuf, (int *) NULL, &status);
-    ffgcve(fits, gcols[3], roff + 1L, 1L, rread, 0.0, locskybuf, (int *) NULL, &status);
-    ffgcve(fits, gcols[4], roff + 1L, 1L, rread, 0.0, skyrmsbuf, (int *) NULL, &status);
+    ffgcve(fits, gcols[0], roff + 1L, 1L, rread, 0.0, isobuf, (int *) NULL, &status);
+    ffgcvd(fits, gcols[1], roff + 1L, 1L, rread, 0.0, xbuf, (int *) NULL, &status);
+    ffgcvd(fits, gcols[2], roff + 1L, 1L, rread, 0.0, ybuf, (int *) NULL, &status);
+    ffgcve(fits, gcols[3], roff + 1L, 1L, rread, 0.0, pkhtbuf, (int *) NULL, &status);
+    ffgcve(fits, gcols[4], roff + 1L, 1L, rread, 0.0, areal1buf, (int *) NULL, &status);
+    ffgcve(fits, gcols[5], roff + 1L, 1L, rread, 0.0, locskybuf, (int *) NULL, &status);
+    ffgcve(fits, gcols[6], roff + 1L, 1L, rread, 0.0, skyrmsbuf, (int *) NULL, &status);
 
-    if(gcols[5])
-      ffgcve(fits, gcols[5], roff + 1L, 1L, rread, 0.0, badpixbuf, (int *) NULL, &status);
+    if(gcols[7])
+      ffgcve(fits, gcols[7], roff + 1L, 1L, rread, 0.0, badpixbuf, (int *) NULL, &status);
 
     for(col = 0; col < NFLUX; col++) {
-      ffgcve(fits, gcols[6+col], roff + 1L, 1L, rread, 0.0, allfluxbuf + col*rblksz,
+      ffgcve(fits, gcols[8+col], roff + 1L, 1L, rread, 0.0, allfluxbuf + col*rblksz,
 	     (int *) NULL, &status);
     }
 
@@ -2462,6 +2469,24 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       if(rrout >= mefinfo->nstars ||
 	 mefinfo->stars[rrout].ptr != rrin+1)
 	continue;
+
+      /* Figure out if the source was measured.  Unfortunately, zero
+         is used as the flag value and is a valid result, so we test
+         a bunch of quantities to make it more robust.  These are all
+         computed in update, which checks first if the rcore radius
+         aperture is entirely on the frame.  The photometry (phopt)
+         does no checks so sources with the aperture partly in the
+         frame can have measurements in Core_flux and the others.
+         The decision was made to discard such cases, a partial
+         measurement is probably not useful and we don't have the
+         other parameters such as x, y, peak height to go with it
+         anyway.  This is a change from old versions of the program
+         which just checked for a flux and assumed the object was
+         on the frame if there was one. */
+      if(isobuf[rin] || pkhtbuf[rin] || areal1buf[rin])
+        measured = 1;
+      else
+        measured = 0;
 
       /* Store x, y positions */
       points[rout].x = xbuf[rin];
@@ -2522,7 +2547,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       navskyfiterr++;
 
       /* Accumulate counts of frames with bad pixels */
-      if(gcols[5] && badpixbuf[rin] > 0.0) {
+      if(gcols[7] && badpixbuf[rin] > 0.0) {
 	points[rout].conf = 1;
 	mefinfo->stars[rrout].cflag++;
       }
@@ -2552,11 +2577,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  flux = fluxbuf[rin] * mefinfo->apcor[col] * mefinfo->percorr;
 	  fluxvar = fabsf(fluxbuf[rin]) * mefinfo->apcor[col] / gain + skyvar;
 
-          /* A value of exactly zero is used to flag no measurement.
-             This is unfortunate for difference imaging because it
-             lies right in the middle of the expected range.  Is
-             there another way to detect this condition? */
-	  if(flux == 0.0 || mefinfo->stars[rrout].ref.aper[col].flux == 0.0)
+	  if(mefinfo->stars[rrout].ref.aper[col].flux == 0.0)
 	    flux = 0.0;
 	  else
 	    flux += mefinfo->stars[rrout].ref.aper[col].flux;
@@ -2568,7 +2589,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  fluxvar = fabsf(fluxbuf[rin]) * apcor[col] / gain + skyvar;
 	}
 
-	if(flux > 0.0) {
+	if(measured && flux > 0.0) {
 	  points[rout].aper[col].flux = 2.5 * log10f(flux);
 
 	  if(!diffmode)
