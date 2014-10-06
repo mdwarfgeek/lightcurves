@@ -874,8 +874,9 @@ specific application.  I usually suggest using a higher threshold (the
 second number), than one would for ``standard'' survey applications,
 because the faintest objects don't usually produce useful light curves
 and serve only to slow down processing and waste space in the output
-files.  Note that I recommend always specifying the catalogue type, it
-has a had a habit of changing as new versions have been released.
+files.  Note that I recommend always specifying the catalogue type,
+the default has a had a habit of changing as new versions have been
+released.
 .PP
 In this example, I will use the WCS to align the input images and
 place apertures (this is not always a good idea, e.g. if the WCS
