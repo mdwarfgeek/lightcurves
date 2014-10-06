@@ -109,7 +109,11 @@ in the output file.  The most common use of this option is
 .BI "-c " "9"
 to save only targets and comparison stars, which may be desirable to
 reduce file size for observations where only a few objects in the
-field are of interest.
+field are of interest.  It also speeds up light curve processing since
+only those objects eligible to be comparison stars and those selected
+with the
+.B -c
+option are processed.
 .TP
 .BI "-o " "file"
 Write out light curves to
@@ -387,12 +391,11 @@ MAGZPT
 ZMAG
 Magnitude zero-point.  The CASU standard variant is MAGZPT and is for
 an exposure time of one second and airmass of unity (and for mosaic
-instruments, the first extension, see PERCORR).  ZMAG is a variant
-seen in UNSW APT data and is for the exposure time of the frame and an
-airmass of unity.  If not present, uses MAGZPT=25.0 (this is a
-somewhat randomly chosen value, but happens to be shockingly good
-match for a certain NASA exoplanet hunting satellite) and emits a
-warning.
+instruments, PERCORR=0).  ZMAG is a variant seen in UNSW APT data and
+is for the exposure time of the frame and an airmass of unity.  If not
+present, uses MAGZPT=25.0 (this is a somewhat randomly chosen value,
+but happens to be a shockingly good match for a certain NASA exoplanet
+hunting satellite) and emits a warning.
 .TP
 MJD-OBS
 .TP
@@ -402,9 +405,9 @@ JD
 Time stamp as Modified Julian Day or Julian Day, respectively.  The
 program currently ignores the TIMESYS keyword and always assumes these
 are in the UTC time-system.  If not present, uses 2000 January 1 at
-12 hours UTC and emits a warning.  The program will run without time
-stamps available but many outputs are meaningless and no corrections
-for target star proper motion are performed.
+12 hours UTC (aka 2000.0) and emits a warning.  The program will
+run without time stamps available, but many outputs are meaningless
+and no corrections for target star proper motion are performed.
 .TP
 PEDESTAL
 Constant offset added to the counts in the image to prevent negative
@@ -511,9 +514,9 @@ SEGD1   =                   -1 / Segment 1 instrument change date
 SEGA1   =                    0 / Segment 1 angle
 .fi
 .PP
-The use of ``segments'' for purposes other than meridian flips is a
-MEarth-specific feature, as are the SEGV and SEGD numbered headers.
-SEGA gives a number in the same form as IANG, below.
+The use of ``segments'' for purposes other than meridian flips is
+currently a MEarth-specific feature, as are the SEGV and SEGD numbered
+headers.  SEGA gives a number in the same form as IANG, below.
 .SS Header time-series vectors
 A number of quantities that apply to all measurements in a frame are
 stored into the header as numbered keywords, forming a vector.  These
@@ -680,8 +683,8 @@ the flags column instead.
 .B sflag
 Count of the number of frames where saturated pixels were encountered
 while summing the aperture photometry.  I recommend using the flags
-column instead.  Note that the reliability of saturation flagging
-depends critically on the accuracy of the saturation level assumed.
+column instead.  See there for comments on the reliability of the
+saturation flagging.
 .TP
 .B pointer
 Row number in the input master catalogue.  This is invariant over
@@ -774,7 +777,9 @@ Flags for each data point.  This is encoded as a bitmask from the
 following values: 1 = no data point (star was not on the detector); 2
 = aperture contains bad pixels; 4 = saturated.  Note that the
 reliability of saturation flagging depends critically on the accuracy
-of the saturation level assumed.  To detect data points that are
+of the saturation level assumed, and mildly saturated data may be
+still be usable for many purposes depending on the requirements.
+To detect data points that are
 .I guaranteed
 to be bad, check if (flags & 3) is non-zero, where & is the bitwise
 AND operator.
@@ -858,7 +863,7 @@ headers to find the best image.
 We then generate the master catalogue and classify it:
 .PP
 .nf
-  imcore master.fit conf.fits 4 2 1 3 2 catype=32
+  imcore --rcore=3 --cattype=1 master.fit conf.fits master_cat.fits 4 2
   classify master_cat.fits
 .fi
 .PP
@@ -869,7 +874,8 @@ specific application.  I usually suggest using a higher threshold (the
 second number), than one would for ``standard'' survey applications,
 because the faintest objects don't usually produce useful light curves
 and serve only to slow down processing and waste space in the output
-files.
+files.  Note that I recommend always specifying the catalogue type, it
+has a had a habit of changing as new versions have been released.
 .PP
 In this example, I will use the WCS to align the input images and
 place apertures (this is not always a good idea, e.g. if the WCS
@@ -882,7 +888,7 @@ following shell script is used:
   
   for imfile in target????.fit; do
       listfile=`echo "$imfile" | sed -e 's/\.fit$/_list.fits/g'`
-      imcore_list "$imfile" conf.fits master_cat.fits use=wcs 3
+      imcore_list --rcore=3 --cattype=1 "$imfile" conf.fits master_cat.fits "$listfile" 2
       classify "$listfile"
   done
 .fi
