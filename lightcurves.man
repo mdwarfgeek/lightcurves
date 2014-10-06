@@ -894,11 +894,7 @@ following shell script is used:
   done
 .fi
 .PP
-The RCORE value (last number on the
-.B imcore_list
-command-line here, and the second to last on the
-.B imcore
-command-line) must match between the master and the list-driven
+The RCORE value must match between the master and the list-driven
 files.  The lightcurves program does run and produce results if this
 condition is violated, but some things will not work properly,
 particularly the normalisation of the magnitude system.  The aperture
