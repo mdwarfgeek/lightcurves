@@ -242,7 +242,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   }
 
   if(opt > 5) {
-    sortfloat(medbuf, opt);
+    fquicksort(medbuf, opt);
     rmsclip = percentile(medbuf, opt, 9, 10);
   }
   else

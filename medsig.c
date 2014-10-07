@@ -18,7 +18,7 @@ void medsig (float *a, long n, float *median_r, float *sigma_r) {
     return;
   }
 
-  sortfloat(a, n);
+  fquicksort(a, n);
   median = (n % 2 == 0 ? 0.5 * (a[n/2-1] + a[n/2]) : a[n/2]);
 
   *median_r = median;
@@ -27,7 +27,7 @@ void medsig (float *a, long n, float *median_r, float *sigma_r) {
     for(m = 0; m < n; m++)
       a[m] = fabsf(a[m] - median);
     
-    sortfloat(a, n);
+    fquicksort(a, n);
     mad = (n % 2 == 0 ? 0.5 * (a[n/2-1] + a[n/2]) : a[n/2]);
 
     *sigma_r = 1.48 * mad;

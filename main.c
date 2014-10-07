@@ -113,8 +113,9 @@ int main (int argc, char *argv[]) {
   float *medbuf1 = (float *) NULL, *medbuf2, medsat, medlim;
   long nmedsat, nmedlim, nstartot;
 
-  long cflagmed, star;
-  long *tmpmed = (long *) NULL;
+  long star;
+  int cflagmed;
+  int *tmpmed = (int *) NULL;
 
   float satlev = -1.0;
   float sysulim = -1.0, sysllim = -1.0;
@@ -461,21 +462,21 @@ int main (int argc, char *argv[]) {
        * are frames with zero confidence all-over, so subtract off
        * the median cflag value.
        */
-      tmpmed = (long *) malloc(meflist[mef].nstars * sizeof(long));
+      tmpmed = (int *) malloc(meflist[mef].nstars * sizeof(int));
       if(!tmpmed)
         error(1, "malloc");
       
       for(star = 0; star < meflist[mef].nstars; star++)
         tmpmed[star] = meflist[mef].stars[star].cflag;
       
-      sortlong(tmpmed, meflist[mef].nstars);
+      iquicksort(tmpmed, meflist[mef].nstars);
       cflagmed = meflist[mef].nstars % 2 ?
                  tmpmed[meflist[mef].nstars/2] :
                  (tmpmed[meflist[mef].nstars/2-1] +
                   tmpmed[meflist[mef].nstars/2]) / 2;
 
       free((void *) tmpmed);
-      tmpmed = (long *) NULL;
+      tmpmed = (int *) NULL;
       
       for(star = 0; star < meflist[mef].nstars; star++) {
         meflist[mef].stars[star].cflag -= cflagmed;
@@ -502,7 +503,7 @@ int main (int argc, char *argv[]) {
 	printf("  Saturation level:     undetermined\n");
 
       printf("  5-sigma limit:        %.1f\n"
-	     "  Median cflag:         %ld\n",
+	     "  Median cflag:         %d\n",
 	     meflist[mef].refflim, cflagmed);
     }
 

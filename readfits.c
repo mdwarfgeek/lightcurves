@@ -1426,9 +1426,9 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   free((void *) allfluxbuf);
   allfluxbuf = (float *) NULL;
 
-  /* Determine saturation level robustly - 10%ile */
+  /* Determine saturation level robustly - lower quartile */
   if(nsattmp > 0) {
-    sortfloat(sattmp, nsattmp);
+    fquicksort(sattmp, nsattmp);
     satflux = sattmp[nsattmp/4];
   }
 
