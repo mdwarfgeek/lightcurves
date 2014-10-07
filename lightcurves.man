@@ -288,14 +288,15 @@ supposed to work.  Please email bug reports to the author if these are
 found to be broken.
 .PP
 The input files must have a FITS-WCS conforming to the standards for
-FITS images.  The coordinate system is assumed to be ICRS, any RADESYS
-values are silently ignored.  The only projection types correctly
-understood by the program are currently ARC, SIN, TAN and ZPN.  SIP is
-not supported.  These restrictions could be lifted by transitioning to
-using one of the standard WCS libraries, however beware that most of
-the rest of the CASU pipeline toolkit has the same restrictions.
-While a FITS WCS is expected in the input files, one that is incorrect
-(or not correctly understood) should merely render the
+FITS images.  The coordinate system is assumed to be ICRS, any
+RADESYS, RADECSYS, EPOCH or EQUINOX values are silently ignored.  The
+only projection types correctly understood by the program are
+currently ARC, SIN, TAN and ZPN.  SIP is not supported.  These
+restrictions could be lifted by transitioning to using one of the
+standard WCS libraries, however beware that most of the rest of the
+CASU pipeline toolkit has the same restrictions.  While a FITS-WCS is
+expected in the input files, one that is incorrect (or not correctly
+understood) should merely render the
 .B ra
 /
 .B dec
@@ -400,7 +401,7 @@ and
 are not computed.  The observing site location header keywords are
 (sadly) yet another set that are wildly inconsistent between
 different observatories, although they are at least usually in the
-same units.
+same units.  Decimal or sexagesimal (using ``:'') forms are supported.
 .TP
 LONGITUDE
 .TP
@@ -779,6 +780,12 @@ Barycentric MJD in the TDB time-system.  This is stored as MJD to
 reduce loss of accuracy.  Please don't forget the 0.5 in the
 definition of MJD.
 .TP
+.B hjd
+.B Vector.
+.B Optional, enabled only if HJD was defined at compile time.
+Heliocentric MJD in the UTC time-system.  This exists only for
+backwards compatibility and may eventually be removed.
+.TP
 .B flux
 .B Vector.
 The light curve itself: magnitude as a function of time.  Can
@@ -906,8 +913,9 @@ on it (as an aside: in this case, I suggest then using
 .B imcore_list
 to make a list-driven file out of the
 .B original
-non-nebulised image, using the nebulised catalogue to place the
-apertures, and then using this list-driven file as the master).
+non-nebulised image, using the nebulised catalogue only to decide
+where to place the apertures, and then using this list-driven file as
+the master).
 .PP
 I usually symlink
 .B master.fit
@@ -918,7 +926,8 @@ headers to find the best image.
 We then generate the master catalogue and classify it:
 .PP
 .nf
-  imcore --rcore=3 --cattype=1 master.fit conf.fits master_cat.fits 4 2
+  imcore master.fit conf.fits master_cat.fits 4 2 \\
+         --verbose --rcore=3 --cattype=1
   classify master_cat.fits
 .fi
 .PP
@@ -944,7 +953,8 @@ following shell script is used:
   
   for imfile in target????.fit; do
       listfile=`echo "$imfile" | sed -e 's/\.fit$/_list.fits/g'`
-      imcore_list --rcore=3 --cattype=1 "$imfile" conf.fits master_cat.fits "$listfile" 2
+      imcore_list "$imfile" conf.fits master_cat.fits "$listfile" 2 \\
+                  --verbose --rcore=3 --cattype=1
       classify "$listfile"
   done
 .fi
@@ -975,7 +985,7 @@ form to pass them to
 instead of using the command line:
 .PP
 .nf
-  find . -name 'target????_list.fits' -print > listlist
+  find . -name 'target????_list.fits' -print | sort > listlist
 .fi
 .PP
 We are then ready to make some light curves.  For the first pass, we
