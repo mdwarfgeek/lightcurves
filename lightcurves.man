@@ -783,8 +783,10 @@ definition of MJD.
 .B hjd
 .B Vector.
 .B Optional, enabled only if HJD was defined at compile time.
-Heliocentric MJD in the UTC time-system.  This exists only for
-backwards compatibility and may eventually be removed.
+Heliocentric MJD in the UTC time-system.  Computed for the geocentre,
+ignoring the displacement of the observer from it, and using the
+Stumpff (1980) method rather than JPL ephemerides.  This column exists
+only for backwards compatibility and may eventually be removed.
 .TP
 .B flux
 .B Vector.
