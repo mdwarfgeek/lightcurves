@@ -990,6 +990,12 @@ instead of using the command line:
   find . -name 'target????_list.fits' -print | sort > listlist
 .fi
 .PP
+This example assumes the image files are named so that a lexical sort
+will put them in time order.  This is usually the case.  The programs
+do not alter the ordering of the input files during light curve
+generation, so it is advisable, but by no means required, to supply
+them in time order.
+.PP
 We are then ready to make some light curves.  For the first pass, we
 don't necessarily know what to choose for the comparison star
 magnitude range, so we run in automatic mode:
@@ -1007,7 +1013,7 @@ than magnitude 9.  We can then generate some output this time:
 .fi
 .PP
 the
-.B lc.fits
+.B target_lc.fits
 file then contains the results.  When storing a final light curve file
 to disk I recommend also saving the diagnostic plots from the
 .B lightcurves
@@ -1019,6 +1025,12 @@ saying:
 .fi
 .PP
 at the PGPLOT graphics device prompt.
+.SH MISCELLANEOUS NOTES
+Occasionally, one might wish to choose comparison stars manually,
+rather than automatically.  Comparison stars are selected from only
+those objects with classification flags of -1 in the master catalogue,
+so a straightforward (if inelegant) way to achieve this is to set the
+classification flags of all other objects to some other value.
 .SH BUGS
 These programs have a large number of historical quirks, some of which
 could be considered bugs.
@@ -1052,3 +1064,6 @@ Jonathan Irwin (jirwin at cfa.harvard.edu)
 .SH SEE ALSO
 CASUTOOLS:
 http://casu.ast.cam.ac.uk/surveys-projects/software-release
+.PP
+Irwin et al. 2007, MNRAS, 375, 1449 described a much earlier version
+of the same software.
