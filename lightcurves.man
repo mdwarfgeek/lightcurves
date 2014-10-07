@@ -165,7 +165,7 @@ apertures and the chosen one are written to separate columns in the
 output file.  This value of this flag can be
 .I sel
 to save only the chosen aperture, or an integer to select a particular
-aperture.  The apertures are numbered from zero starting with RCORE
+aperture.  The apertures are numbered from 1 starting with RCORE
 and following the list given above.  Forcing the choice of a
 particular aperture causes the other apertures to not be processed.
 .TP
@@ -668,6 +668,33 @@ option was not used).
 .PP
 A number of other, instrument-specific quantities may also be stored.
 These are not yet documented.
+.PP
+When reading large files with many data points, large numbers of
+vectors, and particularly when reading any vectors where some values
+may be null (not present in the header) for some data points, it can
+help to optimise the access pattern.  The vector entries are written
+out one data point at a time, in the same order as presented above
+for each data point before proceeding to the next data point.  CFITSIO
+appears to simply perform a sequential scan through the header when
+searching for a keyword, and uses a rather small buffer (often the 
+full header in a light curve file exceeds the size of this buffer) so
+accessing them in this order minimises the number of times the header
+is read from disk.
+.PP
+When dealing with vectors that could have missing entries, I suggest
+instead reading the entire header in a single pass, passing each
+header keyword in turn to a pattern matcher (this could be as simple
+as a chain of string comparisons in ``if'' statements), and storing
+the values into preallocated arrays if the keywords match the desired
+vectors.  This can yield very large efficiency gains when using
+CFITSIO on files with tens of thousands of data points.  The NMEAS
+keyword needed to decide the vector length is guaranteed to appear
+before the vectors.
+.PP
+Most modern FITS I/O libraries in scripting languages use hash tables
+(also called dictionaries or associative arrays) to store the FITS
+header and perform efficient keyword lookup, so these tricks may not
+be necessary in such languages.
 .SS Table columns
 The tables themselves contain the following columns:
 .TP
@@ -731,7 +758,7 @@ meridian flip offsets for each aperture) to the
 program.
 .TP
 .B apnum
-Number of the chosen aperture (numbering from zero in the same way as
+Number of the chosen aperture (numbering from 1 in the same way as
 the
 .B -a
 flag).
@@ -829,8 +856,8 @@ from the input file.
 .B refmag
 Magnitude of the source on the master frame, used to normalise the
 light curves.  Following CASU conventions this is normally computed in
-aperture 0 (the smallest), however note that for MEarth the program is
-compiled to use aperture 2 instead.
+aperture 1 (the smallest), however note that for MEarth the program is
+compiled to use aperture 3 instead.
 .PP
 In the table above,
 .B vector
