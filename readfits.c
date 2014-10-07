@@ -413,10 +413,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   /* Get filter name for plots */
-  ffgkys(fits, "WFFBAND", filter, (char *) NULL, &status);
+  ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
+    ffgkys(fits, "WFFBAND", filter, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkys(fits, "HIERARCH ESO INS FILT1 NAME", filter, (char *) NULL, &status);
@@ -446,12 +446,12 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
       }
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: FILTER");
+      fitsio_err(errstr, status, "ffgkye: WFFBAND");
       goto error;
     }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: WFFBAND");
+    fitsio_err(errstr, status, "ffgkye: FILTER");
     goto error;
   }
 
@@ -1108,10 +1108,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   }
 
   /* Get filter name in case we can't get extinction */
-  ffgkys(fits, "WFFBAND", filter, (char *) NULL, &status);
+  ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
+    ffgkys(fits, "WFFBAND", filter, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkys(fits, "HIERARCH ESO INS FILT1 NAME", filter, (char *) NULL, &status);
@@ -1141,12 +1141,12 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       }
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: FILTER");
+      fitsio_err(errstr, status, "ffgkye: WFFBAND");
       goto error;
     }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: WFFBAND");
+    fitsio_err(errstr, status, "ffgkye: FILTER");
     goto error;
   }
 
@@ -1918,10 +1918,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   /* Get filter name in case we can't get extinction */
-  ffgkys(fits, "WFFBAND", filter, (char *) NULL, &status);
+  ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    ffgkys(fits, "FILTER", filter, (char *) NULL, &status);
+    ffgkys(fits, "WFFBAND", filter, (char *) NULL, &status);
     if(status == KEY_NO_EXIST) {
       status = 0;
       ffgkys(fits, "HIERARCH ESO INS FILT1 NAME", filter, (char *) NULL, &status);
@@ -1951,12 +1951,12 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       }
     }
     else if(status) {
-      fitsio_err(errstr, status, "ffgkye: FILTER");
+      fitsio_err(errstr, status, "ffgkye: WFFBAND");
       goto error;
     }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkye: WFFBAND");
+    fitsio_err(errstr, status, "ffgkye: FILTER");
     goto error;
   }
 
