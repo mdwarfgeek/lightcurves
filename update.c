@@ -422,7 +422,7 @@ int main (int argc, char *argv[]) {
 	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
-		  dtptr, itptr, &jtab, ttptr,
+		  dtptr, itptr, jtptr, ttptr,
 		  dointra, &(intralist[mef]),
 		  doinstvers, instverslist, ninstvers,
 		  diffmode, satlev, errstr))
