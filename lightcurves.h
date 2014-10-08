@@ -290,6 +290,7 @@ struct buffer_info {
   /* File info */
 #ifdef _WIN32
   char filename[MAX_PATH];
+  HANDLE hf;
 #else
   char filename[1024];
 #endif

@@ -45,7 +45,19 @@ int buffer_init (struct buffer_info *b, char *errstr) {
   }
 
   /* Open it */
-  b->fd = open(b->filename, O_RDWR | O_CREAT);
+  b->hf = CreateFile(b->filename,
+                     GENERIC_READ | GENERIC_WRITE,
+                     0,
+                     NULL,
+                     CREATE_ALWAYS,
+                     FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
+                     NULL);
+  if(b->hf == INVALID_HANDLE_VALUE) {
+    report_err(errstr, "CreateFile(%s) failed\n", b->filename);
+    goto error;
+  }
+
+  b->fd = _open_osfhandle((intptr_t) b->hf, 0);
   if(b->fd == -1) {
     report_syserr(errstr, "open");
     goto error;
@@ -144,11 +156,6 @@ void buffer_close (struct buffer_info *b) {
 
   /* Close the file */
   close(b->fd);
-
-#ifdef _WIN32
-  /* Unlink it */
-  unlink(b->filename);
-#endif
 }
 
 int buffer_fetch_frame (struct buffer_info *b, struct lc_point *buf,
