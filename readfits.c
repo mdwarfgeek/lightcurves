@@ -8,8 +8,6 @@
 #include <unistd.h>
 #include <math.h>
 
-#include <fitsio.h>
-
 #include "lightcurves.h"
 
 #include "cvtunit.h"

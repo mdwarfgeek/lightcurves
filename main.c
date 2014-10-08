@@ -8,8 +8,6 @@
 #include <unistd.h>
 #include <math.h>
 
-#include <fitsio.h>
-
 #ifdef DEBUG
 #include <cpgplot.h>
 #endif

@@ -8,8 +8,6 @@
 #include <unistd.h>
 #include <math.h>
 
-#include <fitsio.h>
-
 #ifdef DEBUG
 #include <cpgplot.h>
 #endif
@@ -76,7 +74,14 @@ int main (int argc, char *argv[]) {
   int status = 0, ext, mef, nmefs;
 
   char outfile[FLEN_FILENAME-1], fnbuf[FLEN_FILENAME];
-  char tmpbasebuf[FLEN_FILENAME-1], *tmpbase, tmpfile[FLEN_FILENAME-1];
+  char tmpbasebuf[FLEN_FILENAME-1], *tmpbase;
+
+#ifdef _WIN32
+  char tmpfile[MAX_PATH];
+#else
+  char tmpfile[FLEN_FILENAME-1];
+#endif
+
   int dooutput = 0;
   int doreplace = 0;
   int outcls = 0;
@@ -103,7 +108,9 @@ int main (int argc, char *argv[]) {
   int noplots = 0;
 
   float satlev = -1.0;
+#ifdef PLOTS
   float sysulim = -1.0, sysllim = -1.0;
+#endif
 
   /* Set the program name for error reporting */
   if(argv[0])
@@ -293,11 +300,20 @@ int main (int argc, char *argv[]) {
     tmpbase = dirname(tmpbasebuf);
 
     /* Create temporary file for in-place edit */
+#ifdef _WIN32
+    /* Obtain temporary file name */
+    if(GetTempFileName(tmpbase, 
+                       progname,
+                       0,
+                       tmpfile) == 0)
+      fatal(1, "GetTempFileName failed");
+#else
     snprintf(tmpfile, sizeof(tmpfile), "%s/%s_XXXXXX", tmpbase, progname);
 
     fd = mkstemp(tmpfile);
     if(fd == -1)
       error(1, "mkstemp: %s", tmpfile);
+#endif
 
     /* Form output name */
     fnbuf[0] = '!';
@@ -503,8 +519,10 @@ int main (int argc, char *argv[]) {
       }
     }
 
+#ifdef PLOTS
     sysulim = meflist[mef].sysulim;  /* kludge */
     sysllim = meflist[mef].sysllim;  /* kludge */
+#endif
   }
 
 #ifdef DEBUG

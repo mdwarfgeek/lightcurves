@@ -3,6 +3,13 @@
 
 #include <fitsio.h>
 
+#ifdef _WIN32
+/* CFITSIO's TBYTE define conflicts with a typedef on Win32.
+   We don't use it, so get rid of it here. */
+#undef TBYTE
+#include <windows.h>
+#endif
+
 #include "lfa.h"
 
 #ifndef NFLUX
@@ -281,7 +288,11 @@ struct lc_mef {
 /* Structure holding disk buffer information */
 struct buffer_info {
   /* File info */
+#ifdef _WIN32
+  char filename[MAX_PATH];
+#else
   char filename[1024];
+#endif
   int fd;
 
   /* Buffer sizing */

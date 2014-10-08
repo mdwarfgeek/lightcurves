@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <math.h>
 
@@ -33,6 +34,23 @@ static int buffer_write (struct buffer_info *b, struct lc_point *wbuf,
  */
 
 int buffer_init (struct buffer_info *b, char *errstr) {
+#ifdef _WIN32
+  /* Obtain temporary file name */
+  if(GetTempFileName(TEXT("."), 
+                     TEXT("lightcurves"),
+                     0,
+                     b->filename) == 0) {
+    report_err(errstr, "GetTempFileName failed");
+    goto error;
+  }
+
+  /* Open it */
+  b->fd = open(b->filename, O_RDWR | O_CREAT);
+  if(b->fd == -1) {
+    report_syserr(errstr, "open");
+    goto error;
+  }
+#else
   int rv;
 
   /* Generate temporary file */
@@ -51,6 +69,7 @@ int buffer_init (struct buffer_info *b, char *errstr) {
     report_syserr(errstr, "unlink: %s", b->filename);
     goto error;
   }
+#endif
 
   b->buf = (unsigned char *) NULL;
 
@@ -125,6 +144,11 @@ void buffer_close (struct buffer_info *b) {
 
   /* Close the file */
   close(b->fd);
+
+#ifdef _WIN32
+  /* Unlink it */
+  unlink(b->filename);
+#endif
 }
 
 int buffer_fetch_frame (struct buffer_info *b, struct lc_point *buf,
