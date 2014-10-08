@@ -1,6 +1,6 @@
 #include <sys/types.h>
 
-#ifdef HAVE_MMAP
+#if defined(HAVE_MMAP) && !defined(_WIN32)
 #include <sys/mman.h>
 #endif
 
@@ -98,6 +98,17 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, char *errstr) {
 #ifdef HAVE_MMAP
   /* Unmap the buffer */
   if(b->buf) {
+#ifdef _WIN32
+    if(!UnmapViewOfFile((LPCVOID) b->buf)) {
+      report_err(errstr, "UnmapViewOfFile failed");
+      goto error;
+    }
+
+    if(!CloseHandle(b->hm)) {
+      report_err(errstr, "CloseHandle failed");
+      goto error;
+    }
+#else
     rv = munmap((void *) b->buf,
 		((off_t) b->nobj) * ((off_t) b->nmeas) *
 		sizeof(struct lc_point));
@@ -105,6 +116,7 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, char *errstr) {
       report_syserr(errstr, "munmap");
       goto error;
     }
+#endif
 
     b->buf = (unsigned char *) NULL;
   }
@@ -123,12 +135,35 @@ int buffer_alloc (struct buffer_info *b, long nobj, long nmeas, char *errstr) {
   if(totsize > 0) {
 #ifdef HAVE_MMAP
     /* Map the buffer */
+#ifdef _WIN32
+    b->hm = CreateFileMapping(b->hf,
+                              NULL,
+                              PAGE_READWRITE,
+                              0,
+                              0,
+                              NULL);
+    if(!b->hm) {
+      report_err(errstr, "CreateFileMapping failed");
+      goto error;
+    }
+
+    b->buf = (unsigned char *) MapViewOfFile(b->hm,
+                                             FILE_MAP_ALL_ACCESS,
+                                             0,
+                                             0,
+                                             totsize);
+    if(!b->buf) {
+      report_err(errstr, "MapViewOfFile failed");
+      goto error;
+    }
+#else
     b->buf = (unsigned char *) mmap((void *) NULL, totsize,
                                     PROT_READ | PROT_WRITE, MAP_SHARED, b->fd, 0);
     if(b->buf == ((unsigned char *) MAP_FAILED)) {
       report_syserr(errstr, "mmap");
       goto error;
     }
+#endif
 #endif
   }
 
@@ -146,9 +181,14 @@ void buffer_close (struct buffer_info *b) {
 #ifdef HAVE_MMAP
   /* Unmap the buffer */
   if(b->buf) {
+#ifdef _WIN32
+    UnmapViewOfFile((LPCVOID) b->buf);
+    CloseHandle(b->hm);
+#else
     munmap((void *) b->buf,
            ((off_t) b->nobj) * ((off_t) b->nmeas) *
            sizeof(struct lc_point));
+#endif
 
     b->buf = (unsigned char *) NULL;
   }
