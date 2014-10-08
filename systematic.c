@@ -3,7 +3,9 @@
 #include <string.h>
 #include <math.h>
 
+#ifdef DEBUG
 #include <cpgplot.h>
+#endif
 
 #include "lightcurves.h"
 
