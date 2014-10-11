@@ -7,8 +7,8 @@
 
 #include "util.h"
 
-#define NITER 5
-#define NSIG  3
+#define NITER  5
+#define NSIGMA 3
 
 int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
 	    double tr[6], char *errstr) {
@@ -74,7 +74,7 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
              - mefinfo->stars[star].y;
 	  err = sqrt(dx*dx+dy*dx);
 	
-	  if(err > NSIG * averr) {
+	  if(err > NSIGMA * averr) {
 	    wtbuf[star] = 0;
 	    rejbuf[star] = 1;
 	  }
