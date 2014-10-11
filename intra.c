@@ -41,7 +41,7 @@ int read_intra (char *filename, struct intra *intralist, int nmefs,
 
     if(reading_header) {
       mef = (int) strtol(p, &ep, 10);
-      if(!isspace(*ep) || mef < 1) {
+      if(!isspace((unsigned char) *ep) || mef < 1) {
 	report_err(errstr, "could not understand header: %s", p);
 	goto error;
       }
@@ -76,7 +76,7 @@ int read_intra (char *filename, struct intra *intralist, int nmefs,
 	/* Read one */
 	map[cur_row*nbin+bin] = strtod(p, &ep);
 	if((bin == nbin-1 && *ep != '\0') ||
-	   (bin < nbin-1 && !isspace(*ep))) {
+	   (bin < nbin-1 && !isspace((unsigned char) *ep))) {
 	  report_err(errstr, "could not understand line: %s");
 	  goto error;
 	}
