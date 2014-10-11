@@ -62,6 +62,8 @@ UPDATE_OBJS=${UPDATE_SRCS:%.c=%.o}
 TESTBUF_SRCS=testbuf.c buffer.c
 TESTBUF_OBJS=${TESTBUF_SRCS:%.c=%.o}
 
+DEPEND_SRCS=main.c update.c testbuf.c $(COMMON_SRCS) $(SLA_SRCS) $(PGPLOT_SRCS)
+
 LIB_OBJS=../lib/fitsutil.o ../lib/liblfa.a
 
 # Rules for building C
@@ -72,6 +74,9 @@ LIB_OBJS=../lib/fitsutil.o ../lib/liblfa.a
 	$(CC) $(CFLAGS) -c $< -o $@
 
 all: lightcurves update
+
+depend:
+	$(CC) $(CFLAGS) -E -MM $(DEPEND_SRCS) > .depend
 
 ../lib/liblfa.a:
 	(cd ../lib && $(MAKE) liblfa.a)
