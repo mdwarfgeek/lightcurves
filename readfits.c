@@ -810,7 +810,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   float skylev, pedestal = 0, skynoise, exptime, rcore, gain, magzpt, percorr;
   float apcor[NFLUX];
 
-  long nrows, nstars, rblksz, roff, routoff, rin, rout, rrin, remain, rread;
+  long nrows, nstars, rblksz, roff, rin, rout, rrin, remain, rread;
   float satflux;
 
   char filter[FLEN_VALUE];
@@ -1415,7 +1415,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     
     roff += rread;
     remain -= rread;
-    routoff += rout;
   }
 
   /* Free workspace */
