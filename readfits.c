@@ -2479,8 +2479,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
          other parameters such as x, y, peak height to go with it
          anyway.  This is a change from old versions of the program
          which just checked for a flux and assumed the object was
-         on the frame if there was one. */
-      if(isobuf[rin] || pkhtbuf[rin] || areal1buf[rin])
+         on the frame if there was one.
+         NaN values are also trapped.  This can happen if there were
+         NaNs in the input image.  In such cases, assume all the
+         measurements are bad and proceed as if not measured. */
+      if(isfinite(isobuf[rin]) &&
+         isfinite(pkhtbuf[rin]) &&
+         isfinite(areal1buf[rin]) &&
+         (isobuf[rin] || pkhtbuf[rin] || areal1buf[rin]))  /* one non-zero */
         measured = 1;
       else
         measured = 0;
