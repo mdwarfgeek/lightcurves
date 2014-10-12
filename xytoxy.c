@@ -15,6 +15,7 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
   double *wtbuf = (double *) NULL;
   float *tmpbufx = (float *) NULL, *tmpbufy;
   unsigned char *rejbuf = (unsigned char *) NULL;
+  float satlim;
 
   long star, opt, nuse, nrej;
   double dx, dy, err;
@@ -44,11 +45,14 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
   /* Decide initial weights and rejection */
   opt = 0;
 
+  satlim = mefinfo->sysulim < 0.0 ?
+    mefinfo->zp - mefinfo->satmag : mefinfo->sysulim;
+
   for(star = 0; star < mefinfo->nstars; star++) {
     if(data[star].aper[0].flux > 0.0 &&          /* Has a flux measurement */
        data[star].aper[0].fluxvar > 0.0 &&       /* And a reliable error */
        mefinfo->stars[star].sigflux[0] > 0 &&
-       data[star].aper[0].flux < mefinfo->sysulim &&  /* Not saturated */
+       data[star].aper[0].flux < satlim &&  /* Not saturated */
        mefinfo->stars[star].cls == -1) {   /* Is classified as stellar */
       wtbuf[star] = 1.0;
       rejbuf[star] = 0;
