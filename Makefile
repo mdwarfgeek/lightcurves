@@ -4,21 +4,21 @@
 ### Constants: edit to suit your system ####
 
 # CFITSIO include and library paths
-CFITSIO_INC=`pkg-config cfitsio --cflags`
-CFITSIO_LIBS=`pkg-config cfitsio --libs`
+CFITSIO_INC?=`pkg-config cfitsio --cflags`
+CFITSIO_LIBS?=`pkg-config cfitsio --libs`
 
 # PGPLOT is is now optional.  Comment out these lines to disable plots
 # and remove the dependency.
 PGPLOT_DIR?=/usr/local/pgplot
-PGPLOT_INC=-I$(PGPLOT_DIR) -DPLOTS
-PGPLOT_LIBS=-L$(PGPLOT_DIR) -lcpgplot -lpgplot -L/usr/X11R6/lib -lX11
-PGPLOT_SRCS=plots.c
+PGPLOT_INC?=-I$(PGPLOT_DIR) -DPLOTS
+PGPLOT_LIBS?=-L$(PGPLOT_DIR) -lcpgplot -lpgplot -L/usr/X11R6/lib -lX11
+PGPLOT_SRCS?=plots.c
 
 # SLALIB is now needed only for HJD (backwards compatibility) support.
 # Uncomment these lines and adjust accordingly if you need it.
-#SLA_INC=-I/usr/local/include -DHJD
-#SLA_LIBS=-L/usr/local/lib -lsla
-#SLA_SRCS=hjd.c sla.c
+#SLA_INC?=-I/usr/local/include -DHJD
+#SLA_LIBS?=-L/usr/local/lib -lsla
+#SLA_SRCS?=hjd.c sla.c
 
 # C compiler
 #CC=gcc
@@ -31,7 +31,7 @@ PGPLOT_SRCS=plots.c
 # portable way to bring in all the runtime libraries.  However, if plots
 # are disabled above, the C compiler can be used instead by changing this
 # line to CC (e.g. if there is no Fortran compiler available).
-LINK=$(FC)
+LINK?=$(FC)
 
 # Optimization flags
 
