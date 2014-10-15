@@ -99,4 +99,4 @@ clean:
 	rm -f $(LIGHTCURVES_OBJS) lightcurves
 	rm -f $(UPDATE_OBJS) update
 	rm -f $(TESTBUF_OBJS) testbuf
-	rm -f *.core *~
+	rm -f .depend
