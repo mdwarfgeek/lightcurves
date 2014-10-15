@@ -409,6 +409,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 void dsolve (double a[50][50], double b[50], int m);
 void dmatinv (double a[50][50], int m);
 
-char **read_file_list (int argc, char **argv, long *nf_r, char *errstr);
+char **read_file_list (int argc, char **argv, int *nf_r, char *errstr);
 
 #endif  /* __LIGHTCURVES_H__ */

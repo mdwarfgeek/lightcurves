@@ -68,7 +68,7 @@ int main (int argc, char *argv[]) {
   struct intra *intralist = (struct intra *) NULL;
   struct buffer_info buf;
 
-  long f, nf = 0;
+  int f, nf = 0;
 
   fitsfile *inf, *outf, *tmplf;
   int status = 0, ext, mef, nmefs;
@@ -435,7 +435,8 @@ int main (int argc, char *argv[]) {
     /* Read frames */
     for(f = 0; f < nf; f++) {
       if(verbose && isatty(1))
-	printf("\r Reading %*s (%*ld of %*ld)", maxflen, fnlist[f], fspc, f+1, fspc, nf);
+	printf("\r Reading %*s (%*d of %*d)",
+               maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
 		  dtptr, itptr, jtptr, ttptr,

@@ -55,11 +55,18 @@ is an existing light curve file from
 or
 .B update
 to which the new points should be appended.  Multiple list-driven
-photometry files can be given on the command-line, or filenames
-beginning with an 
+photometry files can be given on the command-line.  These
+.I file
+arguments are passed to glob(3), so they can be individual filenames,
+or patterns using wild cards.  Note that most shells will interpret
+such patterns themselves unless they are quoted or escaped, and may be
+subject to limits on the number or length of command-line arguments.
+Filenames beginning with an
 .I @
 character are treated as ASCII lists of input filenames, one filename
-per line.
+per line.  These are not passed to glob(3) so can also be used as a
+convenient way to pass filenames containing wild card characters that
+glob(3) would attempt to expand.
 .PP
 The default behaviour if no further options are to given is just to
 build light curves and display diagnostic plots.  No differential
@@ -1025,6 +1032,26 @@ saying:
 .fi
 .PP
 at the PGPLOT graphics device prompt.
+.PP
+It is also possible to use standard glob(3) patterns with the
+.B lightcurves
+program, which obviates the need to make the file list first, as was
+done above.  In this case, the first
+.B lightcurves
+command could be replaced with:
+.PP
+.nf
+  lightcurves -f 0 master_cat.fits 'target????_list.fits'
+.fi
+.PP
+In most shells, the quotes are important to prevent the shell from
+expanding the pattern itself.  Otherwise, a limit in the number or
+length of command-line arguments may be encountered, especially if the
+path names are long.  Note that it can quite useful to keep a record
+of the input files used to make a set of light curves, which is
+guaranteed to be done when the 
+.B listlist
+file method is used.
 .SH MISCELLANEOUS NOTES
 Occasionally, one might wish to choose comparison stars manually,
 rather than automatically.  Comparison stars are selected from only
