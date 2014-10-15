@@ -120,8 +120,8 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
       }
     }
     
-    medsig(tmpbufx, nuse, &averrx, (float *) NULL);
-    medsig(tmpbufx, nuse, &averry, (float *) NULL);
+    fmedsig(tmpbufx, nuse, &averrx, (float *) NULL);
+    fmedsig(tmpbufx, nuse, &averry, (float *) NULL);
     
     averrx *= 1.48;  /* converts to rms equivalent */
     averry *= 1.48;

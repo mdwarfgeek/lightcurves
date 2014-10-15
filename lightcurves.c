@@ -164,7 +164,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      }
 
 	    if(opt2 > 0) {
-	      medsig(medbuf2, opt2, &medflux, &sigflux);
+	      fmedsig(medbuf2, opt2, &medflux, &sigflux);
 	      if(iseg == 0) {
 		medref = medflux;
 		haveref = 1;
@@ -198,7 +198,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      }
 	  }
 
-	  medsig(medbuf1, opt1, &medflux, &sigflux);
+	  fmedsig(medbuf1, opt1, &medflux, &sigflux);
 	  
           mefinfo->stars[star].medflux[meas] = medflux;
           mefinfo->stars[star].sigflux[meas] = sigflux;
@@ -231,7 +231,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      }
 	  
 	  if(opt1 > 0) {
-	    medsig(medbuf1, opt1, &(medcorr[iseg]), (float *) NULL);
+	    fmedsig(medbuf1, opt1, &(medcorr[iseg]), (float *) NULL);
 	    
 	    if(verbose > 2)
 	      printf("medcorr[%d]=%.4f\n", iseg, medcorr[iseg]);
@@ -307,7 +307,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  }
 	}
 	
-	medsig(medbuf1, opt1, &medflux, &sigflux);
+	fmedsig(medbuf1, opt1, &medflux, &sigflux);
 	mefinfo->stars[star].medflux[meas] = medflux;
 	mefinfo->stars[star].sigflux[meas] = sigflux;
       }
@@ -326,7 +326,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  opt1++;
 	}
       
-      medsig(medbuf1, opt1, &(medoff[meas]), &(sigoff[meas]));
+      fmedsig(medbuf1, opt1, &(medoff[meas]), &(sigoff[meas]));
       
       if(verbose)
 	printf("  Aperture %ld calibration offset: %.3f %.3f\n",
@@ -373,7 +373,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  used = 1;
       }
       
-      medsig(medbuf1, opt1, &medflux, &sigflux);
+      fmedsig(medbuf1, opt1, &medflux, &sigflux);
       mefinfo->stars[star].medflux[meas] = medflux;
       mefinfo->stars[star].sigflux[meas] = sigflux;
 
@@ -410,12 +410,12 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       }
       
       if(opt1 > 0) {
-	medsig(medbuf1, opt1,
-	       &(mefinfo->stars[star].segs[iseg].medx),
-	       &(mefinfo->stars[star].segs[iseg].sigx));
-	medsig(medbuf2, opt1,
-	       &(mefinfo->stars[star].segs[iseg].medy),
-	       &(mefinfo->stars[star].segs[iseg].sigy));
+	fmedsig(medbuf1, opt1,
+                &(mefinfo->stars[star].segs[iseg].medx),
+                &(mefinfo->stars[star].segs[iseg].sigx));
+	fmedsig(medbuf2, opt1,
+                &(mefinfo->stars[star].segs[iseg].medy),
+                &(mefinfo->stars[star].segs[iseg].sigy));
       }
     }
   }
@@ -460,8 +460,10 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	}
       
       if(opt1 > 0) {
-	medsig(medbuf1, opt1, &(mefinfo->frames[pt].xoff), &(mefinfo->frames[pt].xsig));
-	medsig(medbuf2, opt1, &(mefinfo->frames[pt].yoff), &(mefinfo->frames[pt].ysig));
+	fmedsig(medbuf1, opt1,
+                &(mefinfo->frames[pt].xoff), &(mefinfo->frames[pt].xsig));
+	fmedsig(medbuf2, opt1,
+                &(mefinfo->frames[pt].yoff), &(mefinfo->frames[pt].ysig));
       }
     }
     
@@ -477,8 +479,10 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	}
       }
       
-      medsig(medbuf1, opt1, &(mefinfo->segs[iseg].medxoff), &(mefinfo->segs[iseg].sigxoff));
-      medsig(medbuf2, opt1, &(mefinfo->segs[iseg].medyoff), &(mefinfo->segs[iseg].sigyoff));
+      fmedsig(medbuf1, opt1,
+              &(mefinfo->segs[iseg].medxoff), &(mefinfo->segs[iseg].sigxoff));
+      fmedsig(medbuf2, opt1,
+              &(mefinfo->segs[iseg].medyoff), &(mefinfo->segs[iseg].sigyoff));
     }
   }
 
@@ -631,7 +635,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	}
       }
       
-      medsig(medbuf, opt, &medflux, &rmsflux);
+      fmedsig(medbuf, opt, &medflux, &rmsflux);
       mefinfo->stars[star].medflux[meas] = medflux;
       mefinfo->stars[star].sigflux[meas] = rmsflux;
 

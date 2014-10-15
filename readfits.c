@@ -1424,10 +1424,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   allfluxbuf = (float *) NULL;
 
   /* Determine saturation level robustly - lower quartile */
-  if(nsattmp > 0) {
-    fquicksort(sattmp, nsattmp);
-    satflux = sattmp[nsattmp/4];
-  }
+  if(nsattmp > 0)
+    satflux = fquickselect(sattmp, nsattmp/4, nsattmp);
 
   /* Decide which are usable as comparison stars */
   systematic_select(stars, nrows, mefinfo->sysllim, mefinfo->sysulim);
@@ -2683,7 +2681,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     mefinfo->avsigma += tmp;
 
   if(navskyfiterr > 0) {
-    medsig(skyfiterrbuf, navskyfiterr, &avskyfiterr, (float *) NULL);
+    fmedsig(skyfiterrbuf, navskyfiterr, &avskyfiterr, (float *) NULL);
     mefinfo->avskyfit += avskyfiterr * avskyfiterr * expfac;
   }
 

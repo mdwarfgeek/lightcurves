@@ -51,7 +51,7 @@ LIBS=$(CFITSIO_LIBS) $(PGPLOT_LIBS) $(SLA_LIBS) -lm
 
 COMMON_SRCS=buffer.c chooseap.c instvers.c intra.c lightcurves.c \
 	readfits.c systematic.c xytoxy.c \
-	dsolve.c dmatinv.c filelist.c medsig.c
+	dsolve.c dmatinv.c filelist.c
 
 LIGHTCURVES_SRCS=main.c $(COMMON_SRCS) $(SLA_SRCS) $(PGPLOT_SRCS)
 LIGHTCURVES_OBJS=${LIGHTCURVES_SRCS:%.c=%.o}

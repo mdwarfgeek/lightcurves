@@ -112,8 +112,7 @@ int main (int argc, char *argv[]) {
   long nmedsat, nmedlim, nstartot;
 
   long star;
-  int cflagmed;
-  int *tmpmed = (int *) NULL;
+  int cflagmin;
 
   float satlev = -1.0;
   float sysulim = -1.0, sysllim = -1.0;
@@ -458,33 +457,19 @@ int main (int argc, char *argv[]) {
       
       /* Fix the cflag column - sometimes in difference imaging there
        * are frames with zero confidence all-over, so subtract off
-       * the median cflag value.
+       * the minimum cflag value.
        */
-      tmpmed = (int *) malloc(meflist[mef].nstars * sizeof(int));
-      if(!tmpmed)
-        error(1, "malloc");
+      cflagmin = meflist[mef].stars[0].cflag;
+
+      for(star = 1; star < meflist[mef].nstars; star++)
+        if(meflist[mef].stars[star].cflag < cflagmin)
+          cflagmin = meflist[mef].stars[star].cflag;
       
       for(star = 0; star < meflist[mef].nstars; star++)
-        tmpmed[star] = meflist[mef].stars[star].cflag;
-      
-      iquicksort(tmpmed, meflist[mef].nstars);
-      cflagmed = meflist[mef].nstars % 2 ?
-                 tmpmed[meflist[mef].nstars/2] :
-                 (tmpmed[meflist[mef].nstars/2-1] +
-                  tmpmed[meflist[mef].nstars/2]) / 2;
-
-      free((void *) tmpmed);
-      tmpmed = (int *) NULL;
-      
-      for(star = 0; star < meflist[mef].nstars; star++) {
-        meflist[mef].stars[star].cflag -= cflagmed;
-        
-        if(meflist[mef].stars[star].cflag < 0)
-          meflist[mef].stars[star].cflag = 0;
-      }
+        meflist[mef].stars[star].cflag -= cflagmin;
     }
     else
-      cflagmed = 0;
+      cflagmin = 0;
 
     /* Change MJD to be relative to the first frame */
     meflist[mef].mjdref = floor(meflist[mef].frames[0].mjd);
@@ -501,8 +486,8 @@ int main (int argc, char *argv[]) {
 	printf("  Saturation level:     undetermined\n");
 
       printf("  5-sigma limit:        %.1f\n"
-	     "  Median cflag:         %d\n",
-	     meflist[mef].refflim, cflagmed);
+	     "  Minimum cflag:        %d\n",
+	     meflist[mef].refflim, cflagmin);
     }
 
     if(meflist[mef].satmag != -999.0) {
@@ -579,8 +564,8 @@ int main (int argc, char *argv[]) {
     }
   }
 
-  medsig(medbuf1, nmedsat, &medsat, (float *) NULL);
-  medsig(medbuf2, nmedlim, &medlim, (float *) NULL);
+  fmedsig(medbuf1, nmedsat, &medsat, (float *) NULL);
+  fmedsig(medbuf2, nmedlim, &medlim, (float *) NULL);
 
   free((void *) medbuf1);
   medbuf1 = (float *) NULL;

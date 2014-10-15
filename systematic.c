@@ -99,19 +99,6 @@ static float polyvar(float dx, float dy, double cov[50][50], int degree) {
   return(result);
 }
 
-static float percentile (float *list, long nn, long num, long div) {
-  long ff, ii, rem;
-
-  ff = num * nn;
-  ii = ff / div;
-  rem = ff - ii*div;
-
-  if(ii+1 < nn)
-    return((list[ii] * (div-rem) + list[ii+1] * rem) / div);
-
-  return(list[ii]);
-}
-
 /* This routine flags potential reference stars.  Called from read_lc
    or read_ref in readfits.c when the star list is read in.  This
    allows unused stars to be stripped out at the earliest possible
@@ -243,10 +230,11 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     }
   }
 
-  if(opt > 5) {
-    fquicksort(medbuf, opt);
-    rmsclip = percentile(medbuf, opt, 9, 10);
-  }
+  /* 90th percentile.  Uses ceil so it behaves the same as the original
+     did (given what we use this for below), without needing to average
+     two elements. */
+  if(opt > 5)
+    rmsclip = fquickselect(medbuf, ceil(0.9*opt), opt);
   else
     rmsclip = 999.0;  /* I think this should be safe :) */
 
@@ -267,7 +255,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     }
   }
 
-  medsig(medbuf, opt, &medoff, &sigoff);
+  fmedsig(medbuf, opt, &medoff, &sigoff);
 
 #ifdef DEBUG
   /* Calculate ranges */
@@ -476,7 +464,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
       }
     }
 
-    medsig(medbuf, opt, &newmed, &newsig);
+    fmedsig(medbuf, opt, &newmed, &newsig);
 
     /* Last one? */
     if(fabsf(newmed - medoff) < TTHRESH &&

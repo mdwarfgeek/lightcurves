@@ -405,10 +405,9 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      int diffmode, float satlev,
 	      char *errstr);
 
-/* Utility functions: dsolve.c, dmatinv.c, linear.c, medsig.c, sortfloat.c */
+/* Utility functions: dsolve.c, dmatinv.c, filelist.c */
 void dsolve (double a[50][50], double b[50], int m);
 void dmatinv (double a[50][50], int m);
-void medsig (float *a, long n, float *median_r, float *sigma_r);
 
 char **read_file_list (int argc, char **argv, long *nf_r, char *errstr);
 

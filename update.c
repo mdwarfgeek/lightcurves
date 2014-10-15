@@ -573,8 +573,8 @@ int main (int argc, char *argv[]) {
     }
   }
 
-  medsig(medbuf1, nmedsat, &medsat, (float *) NULL);
-  medsig(medbuf2, nmedlim, &medlim, (float *) NULL);
+  fmedsig(medbuf1, nmedsat, &medsat, (float *) NULL);
+  fmedsig(medbuf2, nmedlim, &medlim, (float *) NULL);
 
   free((void *) medbuf1);
   medbuf1 = (float *) NULL;
@@ -1486,7 +1486,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       }
       
       if(nmed > 0) {
-	medsig(medlist, nmed, &medflux, &sigflux);
+	fmedsig(medlist, nmed, &medflux, &sigflux);
 	
 	if(nmed == 1)
 	  sigflux = -999.0;

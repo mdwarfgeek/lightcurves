@@ -63,7 +63,7 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  }
 	
 	if(ncor > 1) {
-	  medsig(corbuf, ncor, &medcor, (float *) NULL);
+	  fmedsig(corbuf, ncor, &medcor, (float *) NULL);
 	  
 	  /* Accumulate mean */
 	  if(fabsf(medcor) < 1) {  /* it can't ever be that big => junk */

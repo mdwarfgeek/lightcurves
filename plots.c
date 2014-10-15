@@ -68,15 +68,15 @@ int do_plots (struct lc_mef *meflist, int nmefs,
     medbuf9[mef] = meflist[mef].avscint;
   }
 
-  medsig(medbuf1, nmefs, &gain, (float *) NULL);
-  medsig(medbuf2, nmefs, &rcore, (float *) NULL);
-  medsig(medbuf3, nmefs, &sigma, (float *) NULL);
-  medsig(medbuf4, nmefs, &skyfiterr, (float *) NULL);
-  medsig(medbuf5, nmefs, &avzp, (float *) NULL);
-  medsig(medbuf6, nmefs, &avapcor, (float *) NULL);
-  medsig(medbuf7, nmefs, &avextinc, (float *) NULL);
-  medsig(medbuf8, nmefs, &avsigm, (float *) NULL);
-  medsig(medbuf9, nmefs, &avscint, (float *) NULL);
+  fmedsig(medbuf1, nmefs, &gain, (float *) NULL);
+  fmedsig(medbuf2, nmefs, &rcore, (float *) NULL);
+  fmedsig(medbuf3, nmefs, &sigma, (float *) NULL);
+  fmedsig(medbuf4, nmefs, &skyfiterr, (float *) NULL);
+  fmedsig(medbuf5, nmefs, &avzp, (float *) NULL);
+  fmedsig(medbuf6, nmefs, &avapcor, (float *) NULL);
+  fmedsig(medbuf7, nmefs, &avextinc, (float *) NULL);
+  fmedsig(medbuf8, nmefs, &avsigm, (float *) NULL);
+  fmedsig(medbuf9, nmefs, &avscint, (float *) NULL);
 
   free((void *) medbuf1);
   medbuf1 = (float *) NULL;
