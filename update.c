@@ -553,20 +553,12 @@ int main (int argc, char *argv[]) {
     if(doreplace) {
       if(dooutput) {
 	/* Overwrite original output with temporary file */
-	rv = unlink(outfile);
-	if(rv == -1)
-	  error(1, "unlink: %s", outfile);
-	
 	rv = rename(tmpfile, outfile);
 	if(rv == -1)
 	  error(1, "rename: %s to %s", tmpfile, outfile);
       }
       else {
 	/* Overwrite original input with temporary file */
-	rv = unlink(refname);
-	if(rv == -1)
-	  error(1, "unlink: %s", refname);
-	
 	rv = rename(tmpfile, refname);
 	if(rv == -1)
 	  error(1, "rename: %s to %s", tmpfile, refname);
