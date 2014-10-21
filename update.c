@@ -181,7 +181,7 @@ int main (int argc, char *argv[]) {
 
   refname = argv[0];
 
-  fnlist = read_file_list(argc, argv, &nf, errstr);
+  fnlist = read_file_list(argc-1, argv+1, &nf, errstr);
   if(!fnlist)
     fatal(1, "%s", errstr);
 
