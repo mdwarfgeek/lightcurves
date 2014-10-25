@@ -1,3 +1,10 @@
+/* hjd.c:  Heliocentric JD (UTC) computation using SLALIB.  The calculation
+           is for a Geocentric observer and intentionally neglects the
+           displacement from the Geocentre to make it backward compatible
+           with older calculations which used the same method.  For all
+           purposes not needing such backwards compatibility I recommend
+           using the default BJD(TDB) calculations instead. */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
