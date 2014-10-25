@@ -1,5 +1,5 @@
-#ifndef __SLA_H__
-#define __SLA_H__
+#ifndef SLA_H
+#define SLA_H
 
 #ifdef CSLALIB
 #include <slalib.h>
@@ -39,4 +39,4 @@ void slaRdplan (double date, int np, double elong, double phi, double *ra, doubl
 void slaSubet (double rc, double dc, double eq, double *rm, double *dm);
 #endif
 
-#endif  /* __SLA_H__ */
+#endif  /* SLA_H */

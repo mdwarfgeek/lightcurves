@@ -1,5 +1,5 @@
-#ifndef __LIGHTCURVES_H__
-#define __LIGHTCURVES_H__
+#ifndef LIGHTCURVES_H
+#define LIGHTCURVES_H
 
 #include <fitsio.h>
 
@@ -411,4 +411,4 @@ void dmatinv (double a[50][50], int m);
 
 char **read_file_list (int argc, char **argv, int *nf_r, char *errstr);
 
-#endif  /* __LIGHTCURVES_H__ */
+#endif  /* LIGHTCURVES_H */
