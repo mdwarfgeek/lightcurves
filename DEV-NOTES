@@ -1,0 +1,20 @@
+Miscellaneous notes which may help anybody looking at the source code:
+
+* Magnitudes are represented "backwards" internally, as 2.5*log10(flux).
+  This is bizarre and confusing, and should be fixed.  It is related
+  to the strange terminology in the output files, in that these quantities
+  were flux once (a very long time ago, during the initial design / 
+  experimentation phase).  I should have changed it back then when it
+  would have been easier...
+
+* Values of -999 are (ab)used widely to represent undefined values
+  internally.  This should be changed to use the flags, which were added
+  later.
+  
+* Unfortunately, zero is used in the input files for undefined values
+  rather than NaNs, which makes the condition difficult to detect,
+  especially for difference imaging where zero is a perfectly valid
+  input value.
+
+* There is a lot of repetition in readfits.c.  I hope to tidy it up some
+  day.
