@@ -28,7 +28,7 @@ static void polyaccum(float dx, float dy, float wt, float val,
 		      double a[50][50], double b[50], int degree) {
   int ox1, oy1, mx1, i1;
   int ox2, oy2, mx2, i2;
-  float xp1, yp1, xp2, yp2, tmp;
+  double xp1, yp1, xp2, yp2, tmp;
 
   i1 = 0;
   for(oy1 = 0, yp1 = 1.0; oy1 <= degree; oy1++, yp1 *= dy) {
@@ -54,7 +54,8 @@ static void polyaccum(float dx, float dy, float wt, float val,
 }
 
 static float polyeval(float dx, float dy, double coeff[50], int degree) {
-  float result = 0.0, xp, yp;
+  double xp, yp;
+  float result = 0.0;
   int ox, oy, mx, i;
 
   i = 0;
@@ -72,7 +73,8 @@ static float polyeval(float dx, float dy, double coeff[50], int degree) {
 static float polyvar(float dx, float dy, double cov[50][50], int degree) {
   int ox1, oy1, mx1, i1;
   int ox2, oy2, mx2, i2;
-  float xp1, yp1, xp2, yp2, tmp, result;
+  double xp1, yp1, xp2, yp2, tmp;
+  float result;
 
   result = 0;
 
