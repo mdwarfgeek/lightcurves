@@ -666,8 +666,8 @@ stars.
 .TP
 .B LYD
 These headers record a standard 6-coefficient linear transformation
-from the pixel coordinates in the master frame to the pixel
-coordinates in the target frame.  This transformation is derived
+from the pixel coordinates in the target frame to the pixel
+coordinates in the master frame.  This transformation is derived
 using all the stars detected in the frame, not just those considered
 as comparison stars, so is written only if all of the stars in the
 frame were processed (i.e. the
