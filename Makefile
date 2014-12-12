@@ -82,7 +82,7 @@ depend:
 	(cd ../lib && $(MAKE) liblfa.a)
 
 ../lib/fitsutil.o:
-	(cd ../lib && $(MAKE) fitsutil.o CFITSIO_INC=$(CFITSIO_INC))
+	(cd ../lib && $(MAKE) fitsutil.o CFITSIO_INC="$(CFITSIO_INC)")
 
 # Rules for lightcurves
 
