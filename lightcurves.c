@@ -13,10 +13,8 @@
 #include "cvtunit.h"
 #include "util.h"
 
-#define NITER 3
-
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
-		 int norenorm, int noastrom, char *errstr) {
+		 int norenorm, int noastrom, int niter, char *errstr) {
   struct lc_point *ptbuf = (struct lc_point *) NULL;
   float *medbuf1 = (float *) NULL, *medbuf2;
   long nmedbuf;
@@ -134,12 +132,12 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
      * offsets (which are the dominant effect otherwise
      * on data taken in non-photometric conditions).
      */
-    for(iter = 0; iter < NITER; iter++) {
-      degree = (iter == NITER-1 ? mefinfo->degree : 0);
+    for(iter = 0; iter < niter; iter++) {
+      degree = (iter == niter-1 ? mefinfo->degree : 0);
       
     if(verbose && isatty(1))
       printf("\r Processing iteration %d of %d",
-	     iter+1, NITER);
+	     iter+1, niter);
 
       /* Compute per-object, per-segment median flux */
       for(star = 0; star < mefinfo->nstars; star++) {

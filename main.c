@@ -43,6 +43,7 @@ static void usage (char *av) {
 	  "         -a aper   Specify aperture or 'sel' for only auto (default both).\n"
 	  "         -d        Enables difference imaging mode.\n"
 	  "         -f degree Apply polynomial of 'degree' for systematics removal.\n"
+          "         -I iter   Use 'iter' iterations for frame zero points.\n"
 	  "         -i file   Apply intrapixel correction from 'file'.\n"
 	  "         -m        Allow for meridian offset in rms and weighting.\n"
 	  "         -mm       Same, only also removes it.\n"
@@ -99,6 +100,8 @@ int main (int argc, char *argv[]) {
   int norenorm = 0;
   int polydeg = -1;
 
+  int niter = 3;
+
   int outcls = 0;
   int wantoutcls = 0;
 
@@ -132,7 +135,7 @@ int main (int argc, char *argv[]) {
   avzero = argv[0];
 
   /* Extract command-line arguments */
-  while((c = getopt(argc, argv, "a:c:df:g:i:mno:pqSs:u:vV:")) != -1)
+  while((c = getopt(argc, argv, "a:c:df:g:I:i:mno:pqSs:u:vV:")) != -1)
     switch(c) {
     case 'a':
       if(!strncasecmp(optarg, "sel", 3))
@@ -162,6 +165,11 @@ int main (int argc, char *argv[]) {
       strncpy(goodfile, optarg, sizeof(goodfile)-1);
       goodfile[sizeof(goodfile)-1] = '\0';
       dogood = 1;
+      break;
+    case 'I':
+      niter = (int) strtol(optarg, &ep, 10);
+      if(*ep != '\0' || niter < 1)
+	fatal(1, "invalid niter: %s", optarg);
       break;
     case 'i':
       strncpy(intrafile, optarg, sizeof(intrafile)-1);
@@ -502,7 +510,7 @@ int main (int argc, char *argv[]) {
     nstartot += meflist[mef].nstars;
 
     /* Call into the main part of the program */
-    if(lightcurves(&buf, &(meflist[mef]), norenorm, wantoutcls, errstr))
+    if(lightcurves(&buf, &(meflist[mef]), norenorm, wantoutcls, niter, errstr))
       fatal(1, "%s", errstr);
 
     /* Calculate average extinction */

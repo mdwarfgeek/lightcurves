@@ -199,6 +199,10 @@ after processing.  This was originally intended for removing
 low-quality (highly non-photometric) frames from the processing.  It
 is not often used any more.
 .TP
+.BI "-I " "iter"
+Set number of iterations between computing comparison star magnitudes
+and rms, and frame corrections.  Default 3.
+.TP
 .BI "-i " "file"
 An experimental attempt at correcting for intra-pixel sensitivity
 variation using a pixel map stored in an ASCII file.  Not likely to be

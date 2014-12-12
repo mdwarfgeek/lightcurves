@@ -358,7 +358,7 @@ float calc_intra (float x, float y, struct intra *corr);
 
 /* Main routine: lightcurves.c */
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
-		 int norenorm, int noastrom, char *errstr);
+		 int norenorm, int noastrom, int niter, char *errstr);
 int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 			int noastrom, char *errstr);
 
