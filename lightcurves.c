@@ -149,7 +149,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
           
           for(meas = meas1; meas < meas2; meas++) {
             /* Apply last set of frame corrections */
-            if(systematic_apply_star(ptbuf, mefinfo, pt, meas, errstr))
+            if(systematic_apply_star(ptbuf, mefinfo, star, meas, errstr))
               goto error;
 
             if(mefinfo->nseg > 1) {
