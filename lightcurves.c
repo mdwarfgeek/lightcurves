@@ -152,39 +152,43 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
             if(systematic_apply_star(ptbuf, mefinfo, pt, meas, errstr))
               goto error;
 
-            /* Compute segment medians */
-            for(iseg = 0; iseg < mefinfo->nseg; iseg++)
-              nmedseg[iseg] = 0;
-
-            for(pt = 0; pt < mefinfo->nf; pt++)
-              if(ptbuf[pt].aper[meas].flux != 0.0) {
-                iseg = mefinfo->frames[pt].iseg;
-
-                *(medseg[iseg] + nmedseg[iseg]) = ptbuf[pt].aper[meas].flux;
-                nmedseg[iseg]++;
-              }
-
-            medref = 0;
-            haveref = 0;
-
-            for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
-              if(nmedseg[iseg] > 0) {
-                fmedsig(medseg[iseg], nmedseg[iseg], &medflux, &sigflux);
-                if(iseg == 0) {
-                  medref = medflux;
-                  haveref = 1;
+            if(mefinfo->nseg > 1) {
+              /* Compute segment medians */
+              for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+                nmedseg[iseg] = 0;
+              
+              for(pt = 0; pt < mefinfo->nf; pt++)
+                if(ptbuf[pt].aper[meas].flux != 0.0) {
+                  iseg = mefinfo->frames[pt].iseg;
+                  
+                  *(medseg[iseg] + nmedseg[iseg]) = ptbuf[pt].aper[meas].flux;
+                  nmedseg[iseg]++;
                 }
-                
-                if(haveref)
-                  corr = medflux - medref;
+              
+              medref = 0;
+              haveref = 0;
+              
+              for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
+                if(nmedseg[iseg] > 0) {
+                  fmedsig(medseg[iseg], nmedseg[iseg], &medflux, &sigflux);
+                  if(iseg == 0) {
+                    medref = medflux;
+                    haveref = 1;
+                  }
+                  
+                  if(haveref)
+                    corr = medflux - medref;
+                  else
+                    corr = 0;
+                  
+                  mefinfo->stars[star].segs[iseg].corr[meas] = corr;
+                }
                 else
-                  corr = 0;
-                
-                mefinfo->stars[star].segs[iseg].corr[meas] = corr;
+                  mefinfo->stars[star].segs[iseg].corr[meas] = 0;
               }
-              else
-                mefinfo->stars[star].segs[iseg].corr[meas] = 0;
             }
+            else
+              mefinfo->stars[star].segs[0].corr[meas] = 0;
 
             /* Compute global median, after correction */
             opt1 = 0;
