@@ -514,21 +514,23 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   return(1);
 }
 
-int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
-		      float *medbuf, struct systematic_fit *sysbuf, char *errstr) {
+int systematic_apply_frame (struct lc_point *data, struct lc_mef *mefinfo,
+                            long frame, long meas, char *errstr) {
   long star;
   float dx, dy, corr, var;
 
   /* Apply fit */
   for(star = 0; star < mefinfo->nstars; star++) {
     if(data[star].aper[meas].flux > 0.0) {
-      dx = mefinfo->stars[star].x - sysbuf[frame].xbar;
-      dy = mefinfo->stars[star].y - sysbuf[frame].ybar;
+      dx = mefinfo->stars[star].x - mefinfo->frames[frame].sys[meas].xbar;
+      dy = mefinfo->stars[star].y - mefinfo->frames[frame].sys[meas].ybar;
 
-      corr = polyeval(dx, dy, sysbuf[frame].coeff, sysbuf[frame].degree);
-      var = polyvar(dx, dy, sysbuf[frame].cov, sysbuf[frame].degree);
-
-      //printf("%f %f %f %f\n", corr, sqrt(var), sysbuf[frame].sigoff, sysbuf[frame].sigm);
+      corr = polyeval(dx, dy,
+                      mefinfo->frames[frame].sys[meas].coeff,
+                      mefinfo->frames[frame].sys[meas].degree);
+      var = polyvar(dx, dy,
+                    mefinfo->frames[frame].sys[meas].cov,
+                    mefinfo->frames[frame].sys[meas].degree);
 
       data[star].aper[meas].flux -= corr;
 
@@ -536,6 +538,37 @@ int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame,
 	data[star].aper[meas].fluxvarcom = data[star].aper[meas].fluxvar + var;
       else
 	data[star].aper[meas].fluxvarcom = 0.0;
+    }
+  }
+
+  return(0);
+}
+
+int systematic_apply_star (struct lc_point *data, struct lc_mef *mefinfo,
+                           long star, long meas, char *errstr) {
+  long frame;
+  float dx, dy, corr, var;
+
+  /* Apply fit */
+  for(frame = 0; frame < mefinfo->nf; frame++) {
+    if(data[frame].aper[meas].flux > 0.0 &&
+       mefinfo->frames[frame].sys[meas].npt > 0) {
+      dx = mefinfo->stars[star].x - mefinfo->frames[frame].sys[meas].xbar;
+      dy = mefinfo->stars[star].y - mefinfo->frames[frame].sys[meas].ybar;
+
+      corr = polyeval(dx, dy,
+                      mefinfo->frames[frame].sys[meas].coeff,
+                      mefinfo->frames[frame].sys[meas].degree);
+      var = polyvar(dx, dy,
+                    mefinfo->frames[frame].sys[meas].cov,
+                    mefinfo->frames[frame].sys[meas].degree);
+
+      data[frame].aper[meas].flux -= corr;
+
+      if(data[frame].aper[meas].fluxvar > 0)
+	data[frame].aper[meas].fluxvarcom = data[frame].aper[meas].fluxvar + var;
+      else
+	data[frame].aper[meas].fluxvarcom = 0.0;
     }
   }
 

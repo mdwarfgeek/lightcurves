@@ -119,6 +119,20 @@ struct lc_star {
   long nchisq;
 };
 
+/* Structure holding systematics fit results */
+struct systematic_fit {
+  float xbar;
+  float ybar;
+  double coeff[50];
+  double cov[50][50];
+  int degree;
+
+  float medoff;
+  float sigoff;
+  float sigm;
+  long npt;
+};
+
 struct lc_frame {
   /* Frame MJD and exposure time */
   double mjd;
@@ -136,6 +150,9 @@ struct lc_frame {
   /* Field angle */
   float fang;
   long iang;
+
+  /* Systematic fit results */
+  struct systematic_fit sys[NFLUX];
 
   /* Frame offset and RMS after correction */
   float offset;
@@ -305,20 +322,6 @@ struct buffer_info {
   unsigned char *buf;
 };
 
-/* Structure holding systematics fit results */
-struct systematic_fit {
-  float xbar;
-  float ybar;
-  double coeff[50];
-  double cov[50][50];
-  int degree;
-
-  float medoff;
-  float sigoff;
-  float sigm;
-  long npt;
-};
-
 /* Globals */
 extern float flux_apers[];
 extern int verbose;
@@ -379,8 +382,11 @@ int plot_corr (float *beforehist, float *beforewthist,
 void systematic_select (struct lc_star *stars, long nstars, float fmin, float fmax);
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f, char *errstr);
-int systematic_apply (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
-		      float *medbuf, struct systematic_fit *f, char *errstr);
+
+int systematic_apply_frame (struct lc_point *data, struct lc_mef *mefinfo,
+                            long frame, long meas, char *errstr);
+int systematic_apply_star (struct lc_point *data, struct lc_mef *mefinfo,
+                           long star, long meas, char *errstr);
 
 /* Plate solutions: xytoxy.c */
 int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,

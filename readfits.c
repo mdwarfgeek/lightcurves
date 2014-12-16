@@ -1557,6 +1557,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   double s[3], pr, seq[3];
 
   float diam, sc, err, var, avskyfiterr, avscint;
+
+  float *zpoffbuf[NFLUX];
+  long nzpoff[NFLUX];
+  float avzpoff, avzprms;
+
   float *skyfiterrbuf = (float *) NULL;
   long navskyfiterr, navscint;
 
@@ -1578,6 +1583,12 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   struct instvers *instvers = (struct instvers *) NULL;
 
   long cadencenum = -999;
+
+  /* Init */
+  for(col = 0; col < NFLUX; col++) {
+    zpoffbuf[col] = (float *) NULL;
+    nzpoff[col] = 0;
+  }
 
   /* Open catalogue */
   ffopen(&fits, catfile, READONLY, &status);
@@ -2418,6 +2429,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   }
 
   /* Allocate memory for medians */
+  for(col = 0; col < NFLUX; col++) {
+    zpoffbuf[col] = (float *) malloc(nrows * sizeof(float));
+    if(!zpoffbuf[col]) {
+      report_syserr(errstr, "malloc");
+      goto error;
+    }
+  }
+
   skyfiterrbuf = (float *) malloc(nrows * sizeof(float));
   if(!skyfiterrbuf) {
     report_syserr(errstr, "malloc");
@@ -2600,6 +2619,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  if(dointra)
 	    points[rout].aper[col].flux += calc_intra(xbuf[rin], ybuf[rin], icorr);
 
+          /* If suitable, accumulate for median */
+          if(mefinfo->stars[rrout].compok &&
+             !points[rout].satur) {
+            *(zpoffbuf[col] + nzpoff[col])
+              = points[rout].aper[col].flux - mefinfo->stars[rrout].refmag;
+            nzpoff[col]++;
+          }
+
           /* Relative variance */
           var = fluxvar / (flux*flux);
 
@@ -2728,6 +2755,32 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   mefinfo->frames[iframe].instvers = instvers;
 
+  /* Compute first estimate of ZP offset and init systematic fit
+     with an educated guess. */
+  for(col = 0; col < NFLUX; col++) {
+    if(nzpoff[col] > 0) {
+      fmedsig(zpoffbuf[col], nzpoff[col], &avzpoff, &avzprms);
+
+      mefinfo->frames[iframe].sys[col].xbar = 0;
+      mefinfo->frames[iframe].sys[col].ybar = 0;
+      memset(mefinfo->frames[iframe].sys[col].coeff,
+             0, sizeof(mefinfo->frames[iframe].sys[col].coeff));
+      mefinfo->frames[iframe].sys[col].coeff[0] = avzpoff;
+
+      memset(mefinfo->frames[iframe].sys[col].cov,
+             0, sizeof(mefinfo->frames[iframe].sys[col].cov));
+      mefinfo->frames[iframe].sys[col].degree = 0;
+
+      mefinfo->frames[iframe].sys[col].medoff = 0;
+      mefinfo->frames[iframe].sys[col].sigoff = avzprms;
+      mefinfo->frames[iframe].sys[col].sigm = 0;
+      mefinfo->frames[iframe].sys[col].npt = nzpoff[col];
+    }
+
+    free((void *) zpoffbuf[col]);
+    zpoffbuf[col] = (float *) NULL;
+  }
+
   free((void *) skyfiterrbuf);
   skyfiterrbuf = (float *) NULL;
 
@@ -2747,6 +2800,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     free((void *) allfluxbuf);
   if(points)
     free((void *) points);
+
+  for(col = 0; col < NFLUX; col++)
+    if(zpoffbuf[col])
+      free((void *) zpoffbuf[col]);
+
   if(skyfiterrbuf)
     free((void *) skyfiterrbuf);
 
