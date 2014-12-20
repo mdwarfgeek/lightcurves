@@ -1442,6 +1442,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	  else
 	    fluxerrbuf[soff+pt] = -999.0;
 	}
+        else {
+          fluxbuf[soff+pt] = -999.0;
+          fluxerrbuf[soff+pt] = -999.0;
+        }
 
 	wtbuf[soff+pt] = lcbuf[pt].aper[ap].wt;
       }
