@@ -402,6 +402,7 @@ int main (int argc, char *argv[]) {
     meflist[mef].warned = 0;
 
     meflist[mef].avsigma = 0.0;
+    meflist[mef].avskyfit = 0.0;
     meflist[mef].avapcor = 0.0;
     meflist[mef].avscint = 0.0;
 
@@ -451,6 +452,7 @@ int main (int argc, char *argv[]) {
 
     /* Sort out averages */
     meflist[mef].avsigma = sqrtf(meflist[mef].avsigma / nf);
+    meflist[mef].avskyfit = sqrtf(meflist[mef].avskyfit / nf);
     meflist[mef].avapcor /= nf;
     meflist[mef].avscint /= nf;
 
@@ -488,14 +490,20 @@ int main (int argc, char *argv[]) {
     /* Calculate average extinction */
     if(meflist[mef].degree >= 0) {
       meflist[mef].avextinc = 0.0;
-      
-      for(f = 0; f < nf; f++)
+      meflist[mef].avsigm = 0.0;
+
+      for(f = 0; f < nf; f++) {
 	meflist[mef].avextinc += powf(10.0, -0.4 * meflist[mef].frames[f].extinc);
+        meflist[mef].avsigm += meflist[mef].frames[f].sigm;
+      }
       
       meflist[mef].avextinc /= nf;
+      meflist[mef].avsigm /= nf;
     }
-    else
+    else {
       meflist[mef].avextinc = 1.0;
+      meflist[mef].avsigm = 0.0;
+    }
 
     /* Write out lightcurves for this MEF if requested */
     if(dooutput || doreplace) {
@@ -521,8 +529,8 @@ int main (int argc, char *argv[]) {
     }
 
 #ifdef PLOTS
-    sysulim = meflist[mef].sysulim;  /* kludge */
-    sysllim = meflist[mef].sysllim;  /* kludge */
+    sysulim = meflist[mef].zp - meflist[mef].sysulim;  /* kludge */
+    sysllim = meflist[mef].zp - meflist[mef].sysllim;  /* kludge */
 #endif
   }
 
