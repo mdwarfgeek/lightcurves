@@ -19,7 +19,7 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
 
   long star, opt, nuse, nrej;
   double dx, dy, err;
-  int iter;
+  int iter, iap;
 
   float averrx, averry, averr;
 
@@ -49,10 +49,12 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
     mefinfo->zp - mefinfo->satmag : mefinfo->sysulim;
 
   for(star = 0; star < mefinfo->nstars; star++) {
-    if(data[star].aper[0].flux > 0.0 &&          /* Has a flux measurement */
-       data[star].aper[0].fluxvar > 0.0 &&       /* And a reliable error */
-       mefinfo->stars[star].sigflux[0] > 0 &&
-       data[star].aper[0].flux < satlim &&  /* Not saturated */
+    iap = mefinfo->stars[star].iap;
+
+    if(data[star].aper[iap].flux > 0.0 &&          /* Has a flux measurement */
+       data[star].aper[iap].fluxvar > 0.0 &&       /* And a reliable error */
+       mefinfo->stars[star].sigflux[iap] > 0 &&
+       data[star].aper[iap].flux < satlim &&  /* Not saturated */
        mefinfo->stars[star].cls == -1) {   /* Is classified as stellar */
       wtbuf[star] = 1.0;
       rejbuf[star] = 0;
