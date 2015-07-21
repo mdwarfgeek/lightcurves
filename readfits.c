@@ -83,10 +83,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 
   int cats_are_80 = 0;
 
-  float exptime, pedestal = 0, skylev, skynoise, rcore, gain;
-  float magzpt;
-  long numzpt;
-  int haveimgzpt;
+  float exptime, pedestal = 0, skylev, skynoise, rcore, gain, magzpt;
   float apcor[NFLUX], percorr;
   char filter[FLEN_VALUE];
   float airmass = 1.0, extinct = 0.0;
@@ -338,62 +335,30 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
     goto error;
   }
 
-  /* How many standards in image? */
-  ffgkyj(fits, "IMNZPT", &numzpt, (char *) NULL, &status);
+  ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    numzpt = 0;
+    ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      magzpt = 25.0;
+
+      if(verbose) {
+	printf("Warning: using default magzpt = %.1f\n", magzpt);
+        mefinfo->warned |= WARNED_MAGZPT;
+      }
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: ZMAG");
+      goto error;
+    }
+    else {
+      noexp = 1;  /* don't add in 2.5log10(exptime) */
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkyj: IMNZPT");
+    fitsio_err(errstr, status, "ffgkye: MAGZPT");
     goto error;
-  }
-
-  if(numzpt > 0) {
-    /* Try to get image ZP solution */
-    ffgkye(fits, "IMGZPT", &magzpt, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      haveimgzpt = 0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyj: IMGZPT");
-      goto error;
-    }
-    else if(magzpt == 99.0)  /* flag value */
-      haveimgzpt = 0;
-    else
-      haveimgzpt = 1;
-  }
-  else
-    haveimgzpt = 0;
-  
-  if(!haveimgzpt) {
-    ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
-      if(status == KEY_NO_EXIST) {
-        status = 0;
-        magzpt = 25.0;
-        
-        if(verbose) {
-          printf("Warning: using default magzpt = %.1f\n", magzpt);
-          mefinfo->warned |= WARNED_MAGZPT;
-        }
-      }
-      else if(status) {
-        fitsio_err(errstr, status, "ffgkye: ZMAG");
-        goto error;
-      }
-      else {
-        noexp = 1;  /* don't add in 2.5log10(exptime) */
-      }
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkye: MAGZPT");
-      goto error;
-    }
   }
 
   for(icol = 0; icol < NFLUX; icol++) {
@@ -842,10 +807,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   struct wcs_info wcs;
   double fang;
 
-  float skylev, pedestal = 0, skynoise, exptime, rcore, gain, percorr;
-  float magzpt;
-  long numzpt;
-  int haveimgzpt;
+  float skylev, pedestal = 0, skynoise, exptime, rcore, gain, magzpt, percorr;
   float apcor[NFLUX];
 
   long nrows, nstars, rblksz, roff, rin, rout, rrin, remain, rread;
@@ -1068,62 +1030,30 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
     goto error;
   }
 
-  /* How many standards in image? */
-  ffgkyj(fits, "IMNZPT", &numzpt, (char *) NULL, &status);
+  ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    numzpt = 0;
+    ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      magzpt = 25.0;
+
+      if(verbose) {
+	printf("Warning: using default magzpt = %.1f\n", magzpt);
+        mefinfo->warned |= WARNED_MAGZPT;
+      }
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: ZMAG");
+      goto error;
+    }
+    else {
+      noexp = 1;  /* don't add in 2.5log10(exptime) */
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkyj: IMNZPT");
+    fitsio_err(errstr, status, "ffgkye: MAGZPT");
     goto error;
-  }
-
-  if(numzpt > 0) {
-    /* Try to get image ZP solution */
-    ffgkye(fits, "IMGZPT", &magzpt, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      haveimgzpt = 0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyj: IMGZPT");
-      goto error;
-    }
-    else if(magzpt == 99.0)  /* flag value */
-      haveimgzpt = 0;
-    else
-      haveimgzpt = 1;
-  }
-  else
-    haveimgzpt = 0;
-  
-  if(!haveimgzpt) {
-    ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
-      if(status == KEY_NO_EXIST) {
-        status = 0;
-        magzpt = 25.0;
-        
-        if(verbose) {
-          printf("Warning: using default magzpt = %.1f\n", magzpt);
-          mefinfo->warned |= WARNED_MAGZPT;
-        }
-      }
-      else if(status) {
-        fitsio_err(errstr, status, "ffgkye: ZMAG");
-        goto error;
-      }
-      else {
-        noexp = 1;  /* don't add in 2.5log10(exptime) */
-      }
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkye: MAGZPT");
-      goto error;
-    }
   }
 
   for(col = 0; col < NFLUX; col++) {
@@ -1643,10 +1573,7 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   int iha = 0;
 
   char filter[FLEN_VALUE];
-  float zpcorr, airmass = 1.0, extinct = 0.0;
-  float magzpt;
-  long numzpt;
-  int haveimgzpt;
+  float magzpt, zpcorr, airmass = 1.0, extinct = 0.0;
   int l1, l2, i, ilim, noexp = 0;
 
   long schpri;
@@ -1921,62 +1848,30 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
-  /* How many standards in image? */
-  ffgkyj(fits, "IMNZPT", &numzpt, (char *) NULL, &status);
+  ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
-    numzpt = 0;
+    ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
+    if(status == KEY_NO_EXIST) {
+      status = 0;
+      magzpt = 25.0;
+
+      if(verbose && !(mefinfo->warned & WARNED_MAGZPT)) {
+	printf("Warning: using default magzpt = %.1f\n", magzpt);
+        mefinfo->warned |= WARNED_MAGZPT;
+      }
+    }
+    else if(status) {
+      fitsio_err(errstr, status, "ffgkye: ZMAG");
+      goto error;
+    }
+    else {
+      noexp = 1;  /* don't add in 2.5log10(exptime) */
+    }
   }
   else if(status) {
-    fitsio_err(errstr, status, "ffgkyj: IMNZPT");
+    fitsio_err(errstr, status, "ffgkye: MAGZPT");
     goto error;
-  }
-
-  if(numzpt > 0) {
-    /* Try to get image ZP solution */
-    ffgkye(fits, "IMGZPT", &magzpt, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      haveimgzpt = 0;
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkyj: IMGZPT");
-      goto error;
-    }
-    else if(magzpt == 99.0)  /* flag value */
-      haveimgzpt = 0;
-    else
-      haveimgzpt = 1;
-  }
-  else
-    haveimgzpt = 0;
-  
-  if(!haveimgzpt) {
-    ffgkye(fits, "MAGZPT", &magzpt, (char *) NULL, &status);
-    if(status == KEY_NO_EXIST) {
-      status = 0;
-      ffgkye(fits, "ZMAG", &magzpt, (char *) NULL, &status);
-      if(status == KEY_NO_EXIST) {
-        status = 0;
-        magzpt = 25.0;
-        
-        if(verbose && !(mefinfo->warned & WARNED_MAGZPT)) {
-          printf("Warning: using default magzpt = %.1f\n", magzpt);
-          mefinfo->warned |= WARNED_MAGZPT;
-        }
-      }
-      else if(status) {
-        fitsio_err(errstr, status, "ffgkye: ZMAG");
-        goto error;
-      }
-      else {
-        noexp = 1;  /* don't add in 2.5log10(exptime) */
-      }
-    }
-    else if(status) {
-      fitsio_err(errstr, status, "ffgkye: MAGZPT");
-      goto error;
-    }
   }
 
   for(col = 0; col < NFLUX; col++) {

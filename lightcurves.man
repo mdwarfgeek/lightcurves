@@ -345,11 +345,11 @@ Exposure time, in seconds.  If not present, emits warning and does not
 correct for exposure time.  Output files will contain zero in TEXP.
 .TP
 EXTINCT
-Extinction in magnitudes per airmass.  See notes for IMGZPT and
-MAGZPT, below, for how this value is used.  If not present, a default
-is supplied (this is from a hard-coded table for the INT/WFC for
-historical reasons, namely that the header did not exist in files
-processed by very old versions of the pipeline toolkit).
+Extinction in magnitudes per airmass.  See notes for MAGZPT, below,
+for how this value is used.  If not present, a default is supplied
+(this is from a hard-coded table for the INT/WFC for historical
+reasons, namely that the header did not exist in files processed by
+very old versions of the pipeline toolkit).
 .TP
 FILTER
 .TP
@@ -426,22 +426,16 @@ HIERARCH ESO TEL GEOLON
 Observing site longitude, in degrees, East positive.  See comments
 under LATITUDE, above.
 .TP
-IMGZPT
-.TP
 MAGZPT
 .TP
 ZMAG
-Magnitude zero-point.  IMGZPT is a MEarth-specific header keyword and
-is used if IMNZPT > 0.  This value is derived from a photometric
-solution against APASS using stars in the field of view.  The CASU
-standard variant is MAGZPT and is tried next.  This is usually derived
-from photometric standard star fields.  Both are expressed for an
-exposure time of one second and one airmass using the AIRMASS keyword
-(and for mosaic instruments, PERCORR=0).  ZMAG is a variant seen in
-UNSW APT data and is for the exposure time of the frame and an airmass
-of unity.  If not present, uses MAGZPT=25.0 (this is a somewhat
-randomly chosen value, but happens to be a shockingly good match for a
-certain NASA exoplanet hunting satellite) and emits a warning.
+Magnitude zero-point.  The CASU standard variant is MAGZPT and is for
+an exposure time of one second and airmass of unity (and for mosaic
+instruments, PERCORR=0).  ZMAG is a variant seen in UNSW APT data and
+is for the exposure time of the frame and an airmass of unity.  If not
+present, uses MAGZPT=25.0 (this is a somewhat randomly chosen value,
+but happens to be a shockingly good match for a certain NASA exoplanet
+hunting satellite) and emits a warning.
 .TP
 MJD-OBS
 .TP
@@ -462,8 +456,8 @@ not present.
 .TP
 PERCORR
 Per-detector adjustment added in to the magnitude zero-point (the
-IMGZPT and MAGZPT values are for the whole file, not per extension).
-Value in magnitudes, default is zero for no correction.
+MAGZPT values are for the whole file, not per extension).  Value in
+magnitudes, default is zero for no correction.
 .TP
 SATLEV
 .TP
