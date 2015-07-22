@@ -30,8 +30,20 @@ struct table_section {
 
 static int update_lc (fitsfile *reff, fitsfile *fits,
 		      struct buffer_info *buf, struct lc_mef *mefinfo,
+                      struct dtai_table *dtab,
+                      struct iers_table *itab,
+                      struct jpleph_table *jtab,
+                      struct jpleph_table *ttab,
 		      int outcls, int wantoutcls,
 		      char *errstr);
+static int compute_lc (fitsfile *reff,
+                       struct buffer_info *buf, struct lc_mef *mefinfo,
+                       struct dtai_table *dtab,
+                       struct iers_table *itab,
+                       struct jpleph_table *jtab,
+                       struct jpleph_table *ttab,
+                       int outcls, int wantoutcls,
+                       char *errstr);
 
 /* Getopt stuff */
 extern char *optarg;
@@ -440,7 +452,6 @@ int main (int argc, char *argv[]) {
                maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
-		  dtptr, itptr, jtptr, ttptr,
 		  dointra, &(intralist[mef]),
 		  doinstvers, instverslist, ninstvers,
 		  diffmode, satlev, errstr))
@@ -517,8 +528,10 @@ int main (int argc, char *argv[]) {
 	fatal(1, "%s", errstr);
       }
 
-      if(update_lc(tmplf, outf, &buf, &(meflist[mef]), outcls, wantoutcls, errstr))
-	fatal(1, "write_lc: %s", errstr);
+      if(update_lc(tmplf, outf, &buf, &(meflist[mef]),
+                   dtptr, itptr, jtptr, ttptr,
+                   outcls, wantoutcls, errstr))
+	fatal(1, "update_lc: %s", errstr);
 
       /* Flush */
       ffflus(outf, &status);
@@ -526,6 +539,12 @@ int main (int argc, char *argv[]) {
 	fitsio_err(errstr, status, "ffflus");
 	fatal(1, "%s", errstr);
       }
+    }
+    else {
+      if(compute_lc(tmplf, &buf, &(meflist[mef]),
+                    dtptr, itptr, jtptr, ttptr,
+                    outcls, wantoutcls, errstr))
+	fatal(1, "update_lc: %s", errstr);
     }
 
 #ifdef PLOTS
@@ -593,6 +612,7 @@ int main (int argc, char *argv[]) {
     if(do_plots(meflist, nmefs, medsat, medlim,
 		sysulim < 0.0 ? medsat : sysulim,
 		sysllim < 0.0 ? (sysulim < 0.0 ? medsat : sysulim)+USEMAG : sysllim,
+                outcls, wantoutcls,
 		errstr))
       fatal(1, "do_plots: %s");
   }
@@ -622,6 +642,10 @@ int main (int argc, char *argv[]) {
 
 static int update_lc (fitsfile *reff, fitsfile *fits,
 		      struct buffer_info *buf, struct lc_mef *mefinfo,
+                      struct dtai_table *dtab,
+                      struct iers_table *itab,
+                      struct jpleph_table *jtab,
+                      struct jpleph_table *ttab,
 		      int outcls, int wantoutcls, 
 		      char *errstr) {
   int status = 0, icol, ntmpl, ncoluse, anynull;
@@ -659,15 +683,13 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   long pt, star, soff, istar;
 
-  int ap, ap1, ap2, napcol;
+  int ap;
 
   long nmeasexist, nupdate, nmeasout;
 
   struct lc_point *lcbuf = (struct lc_point *) NULL;
 
-#ifdef HJD
-  double *epos = (double *) NULL;
-#endif
+  struct lc_output op;
 
   float *medfluxbuf = (float *) NULL, *rmsbuf;
   float *fluxbuf = (float *) NULL, *fluxerrbuf, *wtbuf;
@@ -682,7 +704,6 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   char card[FLEN_CARD], key[FLEN_KEYWORD];
 
   long satflag;
-  unsigned char flags;
 
   int ncolsfile, tcol;
   long previnstart, prevoutstart, previnpos, prevoutpos;
@@ -702,6 +723,12 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   long starin, starout, nstarin, nstarout = 0, pointer;
   int allast;
+
+  /* Init output */
+  memset(&op, 0, sizeof(op));
+
+  if(output_init(&op, mefinfo, dtab, itab, jtab, ttab, errstr))
+    goto error;
 
   /* Get existing number of measurements and number of updates */
   ffgkyj(reff, "NMEAS", &nmeasexist, (char *) NULL, &status);
@@ -728,34 +755,15 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     goto error;
   }
 
-  /* Figure out apertures */
-  if(mefinfo->aperture) {
-    ap1 = mefinfo->aperture-1;
-    ap2 = ap1;
-    napcol = 1;
-  }
-  else {
-    if(mefinfo->apselmode & APSEL_ALL) {
-      ap1 = 0;
-      ap2 = NFLUX;
-      napcol = ap2-ap1 + 1;
-    }
-    else {
-      ap1 = 0;
-      ap2 = 0;
-      napcol = 1;
-    }
-  }
-
   /* Decide how many columns */
   ntmpl = sizeof(colnames) / sizeof(colnames[0]);
 
   ncoluse = 0;
   for(tcol = 0; tcol < ntmpl; tcol++) {
-    ncoluse++;
-
     if(tpap[tcol])
-      ncoluse += ap2-ap1;
+      ncoluse += op.nlapcol;
+    else
+      ncoluse++;
   }
 
   /* Allocate arrays */
@@ -778,8 +786,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
     icol++;
 
-    if(tpap[tcol])
-      for(ap = ap1; ap < ap2; ap++) {
+    if(!mefinfo->aperture && mefinfo->apselmode & APSEL_ALL && tpap[tcol])
+      for(ap = op.ap1; ap < op.ap2; ap++) {
 	snprintf(cn, sizeof(cn), "%s%d", colnames[tcol], ap+1);
 	ffgcno(reff, CASEINSEN, cn, gcols+icol, &status);
 	if(status == COL_NOT_UNIQUE)
@@ -830,15 +838,6 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       }
     }
   }
-
-#ifdef HJD
-  /* Allocate buffer for earth positions */
-  epos = (double *) malloc(3 * mefinfo->nf * sizeof(double));
-  if(!epos) {
-    report_syserr(errstr, "malloc");
-    goto error;
-  }
-#endif
 
   /* Update number of measurements and number of updates */
   nmeasout = nmeasexist+mefinfo->nf;
@@ -1149,11 +1148,6 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	goto error;
       }
     }
-
-#ifdef HJD
-    /* Calculate Earth's heliocentric position at this MJD */
-    getearth(mefinfo->mjdref + mefinfo->frames[pt].mjd, epos + 3*pt);
-#endif
   }
 
   if(allast >= 0) {
@@ -1168,20 +1162,22 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   icol = 0;
   for(tcol = 0; tcol < ntmpl; tcol++) {
     if(tvec[tcol]) {
-      ffmvec(fits, gcols[icol], nmeasout, &status);
-      icol++;
-
-      if(tpap[tcol])
-	for(ap = ap1; ap < ap2; ap++) {	
+      if(tpap[tcol]) {
+	for(ap = 0; ap < op.nlapcol; ap++) {	
 	  ffmvec(fits, gcols[icol], nmeasout, &status);
 	  icol++;
 	}
+      }
+      else {
+        ffmvec(fits, gcols[icol], nmeasout, &status);
+        icol++;
+      }
     }
     else {
-      icol++;
-      
       if(tpap[tcol])
-	icol += ap2-ap1;
+	icol += op.nlapcol;
+      else
+        icol++;
     }
   }
 
@@ -1298,8 +1294,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   }
 
   /* Allocate output buffers */
-  medfluxbuf = (float *) malloc(2 * napcol * sizeof(float));
-  fluxbuf = (float *) malloc(3 * nmeasout * napcol * sizeof(float));
+  medfluxbuf = (float *) malloc(2 * op.nlapcol * sizeof(float));
+  fluxbuf = (float *) malloc(3 * nmeasout * op.nlapcol * sizeof(float));
   airbuf = (float *) malloc(5 * nmeasout * sizeof(float));
 #ifdef HJD
   bjdbuf = (double *) malloc(4 * nmeasout * sizeof(double));
@@ -1313,10 +1309,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     goto error;
   }
 
-  rmsbuf = medfluxbuf + napcol;
+  rmsbuf = medfluxbuf + op.nlapcol;
 
-  fluxerrbuf = fluxbuf + napcol * nmeasout;
-  wtbuf = fluxbuf + 2 * napcol * nmeasout;
+  fluxerrbuf = fluxbuf + op.nlapcol * nmeasout;
+  wtbuf = fluxbuf + 2 * op.nlapcol * nmeasout;
 
   habuf = airbuf + nmeasout;
   locskybuf = airbuf + 2 * nmeasout;
@@ -1359,10 +1355,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffgcvd(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, hjdbuf, &anynull, &status);
 #endif
 
-    for(ap = 0; ap < napcol; ap++)
+    for(ap = 0; ap < op.nlapcol; ap++)
       ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, fluxbuf+ap*nmeasout, &anynull, &status);
 
-    for(ap = 0; ap < napcol; ap++)
+    for(ap = 0; ap < op.nlapcol; ap++)
       ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, fluxerrbuf+ap*nmeasout, &anynull, &status);
 
     ffgcvd(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, xlcbuf, &anynull, &status);
@@ -1370,7 +1366,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, airbuf, &anynull, &status);
     ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, habuf, &anynull, &status);
 
-    for(ap = 0; ap < napcol; ap++)
+    for(ap = 0; ap < op.nlapcol; ap++)
       ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, wtbuf+ap*nmeasout, &anynull, &status);
 
     ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, locskybuf, &anynull, &status);
@@ -1386,78 +1382,26 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       goto error;
 
     /* Fill in buffer */
+    chisq = 0.0;
+    nchisq = 0;
     satflag = 0;
-    for(pt = 0; pt < mefinfo->nf; pt++) {
-      flags = 0;
 
-      if(lcbuf[pt].aper[mefinfo->stars[star].iap].flux != 0.0) {
-	fluxbuf[nmeasexist+pt] = mefinfo->zp - lcbuf[pt].aper[mefinfo->stars[star].iap].flux;
-
-	if(abs(lcbuf[pt].aper[mefinfo->stars[star].iap].flux > 20)) {
-	  printf("Warning: daft-looking flux for star %ld point %ld: %.2g\n",
-		 star+1, pt+1, lcbuf[pt].aper[mefinfo->stars[star].iap].flux);
-	}
-
-	/* Unset the all saturated flag if not saturated */
-	if(lcbuf[pt].conf)
-	  flags |= FLAG_CONF;
-	if(lcbuf[pt].satur) {
-	  flags |= FLAG_SATUR;
-	  satflag++;
-	}
-
-	if(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvarcom > 0.0)
-	  fluxerrbuf[nmeasexist+pt] = sqrtf(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvarcom);
-	else
-	  fluxerrbuf[nmeasexist+pt] = -999.0;
-      }
-      else {
-	fluxbuf[nmeasexist+pt] = -999.0;
-	fluxerrbuf[nmeasexist+pt] = -999.0;
-	flags |= FLAG_NODP;
-      }
-
-      xlcbuf[nmeasexist+pt] = lcbuf[pt].x;
-      ylcbuf[nmeasexist+pt] = lcbuf[pt].y;
-      airbuf[nmeasexist+pt] = lcbuf[pt].airmass;
-      habuf[nmeasexist+pt] = lcbuf[pt].ha;
-      wtbuf[nmeasexist+pt] = lcbuf[pt].aper[mefinfo->stars[star].iap].wt;
-      locskybuf[nmeasexist+pt] = lcbuf[pt].sky;
-      peakbuf[nmeasexist+pt] = lcbuf[pt].peak;
-
-      flagbuf[nmeasexist+pt] = flags;
-
+    output_prepare(&op,
+                   mefinfo,
+                   lcbuf,
+                   jtab,
+                   star, nmeasexist, nmeasout,
+                   bjdbuf,
 #ifdef HJD
-      /* Calculate HJD (as UTC) */
-      hjdbuf[nmeasexist+pt] = mefinfo->mjdref + mefinfo->frames[pt].mjd +
-	                      hjdcorr(epos + 3*pt,
-				      mefinfo->stars[star].ra,
-				      mefinfo->stars[star].dec);
+                   hjdbuf,
 #endif
-      bjdbuf[nmeasexist+pt] = lcbuf[pt].bjd;
-    }
-
-    /* Do other apertures */
-    for(ap = ap1; ap < ap2; ap++) {
-      soff = (ap-ap1+1)*nmeasout + nmeasexist;
-      
-      /* Fill in buffer */
-      for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(lcbuf[pt].aper[ap].flux != 0.0) {
-	  fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].aper[ap].flux;
-	  if(lcbuf[pt].aper[ap].fluxvarcom > 0.0)
-	    fluxerrbuf[soff+pt] = sqrtf(lcbuf[pt].aper[ap].fluxvarcom);
-	  else
-	    fluxerrbuf[soff+pt] = -999.0;
-	}
-        else {
-          fluxbuf[soff+pt] = -999.0;
-          fluxerrbuf[soff+pt] = -999.0;
-        }
-
-	wtbuf[soff+pt] = lcbuf[pt].aper[ap].wt;
-      }
-    }
+                   fluxbuf, fluxerrbuf,
+                   xlcbuf, ylcbuf,
+                   airbuf, habuf,
+                   wtbuf,
+                   locskybuf, peakbuf,
+                   flagbuf,
+                   &satflag, &chisq, &nchisq);
 
     /* Raw-copy over the bits that didn't change */
     for(sect = 0; sect < ncopysect; sect++) {
@@ -1478,7 +1422,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     }
 
     /* Recalculate median flux */
-    for(ap = 0; ap < napcol; ap++) {
+    for(ap = 0; ap < op.nlapcol; ap++) {
       soff = ap*nmeasout;
 
       nmed = 0;
@@ -1519,11 +1463,16 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	rmsbuf[ap] = -999.0;
 
 	if(ap == 0) {
-	  chisq = -999.0;
+	  chisq = 0.0;
 	  nchisq = 0;
 	}
       }
     }
+
+    mefinfo->stars[star].med = medfluxbuf[0] == -999.0 ? 0 : mefinfo->zp - medfluxbuf[0];
+    mefinfo->stars[star].rms = rmsbuf[0] == -999.0 ? 0 : rmsbuf[0];
+    mefinfo->stars[star].chisq = chisq;  /* for plotting */
+    mefinfo->stars[star].nchisq = nchisq;
 
     /* Write in modified data */
     icol = 0;
@@ -1534,10 +1483,10 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffpcnd(fits, gcols[icol++], starout+1, 1, nmeasout, hjdbuf, -999.0, &status);
 #endif
 
-    for(ap = 0; ap < napcol; ap++)
+    for(ap = 0; ap < op.nlapcol; ap++)
       ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, fluxbuf+ap*nmeasout, -999.0, &status);
 
-    for(ap = 0; ap < napcol; ap++)
+    for(ap = 0; ap < op.nlapcol; ap++)
       ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, fluxerrbuf+ap*nmeasout, -999.0, &status);
 
     ffpcnd(fits, gcols[icol++], starout+1, 1, nmeasout, xlcbuf, -999.0, &status);
@@ -1545,17 +1494,17 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, airbuf, -999.0, &status);
     ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, habuf, -999.0, &status);
 
-    for(ap = 0; ap < napcol; ap++)
+    for(ap = 0; ap < op.nlapcol; ap++)
       ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, wtbuf+ap*nmeasout, -999.0, &status);
 
     ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, locskybuf, -999.0, &status);
     ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, peakbuf, -999.0, &status);
     ffpclb(fits, gcols[icol++], starout+1, 1, nmeasout, flagbuf, &status);
 
-    for(ap = 0; ap < napcol; ap++)
+    for(ap = 0; ap < op.nlapcol; ap++)
       ffpcne(fits, gcols[icol++], starout+1, 1, 1, medfluxbuf+ap, -999.0, &status);
 
-    for(ap = 0; ap < napcol; ap++)
+    for(ap = 0; ap < op.nlapcol; ap++)
       ffpcne(fits, gcols[icol++], starout+1, 1, 1, rmsbuf+ap, -999.0, &status);
 
     ffpcne(fits, gcols[icol++], starout+1, 1, 1, &chisq, -999.0, &status);
@@ -1568,14 +1517,12 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     starout++;
   }
 
+  output_free(&op);
+
   free((void *) gcols);
   gcols = (int *) NULL;
   free((void *) lcbuf);
   lcbuf = (struct lc_point *) NULL;
-#ifdef HJD
-  free((void *) epos);
-  epos = (double *) NULL;
-#endif
   free((void *) copysect);
   copysect = (struct table_section *) NULL;
   free((void *) medfluxbuf);
@@ -1594,14 +1541,12 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   return(0);
 
  error:
+  output_free(&op);
+
   if(gcols)
     free((void *) gcols);
   if(lcbuf)
     free((void *) lcbuf);
-#ifdef HJD
-  if(epos)
-    free((void *) epos);
-#endif
   if(copysect)
     free((void *) copysect);
   if(medfluxbuf)
@@ -1620,3 +1565,230 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   return(1);
 }
 
+static int compute_lc (fitsfile *reff,
+                       struct buffer_info *buf, struct lc_mef *mefinfo,
+                       struct dtai_table *dtab,
+                       struct iers_table *itab,
+                       struct jpleph_table *jtab,
+                       struct jpleph_table *ttab,
+                       int outcls, int wantoutcls,
+                       char *errstr) {
+  int status = 0, icol, ntmpl, anynull;
+
+  char *colnames[3] = { "pointer", "flux", "fluxerr" };
+  int gcols[3];
+
+  long pt, star, istar, opt, iap;
+
+  long nmeasexist, nmeasout;
+  
+  struct lc_output op;
+
+  double s[3], pr;
+
+  double airmass;
+  float scvar;
+
+  float *fluxbuf = (float *) NULL, *fluxerrbuf;
+  struct lc_point *lcbuf = (struct lc_point *) NULL;
+  float *medbuf = (float *) NULL;
+
+  long starin, nstarin, pointer;
+  int ncolsfile;
+
+  float mag, var, tmp, chisq;
+  float medflux, rmsflux;
+  long nchisq;
+
+  /* Init output */
+  memset(&op, 0, sizeof(op));
+
+  if(output_init(&op, mefinfo, dtab, itab, jtab, ttab, errstr))
+    goto error;
+
+  /* Get existing number of measurements */
+  ffgkyj(reff, "NMEAS", &nmeasexist, (char *) NULL, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgkyj: NMEAS");
+    goto error;
+  }
+
+  /* Get number of rows and columns */
+  ffgnrw(reff, &nstarin, &status);
+  ffgncl(reff, &ncolsfile, &status);
+  if(status) {
+    fitsio_err(errstr, status, "ffgncl");
+    goto error;
+  }
+
+  /* Get column numbers */
+  ntmpl = sizeof(colnames) / sizeof(colnames[0]);
+
+  for(icol = 0; icol < ntmpl; icol++) {
+    ffgcno(reff, CASEINSEN, colnames[icol], gcols+icol, &status);
+    if(status == COL_NOT_UNIQUE)
+      status = 0;  /* ignore */
+    else if(status) {
+      fitsio_err(errstr, status, "ffgcno: %s", colnames[icol]);
+      goto error;
+    }
+  }
+
+  /* Total number of measurements */
+  nmeasout = nmeasexist+mefinfo->nf;
+
+  /* Allocate buffers */
+  fluxbuf = (float *) malloc(2 * nmeasexist * sizeof(float));
+  lcbuf = (struct lc_point *) malloc(mefinfo->nf * sizeof(struct lc_point));
+  medbuf = (float *) malloc(nmeasout * sizeof(float));
+  if(!fluxbuf || !lcbuf || !medbuf) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+
+  fluxerrbuf = fluxbuf + nmeasexist;
+
+  /* Loop through all stars */
+  for(starin = 0; starin < nstarin; starin++) {
+    /* Read pointer to figure out original star number */
+    ffgcvj(reff, gcols[0], starin + 1, 1, 1, 0, &pointer, &anynull, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgcv");
+      goto error;
+    }
+
+    star = -1;
+    for(istar = 0; istar < mefinfo->nstars; istar++)
+      if(mefinfo->stars[istar].ptr == pointer) {
+	star = istar;
+	break;
+      }
+
+    /* Skip the ones without the correct class if we're doing that */
+    if(wantoutcls && mefinfo->stars[star].cls != outcls)
+      continue;  /* I'm too lazy to reindent the rest of the loop */
+
+    /* Read existing */
+    icol = 1;
+
+    ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, fluxbuf, &anynull, &status);
+    ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, fluxerrbuf, &anynull, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffgcv");
+      goto error;
+    }
+
+    /* Read new */
+    if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, errstr))
+      goto error;
+
+    iap = mefinfo->stars[star].iap;
+
+    /* Calculate median flux */
+    opt = 0;
+
+    for(pt = 0; pt < nmeasexist; pt++) {
+      mag = fluxbuf[pt];
+      
+      if(mag != -999.0 &&
+         fluxerrbuf[pt] > 0.0) {
+        medbuf[opt] = mefinfo->zp - mag;
+        opt++;
+      }
+    }
+
+    for(pt = 0; pt < mefinfo->nf; pt++) {
+      mag = lcbuf[pt].aper[iap].flux;
+      var = lcbuf[pt].aper[iap].fluxvar;
+      
+      if(mag != 0.0 &&
+         var > 0.0) {
+        medbuf[opt] = mag;
+        opt++;
+      }
+    }
+    
+    if(opt > 0) {
+      fmedsig(medbuf, opt, &medflux, &rmsflux);
+
+      /* Compute final chisq in chosen aperture */
+      chisq = 0.0;
+      nchisq = 0;
+      
+      for(pt = 0; pt < nmeasexist; pt++) {
+        mag = fluxbuf[pt];
+        
+        if(mag != 0.0 &&
+           fluxerrbuf[pt] > 0.0) {
+          tmp = mefinfo->zp - mag - medflux;
+          
+          chisq += tmp*tmp / (fluxerrbuf[pt]*fluxerrbuf[pt]);
+          nchisq++;
+        }
+      }
+
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+        mag = lcbuf[pt].aper[iap].flux;
+        var = lcbuf[pt].aper[iap].fluxvarcom;
+        
+        if(mag != 0.0 &&
+           var > 0.0) {
+          tmp = mag - medflux;
+          
+          /* Compute airmass */
+          if(mefinfo->frames[pt].doairm && jtab) {
+            /* Observed place - parallax left out, we don't have it anyway */
+            source_place(op.obs+pt,
+                         &(mefinfo->stars[star].src),
+                         jtab, TR_TO_OBS_AZ, s, NULL, &pr);
+
+            /* Airmass */
+            airmass = v_airmass(s);
+          
+            /* Scintillation variance */
+            scvar = mefinfo->frames[pt].scvarconst * airmass*airmass*airmass;
+          }
+          else
+            scvar = 0;
+
+          chisq += tmp*tmp / (var+scvar);
+          nchisq++;
+        }
+      }
+    }
+    else {
+      medflux = 0.0;
+      rmsflux = 0.0;
+      chisq = 0.0;
+      nchisq = 0;
+    }
+
+    mefinfo->stars[star].med = medflux;
+    mefinfo->stars[star].rms = rmsflux;
+    mefinfo->stars[star].chisq = chisq;
+    mefinfo->stars[star].nchisq = nchisq;
+  }
+
+  output_free(&op);
+
+  free((void *) fluxbuf);
+  fluxbuf = (float *) NULL;
+  free((void *) lcbuf);
+  lcbuf = (struct lc_point *) NULL;
+  free((void *) medbuf);
+  medbuf = (float *) NULL;
+
+  return(0);
+
+ error:
+  output_free(&op);
+
+  if(fluxbuf)
+    free((void *) fluxbuf);
+  if(lcbuf)
+    free((void *) lcbuf);
+  if(medbuf)
+    free((void *) medbuf);
+
+  return(1);
+}

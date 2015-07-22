@@ -44,7 +44,6 @@ struct instvers {
 };
 
 struct lc_point {
-  double bjd;
   double x;
   double y;
 
@@ -55,8 +54,6 @@ struct lc_point {
     float wt;  /* weight given in computing polynomial corr. */
   } aper[NFLUX];
 
-  float airmass;
-  float ha;
   float sky;   /* local sky */
   float peak;  /* peak counts including sky */
   unsigned char satur : 1;
@@ -99,8 +96,6 @@ struct lc_star {
   /* Global median and scatter */
   float medflux[NFLUX];
   float sigflux[NFLUX];
-  float chiap[NFLUX];
-  long nchiap[NFLUX];
 
   /* Usable as comparison star? */
   int compok;
@@ -112,7 +107,7 @@ struct lc_star {
   int iap;
   float apradius;
 
-  /* Median flux, RMS and chisq for chosen aperture (iap) */
+  /* Median flux and RMS for chosen aperture (iap) */
   float med;
   float rms;
   float chisq;
@@ -137,6 +132,18 @@ struct lc_frame {
   /* Frame MJD and exposure time */
   double mjd;
   float exptime;
+
+  /* Observer location and refraction constants for computing
+     airmass, ha, bjd, hjd at output stage. */
+  double latitude;
+  double longitude;
+  double height;
+  double refco[NREFCO];
+
+  unsigned char doairm;
+
+  /* Scintillation variance constant */
+  float scvarconst;
 
   /* Magnitude zeropoint difference from reference (for absolute cal.) */
   float zpdiff;
@@ -237,7 +244,6 @@ struct lc_mef {
   float zp;
   float satmag;
   float reffang;
-  int havefang;
   float refexp;
   float refextinct;
   float refairmass;
@@ -300,6 +306,20 @@ struct lc_mef {
   /* Segment info */
   struct lc_segment *segs;
   long nseg;
+};
+
+struct lc_output {
+  struct observer *obs;
+#ifdef HJD
+  double *epos;
+#endif
+
+  /* Apertures we processed */
+  int ap1;
+  int ap2;
+
+  int napcol;  /* number of columns for medflux etc. */
+  int nlapcol;  /* number of columns for flux etc. */
 };
 
 /* Structure holding disk buffer information */
@@ -365,10 +385,37 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 			int noastrom, char *errstr);
 
+/* Common output processing: output.c */
+int output_init (struct lc_output *op,
+                 struct lc_mef *mefinfo,
+                 struct dtai_table *dtab,
+                 struct iers_table *itab,
+                 struct jpleph_table *jtab,
+                 struct jpleph_table *ttab,
+                 char *errstr);
+void output_free (struct lc_output *op);
+void output_prepare (struct lc_output *op,
+                     struct lc_mef *mefinfo,
+                     struct lc_point *lcbuf,
+                     struct jpleph_table *jtab,
+                     long star, long soff, long stride,
+                     double *bjdbuf,
+#ifdef HJD
+                     double *hjdbuf,
+#endif
+                     float *fluxbuf, float *fluxerrbuf,
+                     double *xlcbuf, double *ylcbuf,
+                     float *airbuf, float *habuf,
+                     float *wtbuf,
+                     float *locskybuf, float *peakbuf,
+                     unsigned char *flagbuf,
+                     long *satflag, float *chisq, long *nchisq);
+
 #ifdef PLOTS
 /* Diagnostic plots: plots.c */
 int do_plots (struct lc_mef *meflist, int nmefs,
-	      float medsat, float medlim, float umlim, float lmlim, char *errstr);
+	      float medsat, float medlim, float umlim, float lmlim,
+              int outcls, int wantoutcls, char *errstr);
 #endif
 
 int plot_corr (float *beforehist, float *beforewthist,
@@ -402,10 +449,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	      char *errstr);
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
-	      struct dtai_table *dtab,
-	      struct iers_table *itab,
-	      struct jpleph_table *jtab,
-	      struct jpleph_table *ttab,
 	      int dointra, struct intra *icorr,
 	      int doinstvers, struct instvers *instverslist, int ninstvers,
 	      int diffmode, float satlev,

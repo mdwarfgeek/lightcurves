@@ -24,8 +24,19 @@
 
 static int write_lc (fitsfile *reff, fitsfile *fits,
 		     struct buffer_info *buf, struct lc_mef *mefinfo,
+                     struct dtai_table *dtab,
+                     struct iers_table *itab,
+                     struct jpleph_table *jtab,
+                     struct jpleph_table *ttab,
 		     int outcls, int wantoutcls,
 		     char *errstr);
+static int compute_lc (fitsfile *reff,
+                       struct buffer_info *buf, struct lc_mef *mefinfo,
+                       struct dtai_table *dtab,
+                       struct iers_table *itab,
+                       struct jpleph_table *jtab,
+                       struct jpleph_table *ttab,
+                       char *errstr);
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 			   char **fnlist, char *errstr);
 
@@ -447,7 +458,6 @@ int main (int argc, char *argv[]) {
                maxflen, fnlist[f], fspc, f+1, fspc, nf);
 
       if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
-		  dtptr, itptr, jtptr, ttptr,
 		  dointra, &(intralist[mef]),
 		  doinstvers, instverslist, ninstvers,
 		  diffmode, satlev, errstr))
@@ -536,8 +546,16 @@ int main (int argc, char *argv[]) {
       if(verbose)
 	printf(" Writing %s\n", outfile);
 
-      if(write_lc(inf, outf, &buf, &(meflist[mef]), outcls, wantoutcls, errstr))
+      if(write_lc(inf, outf, &buf, &(meflist[mef]),
+		  dtptr, itptr, jtptr, ttptr,
+                  outcls, wantoutcls, errstr))
 	fatal(1, "write_lc: %s", errstr);
+    }
+    else {
+      if(compute_lc(inf, &buf, &(meflist[mef]),
+                    dtptr, itptr, jtptr, ttptr,
+                    errstr))
+	fatal(1, "compute_lc: %s", errstr);
     }
 
     /* Flush */
@@ -592,6 +610,7 @@ int main (int argc, char *argv[]) {
     if(do_plots(meflist, nmefs, medsat, medlim,
 		sysulim < 0.0 ? medsat : sysulim,
 		sysllim < 0.0 ? (sysulim < 0.0 ? medsat : sysulim)+USEMAG : sysllim,
+                0, 0,
 		errstr))
       fatal(1, "do_plots: %s");
   }
@@ -626,6 +645,10 @@ int main (int argc, char *argv[]) {
 
 static int write_lc (fitsfile *reff, fitsfile *fits,
 		     struct buffer_info *buf, struct lc_mef *mefinfo,
+                     struct dtai_table *dtab,
+                     struct iers_table *itab,
+                     struct jpleph_table *jtab,
+                     struct jpleph_table *ttab,
 		     int outcls, int wantoutcls,
 		     char *errstr) {
   int status = 0, col, icol, ocol, ntmpl, ncols;
@@ -697,9 +720,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   struct lc_point *lcbuf = (struct lc_point *) NULL;
 
-#ifdef HJD
-  double *epos = (double *) NULL;
-#endif
+  struct lc_output op;
 
   double *xbuf = (double *) NULL, *ybuf, *rabuf, *decbuf;
   float *medbuf = (float *) NULL, *rmsbuf;
@@ -718,41 +739,23 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   int ikey, nkeys, kclass;
   char card[FLEN_CARD];
-  long r, frow, rblksz, soff;
+  long r, frow, rblksz;
 
   long satflag;
-  unsigned char flags;
 
-  int ap, ap1, ap2, lap1, lap2, napcol, nlapcol;
+  int ap;
   int allast;
 
   int iseg;
 
-  /* Figure out apertures */
-  if(mefinfo->aperture) {
-    ap1 = mefinfo->aperture-1;
-    ap2 = ap1;
-    napcol = 1;
-    lap1 = ap1;
-    lap2 = ap2;
-    nlapcol = 1;
-  }
-  else {
-    ap1 = 0;
-    ap2 = NFLUX;
-    napcol = ap2-ap1 + 1;
+  float chisq;
+  long nchisq;
 
-    if(mefinfo->apselmode & APSEL_ALL) {
-      lap1 = ap1;
-      lap2 = ap2;
-      nlapcol = napcol;
-    }
-    else {
-      lap1 = 0;
-      lap2 = 0;
-      nlapcol = 1;
-    }
-  }
+  /* Init output */
+  memset(&op, 0, sizeof(op));
+
+  if(output_init(&op, mefinfo, dtab, itab, jtab, ttab, errstr))
+    goto error;
 
   /* Generate tform specifier for fluxes and errors */
   snprintf(tsbuf, sizeof(tsbuf), "%ldE", mefinfo->nseg);
@@ -765,10 +768,11 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   ncols = 0;
   for(icol = 0; icol < ntmpl; icol++) {
-    ncols++;
-
+    /* Add in other (non-chosen) apertures if needed */
     if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
-      ncols += ap2-ap1;
+      ncols += op.napcol;
+    else
+      ncols++;
   }
    
   /* Allocate workspace */
@@ -786,13 +790,13 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   ocol = 0;
 
   for(icol = 0; icol < ntmpl; icol++) {
-    ocol++;
-
     if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
-      for(ap = ap1; ap < ap2; ap++) {
+      for(ap = 0; ap < op.napcol; ap++) {
 	ttype[ocol] = NULL;
 	ocol++;
       }
+    else
+      ocol++;
   }
 
   /* Build real column descriptors */
@@ -806,8 +810,10 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     
     ocol++;
 
-    if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
-      for(ap = ap1; ap < ap2; ap++) {
+    if(!mefinfo->aperture &&
+       (tpap[icol] == 1 || (tpap[icol] == 2 &&
+                            mefinfo->apselmode & APSEL_ALL)))
+      for(ap = op.ap1; ap < op.ap2; ap++) {
 	snprintf(vbuf, sizeof(vbuf), "%s%d", tmpl_ttype[icol], ap+1);
 	ttype[ocol] = strdup(vbuf);
 	if(!ttype[ocol]) {
@@ -863,8 +869,10 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   for(icol = 0; icol < ntmpl; icol++) {
     ocol++;
 
-    if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
-      for(ap = ap1; ap < ap2; ap++) {
+    if(!mefinfo->aperture &&
+       (tpap[icol] == 1 || (tpap[icol] == 2 &&
+                            mefinfo->apselmode & APSEL_ALL)))
+      for(ap = op.ap1; ap < op.ap2; ap++) {
 	free((void *) ttype[ocol]);
 	ocol++;
       }
@@ -872,15 +880,6 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   free((void *) ttype);
   ttype = (char **) NULL;
-
-#ifdef HJD
-  /* Allocate buffer for earth positions */
-  epos = (double *) malloc(3 * mefinfo->nf * sizeof(double));
-  if(!epos) {
-    report_syserr(errstr, "malloc");
-    goto error;
-  }
-#endif
 
   /* Write out frame information */
   ffpkyj(fits, "NMEAS", mefinfo->nf,
@@ -1235,11 +1234,6 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	goto error;
       }
     }
-
-#ifdef HJD
-    /* Calculate Earth's heliocentric position at this MJD */
-    getearth(mefinfo->mjdref + mefinfo->frames[pt].mjd, epos + 3*pt);
-#endif
   }
 
   /* Write out astrometry flag for web page */
@@ -1301,18 +1295,18 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 
   /* Allocate output buffers */
   xbuf = (double *) malloc(4 * rblksz * sizeof(double));
-  medbuf = (float *) malloc(2 * rblksz * napcol * sizeof(float));
+  medbuf = (float *) malloc(2 * rblksz * op.napcol * sizeof(float));
   apbuf = (float *) malloc(5 * rblksz * sizeof(float));
   ptrbuf = (long *) malloc(4 * rblksz * sizeof(long));
   clsbuf = (short *) malloc(3 * rblksz * sizeof(short));
-  offbuf = (float *) malloc(mefinfo->nseg * napcol * rblksz * sizeof(float));
+  offbuf = (float *) malloc(mefinfo->nseg * op.napcol * rblksz * sizeof(float));
   compokbuf = (unsigned char *) malloc(rblksz * sizeof(unsigned char));
 #ifdef HJD
   bjdbuf = (double *) malloc(4 * rblksz * mefinfo->nf * sizeof(double));
 #else
   bjdbuf = (double *) malloc(3 * rblksz * mefinfo->nf * sizeof(double));
 #endif
-  fluxbuf = (float *) malloc(3 * rblksz * mefinfo->nf * nlapcol * sizeof(float));
+  fluxbuf = (float *) malloc(3 * rblksz * mefinfo->nf * op.nlapcol * sizeof(float));
   airbuf = (float *) malloc(4 * rblksz * mefinfo->nf * sizeof(float));
   flagbuf = (unsigned char *) malloc(rblksz * mefinfo->nf * sizeof(unsigned char));
   if(!xbuf || !medbuf || !apbuf || !ptrbuf || !clsbuf || !offbuf || !compokbuf || !bjdbuf || !fluxbuf || !airbuf || !flagbuf) {
@@ -1320,7 +1314,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     goto error;
   }
 
-  rmsbuf = medbuf + napcol * rblksz;
+  rmsbuf = medbuf + op.napcol * rblksz;
 
   chibuf = apbuf + rblksz;
   refmagbuf = apbuf + 2 * rblksz;
@@ -1338,8 +1332,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   sfbuf = ptrbuf + 2 * rblksz;
   nchibuf = ptrbuf + 3 * rblksz;
 
-  fluxerrbuf = fluxbuf + nlapcol * rblksz * mefinfo->nf;
-  wtbuf = fluxbuf + 2 * nlapcol * rblksz * mefinfo->nf;  
+  fluxerrbuf = fluxbuf + op.nlapcol * rblksz * mefinfo->nf;
+  wtbuf = fluxbuf + 2 * op.nlapcol * rblksz * mefinfo->nf;  
 
   habuf = airbuf + rblksz * mefinfo->nf;
   locskybuf = airbuf + 2 * rblksz * mefinfo->nf;
@@ -1357,8 +1351,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   r = 0;  /* number of rows buffered */
   frow = 1;
 
-#define FORAP for(ap = 0; ap < napcol; ap++)
-#define FORLAP for(ap = 0; ap < nlapcol; ap++)
+#define FORAP for(ap = 0; ap < op.napcol; ap++)
+#define FORLAP for(ap = 0; ap < op.nlapcol; ap++)
 #define WRITE_COL(func, buf, len)			\
   func(fits, ++ocol, frow, 1, r*(len), buf, &status)
 #define WRITE_COL_NULL(func, buf, len, nullval)		\
@@ -1428,21 +1422,20 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     for(iseg = 0; iseg < mefinfo->nseg; iseg++)
       offbuf[r*mefinfo->nseg + iseg]
 	= mefinfo->stars[star].segs[iseg].corr[mefinfo->stars[star].iap];
-    
 
-    for(ap = ap1; ap < ap2; ap++) {
-      medbuf[(ap-ap1+1)*rblksz+r] = (mefinfo->stars[star].medflux[ap] > 0.0 ?
-				     mefinfo->zp - mefinfo->stars[star].medflux[ap] :
-				     -999.0);
-      rmsbuf[(ap-ap1+1)*rblksz+r] = mefinfo->stars[star].sigflux[ap];
-
-      for(iseg = 0; iseg < mefinfo->nseg; iseg++)
-	offbuf[((ap-ap1+1)*rblksz + r) * mefinfo->nseg + iseg]
-	  = mefinfo->stars[star].segs[iseg].corr[ap];
+    if(!mefinfo->aperture) {
+      for(ap = op.ap1; ap < op.ap2; ap++) {
+        medbuf[(ap-op.ap1+1)*rblksz+r]
+          = (mefinfo->stars[star].medflux[ap] > 0.0 ?
+             mefinfo->zp - mefinfo->stars[star].medflux[ap] :
+             -999.0);
+        rmsbuf[(ap-op.ap1+1)*rblksz+r] = mefinfo->stars[star].sigflux[ap];
+        
+        for(iseg = 0; iseg < mefinfo->nseg; iseg++)
+          offbuf[((ap-op.ap1+1)*rblksz + r) * mefinfo->nseg + iseg]
+            = mefinfo->stars[star].segs[iseg].corr[ap];
+      }
     }
-
-    chibuf[r] = mefinfo->stars[star].chisq;
-    nchibuf[r] = mefinfo->stars[star].nchisq;
 
     clsbuf[r] = mefinfo->stars[star].cls;
     bfbuf[r] = mefinfo->stars[star].bflag;
@@ -1472,82 +1465,33 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       goto error;
 
     /* Fill in buffer */
-    soff = r * mefinfo->nf;
-
+    chisq = 0.0;
+    nchisq = 0;
     satflag = 0;
-    for(pt = 0; pt < mefinfo->nf; pt++) {
-      flags = 0;
 
-      if(lcbuf[pt].aper[mefinfo->stars[star].iap].flux != 0.0) {
-	fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].aper[mefinfo->stars[star].iap].flux;
-
-	if(abs(lcbuf[pt].aper[mefinfo->stars[star].iap].flux > 20)) {
-	  printf("Warning: daft-looking flux for star %ld point %ld: %.2g\n",
-		 star+1, pt+1, lcbuf[pt].aper[mefinfo->stars[star].iap].flux);
-	}
-
-	/* Unset the all saturated flag if not saturated */
-	if(lcbuf[pt].conf)
-	  flags |= FLAG_CONF;
-	if(lcbuf[pt].satur) {
-	  flags |= FLAG_SATUR;
-	  satflag++;
-	}
-
-	if(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvarcom > 0.0)
-	  fluxerrbuf[soff+pt] = sqrtf(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvarcom);
-	else
-	  fluxerrbuf[soff+pt] = -999.0;
-      }
-      else {
-	fluxbuf[soff+pt] = -999.0;
-	fluxerrbuf[soff+pt] = -999.0;
-	flags |= FLAG_NODP;
-      }
-
-      xlcbuf[soff+pt] = lcbuf[pt].x;
-      ylcbuf[soff+pt] = lcbuf[pt].y;
-      airbuf[soff+pt] = lcbuf[pt].airmass;
-      habuf[soff+pt] = lcbuf[pt].ha;
-      wtbuf[soff+pt] = lcbuf[pt].aper[mefinfo->stars[star].iap].wt;
-      locskybuf[soff+pt] = lcbuf[pt].sky;
-      peakbuf[soff+pt] = lcbuf[pt].peak;
-
-      flagbuf[soff+pt] = flags;
-
+    output_prepare(&op,
+                   mefinfo,
+                   lcbuf,
+                   jtab,
+                   star, r*mefinfo->nf, rblksz*mefinfo->nf,
+                   bjdbuf,
 #ifdef HJD
-      /* Calculate HJD (as UTC) */
-      hjdbuf[soff+pt] = mefinfo->mjdref + mefinfo->frames[pt].mjd +
-	                hjdcorr(epos + 3*pt,
-				mefinfo->stars[star].ra,
-				mefinfo->stars[star].dec);
+                   hjdbuf,
 #endif
-      bjdbuf[soff+pt] = lcbuf[pt].bjd;
-    }
+                   fluxbuf, fluxerrbuf,
+                   xlcbuf, ylcbuf,
+                   airbuf, habuf,
+                   wtbuf,
+                   locskybuf, peakbuf,
+                   flagbuf,
+                   &satflag, &chisq, &nchisq);
 
+    chibuf[r] = chisq;
+    nchibuf[r] = nchisq;
     sfbuf[r] = satflag;
 
-    /* Do other apertures */
-    for(ap = lap1; ap < lap2; ap++) {
-      soff = ((ap-lap1+1)*rblksz + r) * mefinfo->nf;
-      
-      /* Fill in buffer */
-      for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(lcbuf[pt].aper[ap].flux != 0.0) {
-	  fluxbuf[soff+pt] = mefinfo->zp - lcbuf[pt].aper[ap].flux;
-	  if(lcbuf[pt].aper[ap].fluxvarcom > 0.0)
-	    fluxerrbuf[soff+pt] = sqrtf(lcbuf[pt].aper[ap].fluxvarcom);
-	  else
-	    fluxerrbuf[soff+pt] = -999.0;
-	}
-        else {
-          fluxbuf[soff+pt] = -999.0;
-          fluxerrbuf[soff+pt] = -999.0;
-        }
-
-	wtbuf[soff+pt] = lcbuf[pt].aper[ap].wt;
-      }
-    }
+    mefinfo->stars[star].chisq = chisq;  /* for plotting */
+    mefinfo->stars[star].nchisq = nchisq;
 
     r++;
 
@@ -1562,12 +1506,10 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     TABLE_FLUSH();
   }    
 
+  output_free(&op);
+
   free((void *) lcbuf);
   lcbuf = (struct lc_point *) NULL;
-#ifdef HJD
-  free((void *) epos);
-  epos = (double *) NULL;
-#endif
   free((void *) medbuf);
   medbuf = (float *) NULL;
   free((void *) apbuf);
@@ -1594,14 +1536,18 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   return(0);
 
  error:
+  output_free(&op);
+
   if(ttype) {
     ocol = 0;
     
     for(icol = 0; icol < ntmpl; icol++) {
       ocol++;
       
-      if(tpap[icol] == 1 || (tpap[icol] == 2 && mefinfo->apselmode & APSEL_ALL))
-	for(ap = ap1; ap < ap2; ap++) {
+      if(!mefinfo->aperture &&
+         (tpap[icol] == 1 || (tpap[icol] == 2 &&
+                              mefinfo->apselmode & APSEL_ALL)))
+	for(ap = op.ap1; ap < op.ap2; ap++) {
 	  if(ttype[ocol])
 	    free((void *) ttype[ocol]);
 
@@ -1613,10 +1559,6 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   }
   if(lcbuf)
     free((void *) lcbuf);
-#ifdef HJD
-  if(epos)
-    free((void *) epos);
-#endif
   if(medbuf)
     free((void *) medbuf);
   if(apbuf)
@@ -1639,6 +1581,139 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     free((void *) bjdbuf);
   if(flagbuf)
     free((void *) flagbuf);
+
+  return(1);
+}
+
+static int compute_lc (fitsfile *reff, 
+                       struct buffer_info *buf, struct lc_mef *mefinfo,
+                       struct dtai_table *dtab,
+                       struct iers_table *itab,
+                       struct jpleph_table *jtab,
+                       struct jpleph_table *ttab,
+                       char *errstr) {
+  struct lc_output op;
+
+  double s[3], pr;
+
+  double airmass;
+  float scvar;
+
+  struct lc_point *lcbuf = (struct lc_point *) NULL;
+  float *medbuf = (float *) NULL;
+
+  long star, pt, opt, iap;
+  float medflux, rmsflux;
+
+  float mag, var, tmp, chisq;
+  long nchisq;
+
+  /* Init output */
+  memset(&op, 0, sizeof(op));
+
+  if(output_init(&op, mefinfo, dtab, itab, jtab, ttab, errstr))
+    goto error;
+
+  /* Allocate buffers */
+  lcbuf = (struct lc_point *) malloc(mefinfo->nf * sizeof(struct lc_point));
+  medbuf = (float *) malloc(mefinfo->nf * sizeof(float));
+  if(!lcbuf || !medbuf) {
+    report_syserr(errstr, "malloc");
+    goto error;
+  }
+
+  for(star = 0; star < mefinfo->nstars; star++) {
+    /* Read in measurements for this star */
+    if(buffer_fetch_object(buf, lcbuf, 0, mefinfo->nf, star, errstr))
+      goto error;
+    
+    for(iap = op.ap1; iap < op.ap2; iap++) {
+      /* Calculate median flux */
+      opt = 0;
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+        mag = lcbuf[pt].aper[iap].flux;
+        var = lcbuf[pt].aper[iap].fluxvar;
+
+	if(mag != 0.0 &&
+           var > 0.0) {
+	  medbuf[opt] = mag;
+	  opt++;
+	}
+      }
+      
+      if(opt > 0)
+        fmedsig(medbuf, opt, &medflux, &rmsflux);
+      else {
+        medflux = 0.0;
+        rmsflux = 0.0;
+      }
+
+      mefinfo->stars[star].medflux[iap] = medflux;
+      mefinfo->stars[star].sigflux[iap] = rmsflux;
+    }
+
+    /* Extract median in chosen aperture */
+    iap = mefinfo->stars[star].iap;
+    medflux = mefinfo->stars[star].medflux[iap];
+    rmsflux = mefinfo->stars[star].sigflux[iap];
+
+    /* Compute final chisq in chosen aperture */
+    chisq = 0.0;
+    nchisq = 0;
+
+    if(medflux > 0.0) {
+      for(pt = 0; pt < mefinfo->nf; pt++) {
+        mag = lcbuf[pt].aper[iap].flux;
+        var = lcbuf[pt].aper[iap].fluxvarcom;
+        
+        if(mag != 0.0 &&
+           var > 0.0) {
+          tmp = mag - medflux;
+
+          /* Compute airmass */
+          if(mefinfo->frames[pt].doairm && jtab) {
+            /* Observed place - parallax left out, we don't have it anyway */
+            source_place(op.obs+pt,
+                         &(mefinfo->stars[star].src),
+                         jtab, TR_TO_OBS_AZ, s, NULL, &pr);
+
+            /* Airmass */
+            airmass = v_airmass(s);
+          
+            /* Scintillation variance */
+            scvar = mefinfo->frames[pt].scvarconst * airmass*airmass*airmass;
+          }
+          else
+            scvar = 0;
+
+          chisq += tmp*tmp / (var+scvar);
+          nchisq++;
+        }
+      }
+    }
+
+    mefinfo->stars[star].med = medflux;
+    mefinfo->stars[star].rms = rmsflux;
+    mefinfo->stars[star].chisq = chisq;
+    mefinfo->stars[star].nchisq = nchisq;
+  }
+
+  output_free(&op);
+
+  free((void *) lcbuf);
+  lcbuf = (struct lc_point *) NULL;
+  free((void *) medbuf);
+  medbuf = (float *) NULL;
+
+  return(0);
+
+ error:
+  output_free(&op);
+
+  if(lcbuf)
+    free((void *) lcbuf);
+  if(medbuf)
+    free((void *) medbuf);
 
   return(1);
 }

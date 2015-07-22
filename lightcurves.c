@@ -25,8 +25,6 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   int used;
 
   float medflux, sigflux;
-  float tmp, chisq;
-  long nchisq;
 
   float medoff[NFLUX], sigoff[NFLUX];
 
@@ -304,7 +302,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	opt1 = 0;
 	for(pt = 0; pt < mefinfo->nf; pt++) {
 	  if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	     ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
+	     ptbuf[pt].aper[meas].fluxvar != 0.0) {
 	    medbuf1[opt1] = ptbuf[pt].aper[meas].flux;
 	    opt1++;
 	  }
@@ -355,7 +353,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     }
   }
 
-  /* Compute final per-object median flux and chi-squared in each aperture */
+  /* Compute final per-object median flux in each aperture */
   for(star = 0; star < mefinfo->nstars; star++) {
     /* Read in measurements for this star */
     if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
@@ -368,7 +366,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       opt1 = 0;
       for(pt = 0; pt < mefinfo->nf; pt++) {
 	if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	   ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
+	   ptbuf[pt].aper[meas].fluxvar != 0.0) {
 	  medbuf1[opt1] = ptbuf[pt].aper[meas].flux;
 	  opt1++;
 	}
@@ -379,22 +377,6 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       fmedsig(medbuf1, opt1, &medflux, &sigflux);
       mefinfo->stars[star].medflux[meas] = medflux;
       mefinfo->stars[star].sigflux[meas] = sigflux;
-
-      /* Calculate chi-squared */
-      chisq = 0.0;
-      nchisq = 0;
-      
-      for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	   ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
-	  tmp = ptbuf[pt].aper[meas].flux - medflux;
-	  chisq += tmp*tmp / ptbuf[pt].aper[meas].fluxvarcom;
-	  nchisq++;
-	}
-      }
-      
-      mefinfo->stars[star].chiap[meas] = chisq;
-      mefinfo->stars[star].nchiap[meas] = nchisq;
     }
     
     mefinfo->stars[star].used += used;
@@ -427,12 +409,10 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
   if(chooseap(buf, mefinfo, ptbuf, medbuf1, norenorm, errstr))
     goto error;
 
-  /* Extract median and chi squared in chosen aperture */
+  /* Extract median in chosen aperture */
   for(star = 0; star < mefinfo->nstars; star++) {
     mefinfo->stars[star].med = mefinfo->stars[star].medflux[mefinfo->stars[star].iap];
     mefinfo->stars[star].rms = mefinfo->stars[star].sigflux[mefinfo->stars[star].iap];
-    mefinfo->stars[star].chisq = mefinfo->stars[star].chiap[mefinfo->stars[star].iap];
-    mefinfo->stars[star].nchisq = mefinfo->stars[star].nchiap[mefinfo->stars[star].iap];
   }
 
   if(!noastrom) {
@@ -524,9 +504,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
   float *medbuf = (float *) NULL;
   long nmedbuf;
 
-  long star, meas, meas1, meas2, pt, opt;
-  float medflux, rmsflux, chisq, tmp;
-  long nchisq;
+  long star, meas, meas1, meas2, pt;
 
   int iseg, found, imr;
 
@@ -614,53 +592,6 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
       if(buffer_put_frame(buf, ptbuf, 0, mefinfo->nstars, pt, errstr))
 	goto error;
     }
-  }
-
-  /* Compute final per-object, per-aperture median flux (NEW POINTS ONLY) */
-  for(star = 0; star < mefinfo->nstars; star++) {
-    /* Read in measurements for this star */
-    if(buffer_fetch_object(buf, ptbuf, 0, mefinfo->nf, star, errstr))
-      goto error;
-    
-    for(meas = meas1; meas < meas2; meas++) {
-      /* Calculate median flux and set "used" flag for comparison stars */
-      opt = 0;
-      for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	   ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
-	  medbuf[opt] = ptbuf[pt].aper[meas].flux;
-	  opt++;
-	}
-      }
-      
-      fmedsig(medbuf, opt, &medflux, &rmsflux);
-      mefinfo->stars[star].medflux[meas] = medflux;
-      mefinfo->stars[star].sigflux[meas] = rmsflux;
-
-      /* Calculate chi-squared */
-      chisq = 0.0;
-      nchisq = 0;
-      
-      for(pt = 0; pt < mefinfo->nf; pt++) {
-	if(ptbuf[pt].aper[meas].flux != 0.0 &&
-	   ptbuf[pt].aper[meas].fluxvarcom != 0.0) {
-	  tmp = ptbuf[pt].aper[meas].flux - medflux;
-	  chisq += tmp*tmp / ptbuf[pt].aper[meas].fluxvarcom;
-	  nchisq++;
-	}
-      }
-
-      mefinfo->stars[star].chiap[meas] = chisq;
-      mefinfo->stars[star].nchiap[meas] = nchisq;
-    }
-  }
-
-  /* Extract median and chi squared in chosen aperture */
-  for(star = 0; star < mefinfo->nstars; star++) {
-    mefinfo->stars[star].med = mefinfo->stars[star].medflux[mefinfo->stars[star].iap];
-    mefinfo->stars[star].rms = mefinfo->stars[star].sigflux[mefinfo->stars[star].iap];
-    mefinfo->stars[star].chisq = mefinfo->stars[star].chiap[mefinfo->stars[star].iap];
-    mefinfo->stars[star].nchisq = mefinfo->stars[star].nchiap[mefinfo->stars[star].iap];
   }
 
   if(!noastrom) {

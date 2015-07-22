@@ -50,7 +50,7 @@ LIBS=$(CFITSIO_LIBS) $(PGPLOT_LIBS) $(SLA_LIBS) -lm
 #### End constants section ####
 
 COMMON_SRCS=buffer.c chooseap.c instvers.c intra.c lightcurves.c \
-	readfits.c systematic.c xytoxy.c \
+	output.c readfits.c systematic.c xytoxy.c \
 	dsolve.c dmatinv.c filelist.c
 
 LIGHTCURVES_SRCS=main.c $(COMMON_SRCS) $(SLA_SRCS) $(PGPLOT_SRCS)

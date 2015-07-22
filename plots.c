@@ -16,7 +16,8 @@
 #define THEOSTEP  0.01  /* mag */
 
 int do_plots (struct lc_mef *meflist, int nmefs,
-	      float medsat, float medlim, float umlim, float lmlim, char *errstr) {
+	      float medsat, float medlim, float umlim, float lmlim,
+              int outcls, int wantoutcls, char *errstr) {
   float magmin, magmax, lrmin, lrmax;
   float mag, rms, chi, photons, skyvar, area, tmp, tmpp, tmps;
   long star, pt;
@@ -156,7 +157,10 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 
   for(mef = 0; mef < nmefs; mef++)
     for(star = 0; star < meflist[mef].nstars; star++) {
-      /* Use only the ones classified as stars */
+      /* Skip the ones without the correct class if we're doing that */
+      if(wantoutcls && meflist[mef].stars[star].cls != outcls)
+        continue;
+
       if(meflist[mef].stars[star].med > 0.0 &&
 	 meflist[mef].stars[star].rms > 0.0) {
 	mag = meflist[mef].zp - meflist[mef].stars[star].med;
@@ -164,15 +168,16 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 
 	cpgsci(1+mef);
 
-	if(meflist[mef].stars[star].cls == -1 &&
-	   meflist[mef].stars[star].bflag == 0 &&
-	   meflist[mef].stars[star].cflag == 0) {  /* BODGE */
-	  cpgpt(1, &mag, &rms, 1);
-	}
-	else if(meflist[mef].stars[star].cls == 9) {
+        if(meflist[mef].stars[star].cls == 9) {
 	  cpgpt(1, &mag, &rms, 1);
 	  cpgsci(2);
 	  cpgpt(1, &mag, &rms, 22);
+	}
+	else if(wantoutcls ||
+                (meflist[mef].stars[star].cls == -1 &&
+                 meflist[mef].stars[star].bflag == 0 &&
+                 meflist[mef].stars[star].cflag == 0)) {  /* BODGE */
+	  cpgpt(1, &mag, &rms, 1);
 	}
 
 	cpgsci(1);
@@ -245,7 +250,10 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 
   for(mef = 0; mef < nmefs; mef++)
     for(star = 0; star < meflist[mef].nstars; star++) {
-      /* Use only the ones classified as stars */
+      /* Skip the ones without the correct class if we're doing that */
+      if(wantoutcls && meflist[mef].stars[star].cls != outcls)
+        continue;
+
       if(meflist[mef].stars[star].med > 0.0 &&
 	 meflist[mef].stars[star].chisq > 0.0 &&
 	 meflist[mef].stars[star].nchisq > 1) {
@@ -256,13 +264,13 @@ int do_plots (struct lc_mef *meflist, int nmefs,
 
 	cpgsci(1+mef);
 
-	if(meflist[mef].stars[star].cls == -1)
-	  cpgpt(1, &mag, &chi, 1);
-	else if(meflist[mef].stars[star].cls == 9) {
+	if(meflist[mef].stars[star].cls == 9) {
 	  cpgpt(1, &mag, &chi, 1);
 	  cpgsci(2);
 	  cpgpt(1, &mag, &chi, 22);
 	}
+        else if(wantoutcls || meflist[mef].stars[star].cls == -1)
+	  cpgpt(1, &mag, &chi, 1);
 
 	cpgsci(1);
       }

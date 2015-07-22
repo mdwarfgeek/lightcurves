@@ -205,16 +205,10 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   /* Try for field angle - old files will not have it, in which case
    * fallback to the old, incorrect, HA-based method */
   ffgkye(fits, "REFFANG", &(mefinfo->reffang), (char *) NULL, &status);
-  if(status == KEY_NO_EXIST) {
-    status = 0;
-    mefinfo->havefang = 0;
-  }
-  else if(status) {
+  if(status) {
     fitsio_err(errstr, status, "ffgkye: REFFANG");
     goto error;
   }
-  else
-    mefinfo->havefang = 1;
 
   mefinfo->sysulim = mefinfo->zp - umlim;
   mefinfo->sysllim = mefinfo->zp - lmlim;
@@ -1465,7 +1459,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   else
     mefinfo->satmag = -999.0;
   mefinfo->reffang = fang;
-  mefinfo->havefang = 1;
   mefinfo->refexp = exptime;
   mefinfo->refextinct = noexp ? 0.0 : extinct;
   mefinfo->refairmass = airmass;
@@ -1504,10 +1497,6 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
-	      struct dtai_table *dtab,
-	      struct iers_table *itab,
-	      struct jpleph_table *jtab,
-	      struct jpleph_table *ttab,
 	      int dointra, struct intra *icorr,
 	      int doinstvers, struct instvers *instverslist, int ninstvers,
 	      int diffmode, float satlev,
@@ -1550,27 +1539,21 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   double lat, lon, height = 0;
   unsigned char doairm;
 
-  struct observer obs;
-  int utcdn;
-  double utcdf, dtt;
-
-  double s[3], pr, seq[3];
-
-  float diam, sc, err, var, avskyfiterr, avscint;
+  float diam, scconst, err, var, avskyfiterr;
 
   float *zpoffbuf[NFLUX];
   long nzpoff[NFLUX];
   float avzpoff, avzprms;
 
   float *skyfiterrbuf = (float *) NULL;
-  long navskyfiterr, navscint;
+  long navskyfiterr;
 
   int cats_are_80 = 0;
   char *ep;
 
   long split_iexp = 0, split_nexp = -1, rtstat = -1;
   float tamb = -999, humid = -999, press = -999, skytemp = -999;
-  int iha = 0;
+  double refco[NREFCO];
 
   char filter[FLEN_VALUE];
   float magzpt, zpcorr, airmass = 1.0, extinct = 0.0;
@@ -2046,9 +2029,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   /* Get telescope location for airmass calculation */
   doairm = 1;
   
-  if(!jtab)  /* can't do without JPL at the moment */
-    doairm = 0;
-
   ffgkys(fits, "LATITUDE", latstr, (char *) NULL, &status);
   if(status == KEY_NO_EXIST) {
     status = 0;
@@ -2368,34 +2348,22 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
-  if(doairm) {
-    /* Create observer structure */
-    observer_init(&obs, lon, lat, height);
-
+  /* Pre-compute refraction for later */
+  if(doairm)
     refract_const(tamb != -999 ? 273.16+tamb : 283.0,
-		  humid != -999 ? humid/100 : 0.5,
-		  press != -999 ? press : 1013.25*exp(-height/(29.3*273.0)),
-		  0.80,  /* wavelength, microns */
-		  height,
-		  obs.refco);
-  }
-  else
-    observer_geoc(&obs);  /* geocentric corrections only */
+                  humid != -999 ? humid/100 : 0.5,
+                  press != -999 ? press : 1013.25*exp(-height/(29.3*273.0)),
+                  0.80,  /* wavelength, microns */
+                  height,
+                  refco);
 
-  if(dtab) {
-    /* Look up delta(TT) */
-    utcdn = floor(mjd);
-    utcdf = mjd - utcdn;
-    
-    dtt = dtai(dtab, utcdn, utcdf) + DTT;
-  }
+  /* Scintillation */
+  if(diam > 0.0 && airmass > 0.0 && exptime)
+    scconst = 2.5 * M_LOG10E * 0.09 * powf(diam / 10.0, -2.0 / 3.0) *
+                                      expf(-height / 8000.0) /
+                                      sqrtf(2*exptime);
   else
-    dtt = DTT;  /* assumes TAI=UTC */
-  
-  if(jtab) {
-    /* Compute time-dependent quantities */
-    observer_update(&obs, jtab, ttab, itab, mjd, dtt, OBSERVER_UPDATE_ALL);
-  }
+    scconst = 0;
 
   /* Get block size for row I/O */
   ffgrsz(fits, &rblksz, &status);
@@ -2449,9 +2417,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
   routoff = 0L;
 
   navskyfiterr = 0;
-
-  avscint = 0;
-  navscint = 0;
 
   while(remain > 0) {
     rread = (remain > rblksz ? rblksz : remain);
@@ -2511,35 +2476,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       /* Store x, y positions */
       points[rout].x = xbuf[rin];
       points[rout].y = ybuf[rin];
-
-      if(jtab) {
-        /* Apply space motion */
-        source_place(&obs, &(mefinfo->stars[rrout].src),
-                     jtab, TR_MOTION, s, NULL, &pr);
-        
-        /* Modified BJD(TDB) */
-        points[rout].bjd = obs.tt + (obs.dtdb + bary_delay(&obs, s, pr)) / DAY;
-      }
-      else
-        points[rout].bjd = -999.0;  /* can't compute */
-
-      /* Compute airmass */
-      if(doairm) {
-	/* Observed place - parallax left out, we don't have it anyway */
-	observer_ast2obs(&obs, s, NULL, pr, TR_TO_OBS_AZ);
-
-	points[rout].airmass = v_airmass(s);
-
-	mt_x_v(obs.phm, s, seq);
-	points[rout].ha = -atan2(seq[1], seq[0]);
-	
-	if(points[rout].ha > 0)
-	  iha = 1;  /* "average" HA in some sense - will NOT work for wide-field */
-      }
-      else {
-	points[rout].airmass = -999.0;  /* flag unusability */
-	points[rout].ha = -999.0;
-      }
 
       if(diffmode) {
 	locsky = mefinfo->stars[rrout].ref.sky + locskybuf[rin] - pedestal;
@@ -2630,19 +2566,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
           /* Relative variance */
           var = fluxvar / (flux*flux);
 
-	  /* Scintillation */
-	  if(diam > 0.0 && points[rout].airmass > 0.0 && exptime) {
-	    sc = 0.09 * powf(diam / 10.0, -2.0 / 3.0) *
- 	                powf(points[rout].airmass, 3.0 / 2.0) *
- 	                expf(-height / 8000.0) /
-	                sqrtf(2*exptime);
-
-	    avscint += 2.5 * M_LOG10E * sc;  /* flux to mag */
-	    navscint++;
-
-	    var += sc*sc;
-	  }
-
           /* Convert to magnitudes.  Bright side error bar, see
              Naylor et al. 2002, MNRAS, 335, 291 section 10. */
           err = 2.5*log10f(1.0 + sqrtf(var));
@@ -2714,23 +2637,29 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   mefinfo->avapcor += apcor[0];
 
-  if(navscint > 0)
-    mefinfo->avscint += avscint / navscint;
+  /* Average scintillation rms in magnitudes */
+  mefinfo->avscint += powf(airmass, 3.0 / 2.0) * scconst;
 
   /* Store this frame MJD and seeing */
   mefinfo->frames[iframe].mjd = mjd;
   mefinfo->frames[iframe].exptime = exptime;
+
+  mefinfo->frames[iframe].latitude = lat;
+  mefinfo->frames[iframe].longitude = lon;
+  mefinfo->frames[iframe].height = height;
+  memcpy(mefinfo->frames[iframe].refco,
+         refco,
+         sizeof(mefinfo->frames[iframe].refco));
+  mefinfo->frames[iframe].doairm = doairm;
+
+  mefinfo->frames[iframe].scvarconst = scconst*scconst;
+
   mefinfo->frames[iframe].seeing = seeing;
   mefinfo->frames[iframe].ellipt = ellipt;
   mefinfo->frames[iframe].skylev = skylev-pedestal;
   mefinfo->frames[iframe].skynoise = skynoise;
   mefinfo->frames[iframe].fang = fang;
-
-  if(mefinfo->havefang)
-    mefinfo->frames[iframe].iang = lrintf(ranorm(fang - mefinfo->reffang)/M_PI) % 2;
-  else
-    mefinfo->frames[iframe].iang = iha;  /* old, incorrect, method */
-
+  mefinfo->frames[iframe].iang = lrintf(ranorm(fang - mefinfo->reffang)/M_PI) % 2;
   mefinfo->frames[iframe].split_iexp = split_iexp;
   mefinfo->frames[iframe].split_nexp = split_nexp;
 
