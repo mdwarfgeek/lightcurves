@@ -2572,12 +2572,10 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
 	  /* Convert to "virtual variance" and stash result */
 	  points[rout].aper[col].fluxvar = err*err;
-	  points[rout].aper[col].fluxvarcom = points[rout].aper[col].fluxvar;
 	}
 	else {
 	  points[rout].aper[col].flux = 0.0;
 	  points[rout].aper[col].fluxvar = 0.0;
-	  points[rout].aper[col].fluxvarcom = 0.0;
 	}
 
 	points[rout].aper[col].wt = 0;

@@ -153,7 +153,7 @@ void output_prepare (struct lc_output *op,
   double s[3], pr, seq[3];
 
   double airmass;
-  float var, scvar, tmp;
+  float var, fitvar, scvar, tmp;
   
   for(pt = 0; pt < mefinfo->nf; pt++) {
     /* Calculate airmass, HA, BJD */
@@ -221,8 +221,14 @@ void output_prepare (struct lc_output *op,
         (*satflag)++;
       }
       
-      if(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvarcom > 0.0) {
-        var = lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvarcom + scvar;
+      if(lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvar > 0.0) {
+        fitvar = systematic_var_star_frame(lcbuf, mefinfo,
+                                           pt, star,
+                                           mefinfo->stars[star].iap);
+
+        var = lcbuf[pt].aper[mefinfo->stars[star].iap].fluxvar
+            + fitvar
+            + scvar;
         fluxerrbuf[soff+pt] = sqrtf(var);
         
         if(mefinfo->stars[star].med > 0.0) {
@@ -258,9 +264,13 @@ void output_prepare (struct lc_output *op,
         /* Fill in buffer */
         if(lcbuf[pt].aper[ap].flux != 0.0) {
           fluxbuf[saoff+pt] = mefinfo->zp - lcbuf[pt].aper[ap].flux;
-          if(lcbuf[pt].aper[ap].fluxvarcom > 0.0)
-            fluxerrbuf[saoff+pt] = sqrtf(lcbuf[pt].aper[ap].fluxvarcom +
-                                         scvar);
+          if(lcbuf[pt].aper[ap].fluxvar > 0.0) {
+            fitvar = systematic_var_star_frame(lcbuf, mefinfo,
+                                               pt, star, ap);
+
+            fluxerrbuf[saoff+pt] = sqrtf(lcbuf[pt].aper[ap].fluxvar +
+                                         fitvar + scvar);
+          }
           else
             fluxerrbuf[saoff+pt] = -999.0;
         }

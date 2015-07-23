@@ -50,7 +50,6 @@ struct lc_point {
   struct {
     float flux;
     float fluxvar;
-    float fluxvarcom;  /* combined variance including fit */
     float wt;  /* weight given in computing polynomial corr. */
   } aper[NFLUX];
 
@@ -434,6 +433,11 @@ int systematic_apply_frame (struct lc_point *data, struct lc_mef *mefinfo,
                             long frame, long meas, char *errstr);
 int systematic_apply_star (struct lc_point *data, struct lc_mef *mefinfo,
                            long star, long meas, char *errstr);
+
+float systematic_var_star_frame (struct lc_point *data,
+                                 struct lc_mef *mefinfo,
+                                 long frame, long star,
+                                 long meas);
 
 /* Plate solutions: xytoxy.c */
 int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,

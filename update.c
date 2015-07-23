@@ -1596,7 +1596,7 @@ static int compute_lc (fitsfile *reff,
   long starin, nstarin, pointer;
   int ncolsfile;
 
-  float mag, var, tmp, chisq;
+  float mag, var, fitvar, tmp, chisq;
   float medflux, rmsflux;
   long nchisq;
 
@@ -1728,8 +1728,11 @@ static int compute_lc (fitsfile *reff,
       }
 
       for(pt = 0; pt < mefinfo->nf; pt++) {
+        fitvar = systematic_var_star_frame(lcbuf, mefinfo,
+                                           pt, star, iap);
+
         mag = lcbuf[pt].aper[iap].flux;
-        var = lcbuf[pt].aper[iap].fluxvarcom;
+        var = lcbuf[pt].aper[iap].fluxvar;
         
         if(mag != 0.0 &&
            var > 0.0) {
@@ -1751,7 +1754,7 @@ static int compute_lc (fitsfile *reff,
           else
             scvar = 0;
 
-          chisq += tmp*tmp / (var+scvar);
+          chisq += tmp*tmp / (var + fitvar + scvar);
           nchisq++;
         }
       }

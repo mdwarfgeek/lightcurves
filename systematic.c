@@ -517,7 +517,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 int systematic_apply_frame (struct lc_point *data, struct lc_mef *mefinfo,
                             long frame, long meas, char *errstr) {
   long star;
-  float dx, dy, corr, var;
+  float dx, dy, corr;
 
   /* Apply fit */
   for(star = 0; star < mefinfo->nstars; star++) {
@@ -528,16 +528,8 @@ int systematic_apply_frame (struct lc_point *data, struct lc_mef *mefinfo,
       corr = polyeval(dx, dy,
                       mefinfo->frames[frame].sys[meas].coeff,
                       mefinfo->frames[frame].sys[meas].degree);
-      var = polyvar(dx, dy,
-                    mefinfo->frames[frame].sys[meas].cov,
-                    mefinfo->frames[frame].sys[meas].degree);
 
       data[star].aper[meas].flux -= corr;
-
-      if(data[star].aper[meas].fluxvar > 0)
-	data[star].aper[meas].fluxvarcom = data[star].aper[meas].fluxvar + var;
-      else
-	data[star].aper[meas].fluxvarcom = 0.0;
     }
   }
 
@@ -547,7 +539,7 @@ int systematic_apply_frame (struct lc_point *data, struct lc_mef *mefinfo,
 int systematic_apply_star (struct lc_point *data, struct lc_mef *mefinfo,
                            long star, long meas, char *errstr) {
   long frame;
-  float dx, dy, corr, var;
+  float dx, dy, corr;
 
   /* Apply fit */
   for(frame = 0; frame < mefinfo->nf; frame++) {
@@ -559,19 +551,30 @@ int systematic_apply_star (struct lc_point *data, struct lc_mef *mefinfo,
       corr = polyeval(dx, dy,
                       mefinfo->frames[frame].sys[meas].coeff,
                       mefinfo->frames[frame].sys[meas].degree);
-      var = polyvar(dx, dy,
-                    mefinfo->frames[frame].sys[meas].cov,
-                    mefinfo->frames[frame].sys[meas].degree);
 
       data[frame].aper[meas].flux -= corr;
-
-      if(data[frame].aper[meas].fluxvar > 0)
-	data[frame].aper[meas].fluxvarcom = data[frame].aper[meas].fluxvar + var;
-      else
-	data[frame].aper[meas].fluxvarcom = 0.0;
     }
   }
 
   return(0);
+}
+
+float systematic_var_star_frame (struct lc_point *data,
+                                 struct lc_mef *mefinfo,
+                                 long frame, long star,
+                                 long meas) {
+  float dx, dy, var = 0.0;
+
+  if(data[frame].aper[meas].flux > 0.0 &&
+     mefinfo->frames[frame].sys[meas].npt > 0) {
+    dx = mefinfo->stars[star].x - mefinfo->frames[frame].sys[meas].xbar;
+    dy = mefinfo->stars[star].y - mefinfo->frames[frame].sys[meas].ybar;
+
+    var = polyvar(dx, dy,
+                  mefinfo->frames[frame].sys[meas].cov,
+                  mefinfo->frames[frame].sys[meas].degree);
+  }
+
+  return(var);
 }
 
