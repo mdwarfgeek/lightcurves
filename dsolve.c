@@ -6,7 +6,7 @@
 
 /* gauss elimination to solve ax=b */
 
-void dsolve (double a[50][50], double b[50], int m) {
+void dsolve (double *a, double *b, int m) {
   double temp, big, pivot, rmax;
   int i, iu, j, k, l = 0, jl, ib, ir;
 
@@ -16,7 +16,7 @@ void dsolve (double a[50][50], double b[50], int m) {
 
     /* find largest remaining term in ith column for pivot */
     for(k = i; k < m; k++) {
-      rmax = fabsf(a[i][k]);
+      rmax = fabsf(a[i*m+k]);
       if(rmax > big) {
 	big = rmax;
 	l = k;
@@ -33,9 +33,9 @@ void dsolve (double a[50][50], double b[50], int m) {
     if(i != l) {
       /* switch rows */
       for(j = 0; j < m; j++) {
-	temp    = a[j][i];
-	a[j][i] = a[j][l];
-	a[j][l] = temp;
+	temp    = a[j*m+i];
+	a[j*m+i] = a[j*m+l];
+	a[j*m+l] = temp;
       }
       temp = b[i];
       b[i] = b[l];
@@ -43,28 +43,28 @@ void dsolve (double a[50][50], double b[50], int m) {
     }
 
     /* pivotal reduction */
-    pivot = a[i][i];
+    pivot = a[i*m+i];
     jl = i+1;
 
     for(j = jl; j < m; j++) {
-      temp = a[i][j]/pivot;
+      temp = a[i*m+j]/pivot;
       b[j] -= temp*b[i];
-      for(k = i; k < m; k++) a[k][j] -= temp*a[k][i];
+      for(k = i; k < m; k++) a[k*m+j] -= temp*a[k*m+i];
     }
   }
 
   /* back substitution for solution */
   for(i = 0; i < m; i++) {
     ir = m-1-i;
-    if(a[ir][ir] != 0.0) {
+    if(a[ir*m+ir] != 0.0) {
       temp = b[ir];
       if(ir != m-1) {
 	for(j = 1; j <= i; j++) {
 	  k = m-j;
-	  temp -= a[k][ir]*b[k];
+	  temp -= a[k*m+ir]*b[k];
 	}
       }
-      b[ir] = temp/a[ir][ir];
+      b[ir] = temp/a[ir*m+ir];
     }
     else
       b[ir] = 0.0;

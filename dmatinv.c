@@ -5,8 +5,8 @@
 
 #include "util.h"
 
-void dmatinv (double a[50][50], int m) {
-  double b[50][50];
+void dmatinv (double *a, int m) {
+  double b[m*m];
 
   double temp, big, pivot, rmax;
   int i, iu, j, k, l = 0, jl, ib, ir, kk;
@@ -14,9 +14,9 @@ void dmatinv (double a[50][50], int m) {
   /* Initialise b as a unit matrix */
   for(j = 0; j < m; j++) {
     for(i = 0; i < m; i++)
-      b[j][i] = 0.0;
+      b[j*m+i] = 0.0;
 
-    b[j][j] = 1.0;
+    b[j*m+j] = 1.0;
   }
 
   iu = m-1;
@@ -25,7 +25,7 @@ void dmatinv (double a[50][50], int m) {
 
     /* find largest remaining term in ith column for pivot */
     for(k = i; k < m; k++) {
-      rmax = fabsf(a[i][k]);
+      rmax = fabsf(a[i*m+k]);
       if(rmax > big) {
 	big = rmax;
 	l = k;
@@ -34,7 +34,7 @@ void dmatinv (double a[50][50], int m) {
 
     /* check for non-zero term */
     if(big == 0.0) {
-      for(ib = 0; ib < m; ib++) b[ib][ib] = 0.0;
+      for(ib = 0; ib < m; ib++) b[ib*m+ib] = 0.0;
 /*        fprintf(stderr, "matinv: Zero determinant\n"); */
       return;
     }
@@ -42,26 +42,26 @@ void dmatinv (double a[50][50], int m) {
     if(i != l) {
       /* switch rows */
       for(j = 0; j < m; j++) {
-	temp    = a[j][i];
-	a[j][i] = a[j][l];
-	a[j][l] = temp;
-	temp    = b[j][i];
-	b[j][i] = b[j][l];
-	b[j][l] = temp;
+	temp    = a[j*m+i];
+	a[j*m+i] = a[j*m+l];
+	a[j*m+l] = temp;
+	temp    = b[j*m+i];
+	b[j*m+i] = b[j*m+l];
+	b[j*m+l] = temp;
       }
     }
 
     /* pivotal reduction */
-    pivot = a[i][i];
+    pivot = a[i*m+i];
     jl = i+1;
 
     for(j = jl; j < m; j++) {
-      temp = a[i][j]/pivot;
+      temp = a[i*m+j]/pivot;
       for(k = i; k < m; k++)
-	a[k][j] -= temp*a[k][i];
+	a[k*m+j] -= temp*a[k*m+i];
 
       for(k = 0; k < m; k++)
-	b[k][j] -= temp*b[k][i];
+	b[k*m+j] -= temp*b[k*m+i];
     }
   }
 
@@ -69,15 +69,15 @@ void dmatinv (double a[50][50], int m) {
   for(j = 0; j < m; j++)
     for(i = 0; i < m; i++) {
       ir = m-1-i;
-      temp = b[j][ir];
+      temp = b[j*m+ir];
       if(ir != m-1) {
 	for(k = 1; k <= i; k++) {
 	  kk = m - k;
-	  temp -= a[kk][ir] * b[j][kk];
+	  temp -= a[kk*m+ir] * b[j*m+kk];
 	}
       }
 
-      b[j][ir] = temp / a[ir][ir];
+      b[j*m+ir] = temp / a[ir*m+ir];
     }
 
   /* copy it back into a */

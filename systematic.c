@@ -25,7 +25,7 @@
 #define TTHRESH  0.0001  /* 0.1 mmag */
 
 static void polyaccum(float dx, float dy, float wt, float val,
-		      double a[50][50], double b[50], int degree) {
+		      double *a, double *b, int degree, int ncoeff) {
   int ox1, oy1, mx1, i1;
   int ox2, oy2, mx2, i2;
   double xp1, yp1, xp2, yp2, tmp;
@@ -40,7 +40,7 @@ static void polyaccum(float dx, float dy, float wt, float val,
       for(oy2 = 0, yp2 = 1.0; oy2 <= degree; oy2++, yp2 *= dy) {
 	mx2 = degree - oy2;
 	for(ox2 = 0, xp2 = 1.0; ox2 <= mx2; ox2++, xp2 *= dx) {
-	  a[i1][i2] += tmp * xp2 * yp2 * wt;
+	  a[i1*ncoeff+i2] += tmp * xp2 * yp2 * wt;
 
 	  i2++;
 	}
@@ -53,7 +53,7 @@ static void polyaccum(float dx, float dy, float wt, float val,
   }
 }
 
-static float polyeval(float dx, float dy, double coeff[50], int degree) {
+static float polyeval(float dx, float dy, double *coeff, int degree) {
   double xp, yp;
   float result = 0.0;
   int ox, oy, mx, i;
@@ -70,7 +70,7 @@ static float polyeval(float dx, float dy, double coeff[50], int degree) {
   return(result);
 }
 
-static float polyvar(float dx, float dy, double cov[50][50], int degree) {
+static float polyvar(float dx, float dy, double *cov, int degree, int ncoeff) {
   int ox1, oy1, mx1, i1;
   int ox2, oy2, mx2, i2;
   double xp1, yp1, xp2, yp2, tmp;
@@ -88,7 +88,7 @@ static float polyvar(float dx, float dy, double cov[50][50], int degree) {
       for(oy2 = 0, yp2 = 1.0; oy2 <= degree; oy2++, yp2 *= dy) {
 	mx2 = degree - oy2;
 	for(ox2 = 0, xp2 = 1.0; ox2 <= mx2; ox2++, xp2 *= dx) {
-	  result += cov[i1][i2] * tmp * xp2 * yp2;
+	  result += cov[i1*ncoeff+i2] * tmp * xp2 * yp2;
 
 	  i2++;
 	}
@@ -128,8 +128,12 @@ void systematic_select (struct lc_star *stars, long nstars, float fmin, float fm
 int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, long meas,
 		    float *medbuf, int degree, struct systematic_fit *f,
 		    char *errstr) {
-  double a[50][50], ainv[50][50], b[50], coeff[50], cov[50][50];
-  int ncoeff, ncoeffmax, iter;
+  double *a = (double *) NULL;
+  double *ainv = (double *) NULL;
+  double *b = (double *) NULL;
+  double *coeff = (double *) NULL;
+  double *cov = (double *) NULL;
+  int ncoeff, iter;
   long star, opt;
   float fmin, fmax;
   float rmsclip;
@@ -153,12 +157,16 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   char title[1024];
 #endif
 
-  /* Calculate number of coefficients */
-  ncoeffmax = sizeof(coeff) / sizeof(coeff[0]);
-  ncoeff = ((degree + 1) * (degree + 2)) / 2;
+  /* Allocate buffers */
+  ncoeff = POLY_NCOEFF(degree);
 
-  if(ncoeff > ncoeffmax) {
-    report_err(errstr, "polynomial degree %d too large, maximum is 8", degree);
+  a = (double *) malloc(ncoeff*ncoeff * sizeof(double));
+  ainv = (double *) malloc(ncoeff*ncoeff * sizeof(double));
+  b = (double *) malloc(ncoeff * sizeof(double));
+  coeff = (double *) malloc(ncoeff * sizeof(double));
+  cov = (double *) malloc(ncoeff*ncoeff * sizeof(double));
+  if(!a || !ainv || !b || !coeff || !cov) {
+    report_syserr(errstr, "malloc");
     goto error;
   }
 
@@ -270,7 +278,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     coeff[k] = 0.0;
 
     for(j = 0; j < ncoeff; j++)
-      cov[k][j] = 0.0;
+      cov[k*ncoeff+j] = 0.0;
   }
 
   cxbar = 0.0;
@@ -290,7 +298,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     /* Initialise matrices */
     for(k = 0; k < ncoeff; k++) {
       for(j = 0; j < ncoeff; j++)
-        a[k][j] = 0.0;
+        a[k*ncoeff+j] = 0.0;
       
       b[k] = 0.0;
     }
@@ -372,7 +380,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
 	/* Use the ones within SIGCLIP of the median */
 	if(sigoff == 0.0 || fabsf(pval - medoff) < SIGCLIP * sigoff) {
-	  polyaccum(dx, dy, wt, val, a, b, degree);
+	  polyaccum(dx, dy, wt, val, a, b, degree, ncoeff);
 	  data[star].aper[meas].wt = wt;
 	}
 	else
@@ -383,7 +391,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     }
 
     /* Make a copy first */
-    memcpy(ainv, a, sizeof(ainv));
+    memcpy(ainv, a, ncoeff*ncoeff*sizeof(double));
 
     /* Solve for coefficients */
     dsolve(a, b, ncoeff);
@@ -476,8 +484,8 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     /* Store result */
     medoff = newmed;
     sigoff = newsig;
-    memcpy(coeff, b, sizeof(coeff));
-    memcpy(cov, ainv, sizeof(cov));
+    memcpy(coeff, b, ncoeff*sizeof(double));
+    memcpy(cov, ainv, ncoeff*ncoeff*sizeof(double));
     cxbar = xbar;
     cybar = ybar;
     chisq = newchisq;
@@ -492,14 +500,15 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 
   for(k = 0; k < ncoeff; k++)
     for(j = 0; j < ncoeff; j++)
-      cov[k][j] *= varscale;
+      cov[k*ncoeff+j] *= varscale;
 
   /* Copy out result */
   f->xbar = cxbar;
   f->ybar = cybar;
-  memcpy(f->coeff, coeff, sizeof(f->coeff));
-  memcpy(f->cov, cov, sizeof(f->cov));
+  memcpy(f->coeff, coeff, ncoeff*sizeof(double));
+  memcpy(f->cov, cov, ncoeff*ncoeff*sizeof(double));
   f->degree = degree;
+  f->ncoeff = ncoeff;
   f->medoff = medoff;
   f->sigoff = sigoff;
   f->sigm = (opt > 1 ? (opt > ncoeff ? sigoff / sqrt(opt-ncoeff) : 0.0) : sqrtf(lastvar));
@@ -508,9 +517,26 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   /* Print coeffs */
   //printf("Coefficients %9.5f %9.5f x %9.5f y %9.5f x**2 %9.5f y**2 %9.5f x*y\n", coeff[0]*1000, coeff[1]*1000, coeff[3]*1000, coeff[2]*1000000, coeff[5]*1000000, coeff[4]*1000000);
 
+  free((void *) a);
+  free((void *) ainv);
+  free((void *) b);
+  free((void *) coeff);
+  free((void *) cov);
+
   return(0);
 
  error:
+  if(a)
+    free((void *) a);
+  if(ainv)
+    free((void *) ainv);
+  if(b)
+    free((void *) b);
+  if(coeff)
+    free((void *) coeff);
+  if(cov)
+    free((void *) cov);
+
   return(1);
 }
 
@@ -566,13 +592,15 @@ float systematic_var_star_frame (struct lc_point *data,
   float dx, dy, var = 0.0;
 
   if(data[frame].aper[meas].flux > 0.0 &&
+     mefinfo->frames[frame].sys[meas].ncoeff > 0 &&
      mefinfo->frames[frame].sys[meas].npt > 0) {
     dx = mefinfo->stars[star].x - mefinfo->frames[frame].sys[meas].xbar;
     dy = mefinfo->stars[star].y - mefinfo->frames[frame].sys[meas].ybar;
 
     var = polyvar(dx, dy,
                   mefinfo->frames[frame].sys[meas].cov,
-                  mefinfo->frames[frame].sys[meas].degree);
+                  mefinfo->frames[frame].sys[meas].degree,
+                  mefinfo->frames[frame].sys[meas].ncoeff);
   }
 
   return(var);

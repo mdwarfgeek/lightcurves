@@ -133,6 +133,7 @@ int main (int argc, char *argv[]) {
 
   int noplots = 0;
   int diffmode = 0;
+  int iap;
 
   /* Set the program name for error reporting */
   if(argv[0])
@@ -416,6 +417,7 @@ int main (int argc, char *argv[]) {
     meflist[mef].theosky = theosky;
 
     meflist[mef].degree = polydeg;
+    meflist[mef].ncoeff = POLY_NCOEFF(polydeg);
     meflist[mef].aperture = aperture;
     meflist[mef].apselmode = apselmode;
     meflist[mef].domerid = domerid;
@@ -427,6 +429,9 @@ int main (int argc, char *argv[]) {
 
     meflist[mef].frames = (struct lc_frame *) NULL;
     meflist[mef].nf = nf;
+
+    meflist[mef].sysbuf_coeff = (double *) NULL;
+    meflist[mef].sysbuf_cov = (double *) NULL;
 
     if(ext == -99) {
       /* Move there */
@@ -450,6 +455,23 @@ int main (int argc, char *argv[]) {
     meflist[mef].frames = (struct lc_frame *) malloc(nf * sizeof(struct lc_frame));
     if(!meflist[mef].frames)
       error(1, "malloc");
+
+    /* Allocate buffers for systematic fit */
+    meflist[mef].nsysalloc = meflist[mef].ncoeff;
+    if(meflist[mef].nsysalloc <= 0)
+      meflist[mef].nsysalloc = 1;
+
+    meflist[mef].sysbuf_coeff = (double *) malloc(meflist[mef].nsysalloc * NFLUX * nf * sizeof(double));
+    meflist[mef].sysbuf_cov = (double *) malloc(meflist[mef].nsysalloc*meflist[mef].nsysalloc * NFLUX * nf * sizeof(double));
+    if(!meflist[mef].sysbuf_coeff || !meflist[mef].sysbuf_cov)
+      error(1, "malloc");
+
+    /* Assign pointers */
+    for(f = 0; f < nf; f++)
+      for(iap = 0; iap < NFLUX; iap++) {
+        meflist[mef].frames[f].sys[iap].coeff = meflist[mef].sysbuf_coeff + (f * NFLUX + iap) * meflist[mef].nsysalloc;
+        meflist[mef].frames[f].sys[iap].cov = meflist[mef].sysbuf_cov + (f * NFLUX + iap) * meflist[mef].nsysalloc*meflist[mef].nsysalloc;
+      }
 
     /* Read frames */
     for(f = 0; f < nf; f++) {
@@ -627,6 +649,10 @@ int main (int argc, char *argv[]) {
       free((void *) meflist[mef].stars);
     if(meflist[mef].frames)
       free((void *) meflist[mef].frames);
+    if(meflist[mef].sysbuf_coeff)
+      free((void *) meflist[mef].sysbuf_coeff);
+    if(meflist[mef].sysbuf_cov)
+      free((void *) meflist[mef].sysbuf_cov);
     if(intralist[mef].map)
       free((void *) intralist[mef].map);
   }

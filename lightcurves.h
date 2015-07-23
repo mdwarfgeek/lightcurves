@@ -30,6 +30,9 @@
 /* Default to use all objects within 4 mags below saturation for fit */
 #define USEMAG  4
 
+/* Number of coefficients in polynomial */
+#define POLY_NCOEFF(degree) ((((degree) + 1) * ((degree) + 2)) / 2)
+
 /* Intrapixel sensitivity map */
 struct intra {
   float *map;
@@ -117,9 +120,10 @@ struct lc_star {
 struct systematic_fit {
   float xbar;
   float ybar;
-  double coeff[50];
-  double cov[50][50];
+  double *coeff;
+  double *cov;
   int degree;
+  int ncoeff;
 
   float medoff;
   float sigoff;
@@ -238,6 +242,7 @@ struct lc_mef {
 
   /* Degree of polynomial fit to be applied, zero for none */
   int degree;
+  int ncoeff;
 
   /* Overall reference frame info */
   float zp;
@@ -286,6 +291,11 @@ struct lc_mef {
   /* Individual frame info */
   struct lc_frame *frames;
   long nf;
+
+  /* Systematics fit buffers */
+  double *sysbuf_coeff;
+  double *sysbuf_cov;
+  int nsysalloc;
 
   /* Systematics fitting upper mag limit */
   float sysulim;
@@ -459,8 +469,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      char *errstr);
 
 /* Utility functions: dsolve.c, dmatinv.c, filelist.c */
-void dsolve (double a[50][50], double b[50], int m);
-void dmatinv (double a[50][50], int m);
+void dsolve (double *a, double *b, int m);
+void dmatinv (double *a, int m);
 
 char **read_file_list (int argc, char **argv, int *nf_r, char *errstr);
 

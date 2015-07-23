@@ -213,6 +213,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
   mefinfo->sysulim = mefinfo->zp - umlim;
   mefinfo->sysllim = mefinfo->zp - lmlim;
   mefinfo->degree = degree;
+  mefinfo->ncoeff = POLY_NCOEFF(degree);
 
   /* Simple test for 80-column catalogue */
   ffgkye(fits, "APCOR7", &apcor7, (char *) NULL, &status);
@@ -2690,13 +2691,14 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
       mefinfo->frames[iframe].sys[col].xbar = 0;
       mefinfo->frames[iframe].sys[col].ybar = 0;
-      memset(mefinfo->frames[iframe].sys[col].coeff,
-             0, sizeof(mefinfo->frames[iframe].sys[col].coeff));
+      memset(mefinfo->frames[iframe].sys[col].coeff, 0,
+             mefinfo->nsysalloc * sizeof(double));
       mefinfo->frames[iframe].sys[col].coeff[0] = avzpoff;
 
-      memset(mefinfo->frames[iframe].sys[col].cov,
-             0, sizeof(mefinfo->frames[iframe].sys[col].cov));
+      memset(mefinfo->frames[iframe].sys[col].cov, 0,
+             mefinfo->nsysalloc*mefinfo->nsysalloc * sizeof(double));
       mefinfo->frames[iframe].sys[col].degree = 0;
+      mefinfo->frames[iframe].sys[col].ncoeff = 0;
 
       mefinfo->frames[iframe].sys[col].medoff = 0;
       mefinfo->frames[iframe].sys[col].sigoff = avzprms;

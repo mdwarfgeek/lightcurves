@@ -267,7 +267,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	      mefinfo->frames[pt].offset = mefinfo->frames[pt].sys[meas].medoff;
 	      mefinfo->frames[pt].rms = mefinfo->frames[pt].sys[meas].sigoff;
 	      mefinfo->frames[pt].extinc = mefinfo->frames[pt].sys[meas].coeff[0];
-	      mefinfo->frames[pt].sigm = sqrtf(mefinfo->frames[pt].sys[meas].cov[0][0]);
+	      mefinfo->frames[pt].sigm = sqrtf(mefinfo->frames[pt].sys[meas].cov[0]);
 	    }
 
             /* Perform polynomial fit correction */
@@ -579,7 +579,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	    mefinfo->frames[pt].offset = mefinfo->frames[pt].sys[meas].medoff;
 	    mefinfo->frames[pt].rms = mefinfo->frames[pt].sys[meas].sigoff;
 	    mefinfo->frames[pt].extinc = mefinfo->frames[pt].sys[meas].coeff[0];
-	    mefinfo->frames[pt].sigm = sqrtf(mefinfo->frames[pt].sys[meas].cov[0][0]);
+	    mefinfo->frames[pt].sigm = sqrtf(mefinfo->frames[pt].sys[meas].cov[0]);
 	  }
 	  
 	  /* Perform polynomial fit correction */

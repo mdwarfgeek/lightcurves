@@ -124,6 +124,8 @@ int main (int argc, char *argv[]) {
   float sysulim = -1.0, sysllim = -1.0;
 #endif
 
+  int iap;
+
   /* Set the program name for error reporting */
   if(argv[0])
     pn = basename(argv[0]);
@@ -421,6 +423,9 @@ int main (int argc, char *argv[]) {
     meflist[mef].frames = (struct lc_frame *) NULL;
     meflist[mef].nf = nf;
 
+    meflist[mef].sysbuf_coeff = (double *) NULL;
+    meflist[mef].sysbuf_cov = (double *) NULL;
+
     if(ext == -99) {
       /* Move there */
       ffmahd(inf, mef+2, (int *) NULL, &status);
@@ -444,6 +449,23 @@ int main (int argc, char *argv[]) {
     meflist[mef].frames = (struct lc_frame *) malloc(nf * sizeof(struct lc_frame));
     if(!meflist[mef].frames)
       error(1, "malloc");
+
+    /* Allocate buffers for systematic fit */
+    meflist[mef].nsysalloc = meflist[mef].ncoeff;
+    if(meflist[mef].nsysalloc <= 0)
+      meflist[mef].nsysalloc = 1;
+
+    meflist[mef].sysbuf_coeff = (double *) malloc(meflist[mef].nsysalloc * NFLUX * nf * sizeof(double));
+    meflist[mef].sysbuf_cov = (double *) malloc(meflist[mef].nsysalloc*meflist[mef].nsysalloc * NFLUX * nf * sizeof(double));
+    if(!meflist[mef].sysbuf_coeff || !meflist[mef].sysbuf_cov)
+      error(1, "malloc");
+
+    /* Assign pointers */
+    for(f = 0; f < nf; f++)
+      for(iap = 0; iap < NFLUX; iap++) {
+        meflist[mef].frames[f].sys[iap].coeff = meflist[mef].sysbuf_coeff + (f * NFLUX + iap) * meflist[mef].nsysalloc;
+        meflist[mef].frames[f].sys[iap].cov = meflist[mef].sysbuf_cov + (f * NFLUX + iap) * meflist[mef].nsysalloc*meflist[mef].nsysalloc;
+      }
 
     /* Read frames */
     for(f = 0; f < nf; f++) {
@@ -624,6 +646,10 @@ int main (int argc, char *argv[]) {
       free((void *) meflist[mef].stars);
     if(meflist[mef].frames)
       free((void *) meflist[mef].frames);
+    if(meflist[mef].sysbuf_coeff)
+      free((void *) meflist[mef].sysbuf_coeff);
+    if(meflist[mef].sysbuf_cov)
+      free((void *) meflist[mef].sysbuf_cov);
     if(intralist[mef].map)
       free((void *) intralist[mef].map);
   }
