@@ -248,8 +248,13 @@ void output_prepare (struct lc_output *op,
       flags |= FLAG_NODP;
     }
     
+#ifndef NOXY
     xlcbuf[soff+pt] = lcbuf[pt].x;
     ylcbuf[soff+pt] = lcbuf[pt].y;
+#else
+    xlcbuf[soff+pt] = -999.0;
+    ylcbuf[soff+pt] = -999.0;
+#endif
     wtbuf[soff+pt] = (lcbuf[pt].comp >> mefinfo->stars[star].iap) & 0x01;
     locskybuf[soff+pt] = lcbuf[pt].sky;
     peakbuf[soff+pt] = lcbuf[pt].peak;

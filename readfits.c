@@ -2474,9 +2474,11 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       else
         measured = 0;
 
+#ifndef NOXY
       /* Store x, y positions */
       points[rout].x = xbuf[rin];
       points[rout].y = ybuf[rin];
+#endif
 
       if(diffmode) {
 	locsky = mefinfo->stars[rrout].ref.sky + locskybuf[rin] - pedestal;

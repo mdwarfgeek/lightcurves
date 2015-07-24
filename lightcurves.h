@@ -47,8 +47,10 @@ struct instvers {
 };
 
 struct lc_point {
+#ifndef NOXY
   double x;
   double y;
+#endif
 
   struct {
     float flux;
@@ -176,6 +178,7 @@ struct lc_frame {
   /* Uncertainty contribution from systematics fit */
   float sigm;
 
+#ifndef NOXY
   /* Standard 6-coefficient transformation to reference system */
   double tr[6];
 
@@ -184,6 +187,7 @@ struct lc_frame {
   float xsig;
   float yoff;
   float ysig;
+#endif
 
   /* MEarth-specific: frame grouping information */
   long split_iexp;
@@ -451,9 +455,11 @@ float systematic_var_star_frame (struct lc_point *data,
                                  long frame, long star,
                                  long meas);
 
+#ifndef NOXY
 /* Plate solutions: xytoxy.c */
 int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
 	    double tr[6], char *errstr);
+#endif
 
 /* Catalogue and list driven file reading: readfits.c */
 int read_lc (fitsfile *fits, struct lc_mef *mefinfo,

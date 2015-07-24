@@ -38,6 +38,7 @@ static int compute_lc (fitsfile *reff,
                        struct jpleph_table *ttab,
                        char *errstr);
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
+                           int noastrom,
 			   char **fnlist, char *errstr);
 
 /* Getopt stuff */
@@ -639,7 +640,9 @@ int main (int argc, char *argv[]) {
 #endif
 
   if(dogood) {
-    if(write_goodlist(goodfile, meflist, nmefs, fnlist, errstr))
+    if(write_goodlist(goodfile, meflist, nmefs,
+                      wantoutcls,
+                      fnlist, errstr))
       fatal(1, "do_goodlist: %s");
   }
 
@@ -1210,6 +1213,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
       goto error;
     }
 
+#ifndef NOXY
     /* Suppress output of frame transformation if we only had the
        photometric comparison stars.  It really needs everything. */
     if(!wantoutcls) {
@@ -1261,6 +1265,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 	goto error;
       }
     }
+#endif  /* NOXY */
   }
 
   /* Write out astrometry flag for web page */
@@ -1753,10 +1758,15 @@ static int compute_lc (fitsfile *reff,
 }
 
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
+                           int noastrom,
 			   char **fnlist, char *errstr) {
   FILE *fp;
   long f, nf;
-  int rv, mef, isok, iseg;
+  int rv, mef, isok;
+
+#ifndef NOXY
+  int iseg;
+#endif
 
   long nok;
 
@@ -1784,17 +1794,19 @@ static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
 #endif
 
 #if 1
+      /* MEarth criterion: delta mag > 0.6 */
+      if(meflist[mef].frames[f].extinc < -0.6)
+        isok = 0;
+
+#ifndef NOXY
       iseg = meflist[mef].frames[f].iseg;
 
-      /* MEarth criterion: delta mag > 0.6 and position within 10 sigma */
-      if(meflist[mef].frames[f].extinc < -0.6 ||
-	 fabsf(meflist[mef].frames[f].xoff-meflist[mef].segs[iseg].medxoff) > 10*meflist[mef].segs[iseg].sigxoff ||
-	 fabsf(meflist[mef].frames[f].yoff-meflist[mef].segs[iseg].medyoff) > 10*meflist[mef].segs[iseg].sigyoff) {
-	printf("%ld %ld %f %f %f %f %f %f\n", f+1, meflist[mef].frames[f].iang,
-	       meflist[mef].frames[f].xoff, meflist[mef].segs[iseg].medxoff, meflist[mef].segs[iseg].sigxoff,
-	       meflist[mef].frames[f].yoff, meflist[mef].segs[iseg].medyoff, meflist[mef].segs[iseg].sigyoff);
-	isok = 0;
-      }
+      /* MEarth criterion: position within 10 sigma */
+      if(!noastrom &&
+         (fabsf(meflist[mef].frames[f].xoff-meflist[mef].segs[iseg].medxoff) > 10*meflist[mef].segs[iseg].sigxoff ||
+          fabsf(meflist[mef].frames[f].yoff-meflist[mef].segs[iseg].medyoff) > 10*meflist[mef].segs[iseg].sigyoff))
+        isok = 0;
+#endif
 #endif
     }
 

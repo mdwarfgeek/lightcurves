@@ -16,7 +16,10 @@
 int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 		 int norenorm, int noastrom, int niter, char *errstr) {
   struct lc_point *ptbuf = (struct lc_point *) NULL;
-  float *medbuf1 = (float *) NULL, *medbuf2;
+  float *medbuf1 = (float *) NULL;
+#ifndef NOXY
+  float *medbuf2;
+#endif
   long nmedbuf;
 
   int iter, degree, doall;
@@ -108,7 +111,9 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     goto error;
   }
 
+#ifndef NOXY
   medbuf2 = medbuf1 + nmedbuf;
+#endif
 
   meas1 = (mefinfo->aperture ? mefinfo->aperture-1 : 0);
   meas2 = (mefinfo->aperture ? mefinfo->aperture : NFLUX);
@@ -381,6 +386,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     
     mefinfo->stars[star].used += used;
 
+#ifndef NOXY
     /* Calculate median x,y positions */
     for(iseg = 0; iseg < mefinfo->nseg; iseg++) {
       opt1 = 0;
@@ -403,6 +409,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
                 &(mefinfo->stars[star].segs[iseg].sigy));
       }
     }
+#endif
   }
 
   /* Aperture correct and choose default aperture */
@@ -415,6 +422,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
     mefinfo->stars[star].rms = mefinfo->stars[star].sigflux[mefinfo->stars[star].iap];
   }
 
+#ifndef NOXY
   if(!noastrom) {
     if(verbose)
       printf(" Recomputing astrometric transformations\n");
@@ -468,6 +476,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
               &(mefinfo->segs[iseg].medyoff), &(mefinfo->segs[iseg].sigyoff));
     }
   }
+#endif
 
   /* Free workspace */
   free((void *) ptbuf);
@@ -594,6 +603,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
     }
   }
 
+#ifndef NOXY
   if(!noastrom) {
     if(verbose)
       printf(" Recomputing astrometric transformations\n");
@@ -609,6 +619,7 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 	goto error;
     }
   }
+#endif
 
   /* Free workspace */
   free((void *) ptbuf);

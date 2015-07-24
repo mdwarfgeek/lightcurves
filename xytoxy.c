@@ -1,3 +1,5 @@
+#ifndef NOXY
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -161,3 +163,5 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
 
   return(1);
 }
+
+#endif  /* NOXY */

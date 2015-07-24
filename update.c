@@ -1124,6 +1124,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       goto error;
     }
 
+#ifndef NOXY
     /* Suppress output of frame transformation if we only had the
        photometric comparison stars.  It really needs everything. */
     if(mefinfo->nstars == mefinfo->nrows) {
@@ -1175,6 +1176,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	goto error;
       }
     }
+#endif  /* NOXY */
   }
 
   if(allast >= 0) {
