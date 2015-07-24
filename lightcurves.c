@@ -370,7 +370,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  medbuf1[opt1] = ptbuf[pt].aper[meas].flux;
 	  opt1++;
 	}
-	if(ptbuf[pt].aper[meas].wt > 0)
+	if(ptbuf[pt].comp & (1 << meas))
 	  used = 1;
       }
       

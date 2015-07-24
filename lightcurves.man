@@ -835,8 +835,8 @@ meridian on some equipment.
 .TP
 .B weight
 .B Vector.
-Weight of this source in the comparison star solution.  Zero if not
-included.
+Boolean flag indicating whether this source was included in the
+comparison star solution.  Zero if not included.
 .TP
 .B sky
 .B Vector.

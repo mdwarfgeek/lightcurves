@@ -139,7 +139,7 @@ void output_prepare (struct lc_output *op,
                      float *fluxbuf, float *fluxerrbuf,
                      double *xlcbuf, double *ylcbuf,
                      float *airbuf, float *habuf,
-                     float *wtbuf,
+                     unsigned char *wtbuf,
                      float *locskybuf, float *peakbuf,
                      unsigned char *flagbuf,
                      long *satflag, float *chisq, long *nchisq) {
@@ -250,7 +250,7 @@ void output_prepare (struct lc_output *op,
     
     xlcbuf[soff+pt] = lcbuf[pt].x;
     ylcbuf[soff+pt] = lcbuf[pt].y;
-    wtbuf[soff+pt] = lcbuf[pt].aper[mefinfo->stars[star].iap].wt;
+    wtbuf[soff+pt] = (lcbuf[pt].comp >> mefinfo->stars[star].iap) & 0x01;
     locskybuf[soff+pt] = lcbuf[pt].sky;
     peakbuf[soff+pt] = lcbuf[pt].peak;
     
@@ -279,7 +279,7 @@ void output_prepare (struct lc_output *op,
           fluxerrbuf[saoff+pt] = -999.0;
         }
         
-        wtbuf[saoff+pt] = lcbuf[pt].aper[ap].wt;
+        wtbuf[saoff+pt] = (lcbuf[pt].comp >> ap) & 0x01;
       }
   }
 }

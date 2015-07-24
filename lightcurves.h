@@ -53,13 +53,15 @@ struct lc_point {
   struct {
     float flux;
     float fluxvar;
-    float wt;  /* weight given in computing polynomial corr. */
   } aper[NFLUX];
 
   float sky;   /* local sky */
   float peak;  /* peak counts including sky */
-  unsigned char satur : 1;
-  unsigned char conf : 1;
+
+  /* Flags */
+  unsigned int comp : 16;
+  unsigned int satur : 1;
+  unsigned int conf : 1;
 };
 
 struct lc_star_segment {
@@ -415,7 +417,7 @@ void output_prepare (struct lc_output *op,
                      float *fluxbuf, float *fluxerrbuf,
                      double *xlcbuf, double *ylcbuf,
                      float *airbuf, float *habuf,
-                     float *wtbuf,
+                     unsigned char *wtbuf,
                      float *locskybuf, float *peakbuf,
                      unsigned char *flagbuf,
                      long *satflag, float *chisq, long *nchisq);

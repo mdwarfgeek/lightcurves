@@ -700,7 +700,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 			 tdbuf,
 #endif
                          tfbuf, tfbuf, tdbuf, tdbuf, tfbuf, tfbuf,
-			 tfbuf, tfbuf, tfbuf, tbbuf,
+			 tbbuf, tfbuf, tfbuf, tbbuf,
 			 "1D", "1D", "1E", "1E", "1E" };
   char *tmpl_tunit[] = { "pixels", "pixels", "mag", "mag", "", "",
 			 "", "", "", "", "",
@@ -714,7 +714,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 			 "radians", "radians", "arcsec/yr", "arcsec/yr", "mag" };
   char *tmpl_tdisp[] = { "F8.2", "F8.2", "F7.4", "F7.4", "F10.1", "I4",
 			 "I2", "I2", "I4", "I8", "I8",
-			 "F7.4", "", "F4.2", "I1",
+			 "I1", "", "F4.2", "I1",
 			 "F14.6",
 #ifdef HJD
 			 "F14.6",
@@ -755,7 +755,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   short *clsbuf = (short *) NULL, *bfbuf, *apnumbuf;
   float *offbuf = (float *) NULL;
   unsigned char *compokbuf = (unsigned char *) NULL;
-  float *fluxbuf = (float *) NULL, *fluxerrbuf, *wtbuf;
+  float *fluxbuf = (float *) NULL, *fluxerrbuf;
+  unsigned char *wtbuf = (unsigned char *) NULL;
   float *airbuf = (float *) NULL, *habuf, *locskybuf, *peakbuf;
   double *bjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
 #ifdef HJD
@@ -1332,10 +1333,11 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
 #else
   bjdbuf = (double *) malloc(3 * rblksz * mefinfo->nf * sizeof(double));
 #endif
-  fluxbuf = (float *) malloc(3 * rblksz * mefinfo->nf * op.nlapcol * sizeof(float));
+  fluxbuf = (float *) malloc(2 * rblksz * mefinfo->nf * op.nlapcol * sizeof(float));
+  wtbuf = (unsigned char *) malloc(rblksz * mefinfo->nf * op.nlapcol * sizeof(unsigned char));
   airbuf = (float *) malloc(4 * rblksz * mefinfo->nf * sizeof(float));
   flagbuf = (unsigned char *) malloc(rblksz * mefinfo->nf * sizeof(unsigned char));
-  if(!xbuf || !medbuf || !apbuf || !ptrbuf || !clsbuf || !offbuf || !compokbuf || !bjdbuf || !fluxbuf || !airbuf || !flagbuf) {
+  if(!xbuf || !medbuf || !apbuf || !ptrbuf || !clsbuf || !offbuf || !compokbuf || !bjdbuf || !fluxbuf || !wtbuf || !airbuf || !flagbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
@@ -1359,7 +1361,6 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   nchibuf = ptrbuf + 3 * rblksz;
 
   fluxerrbuf = fluxbuf + op.nlapcol * rblksz * mefinfo->nf;
-  wtbuf = fluxbuf + 2 * op.nlapcol * rblksz * mefinfo->nf;  
 
   habuf = airbuf + rblksz * mefinfo->nf;
   locskybuf = airbuf + 2 * rblksz * mefinfo->nf;
@@ -1414,7 +1415,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   WRITE_COL_NULL(ffpcnd, ylcbuf, mefinfo->nf, -999.0);			\
   WRITE_COL_NULL(ffpcne, airbuf, mefinfo->nf, -999.0);			\
   WRITE_COL_NULL(ffpcne, habuf, mefinfo->nf, -999.0);			\
-  FORLAP WRITE_COL_NULL(ffpcne, wtbuf+ap*rblksz*mefinfo->nf, mefinfo->nf, -999.0); \
+  FORLAP WRITE_COL(ffpclb, wtbuf+ap*rblksz*mefinfo->nf, mefinfo->nf);   \
   WRITE_COL_NULL(ffpcne, locskybuf, mefinfo->nf, -999.0);		\
   WRITE_COL_NULL(ffpcne, peakbuf, mefinfo->nf, -999.0);			\
   WRITE_COL(ffpclb, flagbuf, mefinfo->nf);				\
@@ -1552,6 +1553,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   compokbuf = (unsigned char *) NULL;
   free((void *) fluxbuf);
   fluxbuf = (float *) NULL;
+  free((void *) wtbuf);
+  wtbuf = (unsigned char *) NULL;
   free((void *) airbuf);
   airbuf = (float *) NULL;
   free((void *) bjdbuf);
@@ -1601,6 +1604,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     free((void *) compokbuf);
   if(fluxbuf)
     free((void *) fluxbuf);
+  if(wtbuf)
+    free((void *) wtbuf);
   if(airbuf)
     free((void *) airbuf);
   if(bjdbuf)

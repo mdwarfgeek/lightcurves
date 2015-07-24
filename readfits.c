@@ -2497,6 +2497,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
       points[rout].sky = locsky;
       points[rout].peak = peak;
 
+      points[rout].comp = 0;
+
       /* Accumulate sky fitting error */
       skyfiterr = 0.0;  /* no good way to get this yet */
 
@@ -2578,8 +2580,6 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	  points[rout].aper[col].flux = 0.0;
 	  points[rout].aper[col].fluxvar = 0.0;
 	}
-
-	points[rout].aper[col].wt = 0;
       }
 
       rout++;

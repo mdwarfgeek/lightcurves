@@ -718,7 +718,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   struct lc_output op;
 
   float *medfluxbuf = (float *) NULL, *rmsbuf;
-  float *fluxbuf = (float *) NULL, *fluxerrbuf, *wtbuf;
+  float *fluxbuf = (float *) NULL, *fluxerrbuf;
+  unsigned char *wtbuf = (unsigned char *) NULL;
   float *airbuf = (float *) NULL, *habuf, *locskybuf, *peakbuf;
   double *bjdbuf = (double *) NULL, *xlcbuf, *ylcbuf;
 #ifdef HJD
@@ -1321,7 +1322,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 
   /* Allocate output buffers */
   medfluxbuf = (float *) malloc(2 * op.nlapcol * sizeof(float));
-  fluxbuf = (float *) malloc(3 * nmeasout * op.nlapcol * sizeof(float));
+  fluxbuf = (float *) malloc(2 * nmeasout * op.nlapcol * sizeof(float));
+  wtbuf = (unsigned char *) malloc(nmeasout * op.nlapcol * sizeof(float));
   airbuf = (float *) malloc(5 * nmeasout * sizeof(float));
 #ifdef HJD
   bjdbuf = (double *) malloc(4 * nmeasout * sizeof(double));
@@ -1330,7 +1332,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 #endif
   flagbuf = (unsigned char *) malloc(nmeasout * sizeof(unsigned char));
   rawbuf = (unsigned char *) malloc(rowsize * sizeof(unsigned char));
-  if(!medfluxbuf || !fluxbuf || !airbuf || !bjdbuf || !flagbuf || !rawbuf) {
+  if(!medfluxbuf || !fluxbuf || !wtbuf ||
+     !airbuf || !bjdbuf || !flagbuf || !rawbuf) {
     report_syserr(errstr, "malloc");
     goto error;
   }
@@ -1338,7 +1341,6 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   rmsbuf = medfluxbuf + op.nlapcol;
 
   fluxerrbuf = fluxbuf + op.nlapcol * nmeasout;
-  wtbuf = fluxbuf + 2 * op.nlapcol * nmeasout;
 
   habuf = airbuf + nmeasout;
   locskybuf = airbuf + 2 * nmeasout;
@@ -1393,7 +1395,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, habuf, &anynull, &status);
 
     for(ap = 0; ap < op.nlapcol; ap++)
-      ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, wtbuf+ap*nmeasout, &anynull, &status);
+      ffgcvb(reff, gcols[icol++], starin + 1, 1, nmeasexist, 0, wtbuf+ap*nmeasout, &anynull, &status);
 
     ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, locskybuf, &anynull, &status);
     ffgcve(reff, gcols[icol++], starin + 1, 1, nmeasexist, -999.0, peakbuf, &anynull, &status);
@@ -1521,7 +1523,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, habuf, -999.0, &status);
 
     for(ap = 0; ap < op.nlapcol; ap++)
-      ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, wtbuf+ap*nmeasout, -999.0, &status);
+      ffpclb(fits, gcols[icol++], starout+1, 1, nmeasout, wtbuf+ap*nmeasout, &status);
 
     ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, locskybuf, -999.0, &status);
     ffpcne(fits, gcols[icol++], starout+1, 1, nmeasout, peakbuf, -999.0, &status);
@@ -1555,6 +1557,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
   medfluxbuf = (float *) NULL;
   free((void *) fluxbuf);
   fluxbuf = (float *) NULL;
+  free((void *) wtbuf);
+  wtbuf = (unsigned char *) NULL;
   free((void *) airbuf);
   airbuf = (float *) NULL;
   free((void *) bjdbuf);
@@ -1579,6 +1583,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
     free((void *) medfluxbuf);
   if(fluxbuf)
     free((void *) fluxbuf);
+  if(wtbuf)
+    free((void *) wtbuf);
   if(airbuf)
     free((void *) airbuf);
   if(bjdbuf)
