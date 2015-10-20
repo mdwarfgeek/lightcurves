@@ -80,7 +80,7 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
              - mefinfo->stars[star].x;
           dy = dplate_tr_y(data[star].x, data[star].y, tr)
              - mefinfo->stars[star].y;
-	  err = sqrt(dx*dx+dy*dx);
+	  err = sqrt(dx*dx+dy*dy);
 	
 	  if(err > NSIGMA * averr) {
 	    wtbuf[star] = 0;
