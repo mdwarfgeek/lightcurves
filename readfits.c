@@ -1356,8 +1356,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       source_star_vec(&(stars[rout].src), v, dvdt, 0, 2000.0 + (mjd-J2K)/JYR);
 
       stars[rout].ra = atan2(v[1], v[0]);
-      if(stars[rout].ra < 0.0)
-	stars[rout].ra += TWOPI;
+      stars[rout].ra = ranormp(stars[rout].ra);
 
       stars[rout].dec = atan2(v[2], rr);
 
