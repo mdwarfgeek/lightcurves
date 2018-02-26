@@ -637,3 +637,17 @@ int lightcurves_append (struct buffer_info *buf, struct lc_mef *mefinfo,
 
   return(1);
 }
+
+int checkoutcls (int cls, int *outcls, int wantoutcls) {
+  int ioutcls;
+  int rv = 0;
+
+  for(ioutcls = 0; ioutcls < wantoutcls; ioutcls++)
+    if(cls == outcls[ioutcls]) {
+      rv = 1;
+      break;
+    }
+
+  return(rv);
+}
+

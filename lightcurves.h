@@ -430,7 +430,7 @@ void output_prepare (struct lc_output *op,
 /* Diagnostic plots: plots.c */
 int do_plots (struct lc_mef *meflist, int nmefs,
 	      float medsat, float medlim, float umlim, float lmlim,
-              int outcls, int wantoutcls, char *errstr);
+              int *outcls, int wantoutcls, char *errstr);
 #endif
 
 int plot_corr (float *beforehist, float *beforewthist,
@@ -467,7 +467,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	      int diffmode, float satlev,
 	      float sysllim, float sysulim,
-	      int outcls, int wantoutcls,
+	      int *outcls, int wantoutcls,
 	      char *errstr);
 int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
@@ -476,10 +476,12 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 	      int diffmode, float satlev,
 	      char *errstr);
 
-/* Utility functions: dsolve.c, dmatinv.c, filelist.c */
+/* Utility functions: dsolve.c, dmatinv.c, filelist.c, lightcurves.c */
 void dsolve (double *a, double *b, int m);
 void dmatinv (double *a, int m);
 
 char **read_file_list (int argc, char **argv, int *nf_r, char *errstr);
+
+int checkoutcls (int cls, int *outcls, int wantoutcls);
 
 #endif  /* LIGHTCURVES_H */

@@ -28,7 +28,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
                      struct iers_table *itab,
                      struct jpleph_table *jtab,
                      struct jpleph_table *ttab,
-		     int outcls, int wantoutcls,
+		     int *outcls, int wantoutcls,
 		     char *errstr);
 static int compute_lc (fitsfile *reff,
                        struct buffer_info *buf, struct lc_mef *mefinfo,
@@ -114,7 +114,7 @@ int main (int argc, char *argv[]) {
 
   int niter = 3;
 
-  int outcls = 0;
+  int *outcls = (int *) NULL, cls;
   int wantoutcls = 0;
 
   int rv;
@@ -161,10 +161,17 @@ int main (int argc, char *argv[]) {
       }
       break;
     case 'c':
-      outcls = (int) strtol(optarg, &ep, 0);
+      cls = (int) strtol(optarg, &ep, 0);
       if(*ep != '\0')
 	fatal(1, "invalid class flag: %s", optarg);
-      wantoutcls = 1;
+
+      outcls = (int *) realloc(outcls, (wantoutcls+1) * sizeof(int));
+      if(!outcls)
+        error(1, "malloc");
+
+      outcls[wantoutcls] = cls;
+      wantoutcls++;
+
       break;
     case 'd':
       diffmode++;
@@ -678,7 +685,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
                      struct iers_table *itab,
                      struct jpleph_table *jtab,
                      struct jpleph_table *ttab,
-		     int outcls, int wantoutcls,
+		     int *outcls, int wantoutcls,
 		     char *errstr) {
   int status = 0, col, icol, ocol, ntmpl, ncols;
 
@@ -864,7 +871,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     nstarout = 0;
     for(star = 0; star < mefinfo->nstars; star++) {
       if(mefinfo->stars[star].compok ||
-	 mefinfo->stars[star].cls == outcls)
+	 checkoutcls(mefinfo->stars[star].cls, outcls, wantoutcls))
 	nstarout++;
     }
   }
@@ -1441,7 +1448,7 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
   for(star = 0; star < mefinfo->nstars; star++) {
     if(wantoutcls &&
        !mefinfo->stars[star].compok &&
-       mefinfo->stars[star].cls != outcls)
+       !checkoutcls(mefinfo->stars[star].cls, outcls, wantoutcls))
       continue;  /* skip star */
 
     /* Fill in buffers */

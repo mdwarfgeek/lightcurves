@@ -782,7 +782,7 @@ int read_lc (fitsfile *fits, struct lc_mef *mefinfo,
 int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	      int diffmode, float satlev,
 	      float sysllim, float sysulim,
-	      int outcls, int wantoutcls,
+	      int *outcls, int wantoutcls,
 	      char *errstr) {
   int status = 0;
 
@@ -1430,7 +1430,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 
     for(rin = 0; rin < nrows; rin++)
       if(stars[rin].compok ||
-	 stars[rin].cls == outcls) {
+	 checkoutcls(stars[rin].cls, outcls, wantoutcls)) {
 	/* Keep */
 	memmove(&(stars[rout]), &(stars[rin]), sizeof(struct lc_star));
 	rout++;

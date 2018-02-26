@@ -34,7 +34,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
                       struct iers_table *itab,
                       struct jpleph_table *jtab,
                       struct jpleph_table *ttab,
-		      int outcls, int wantoutcls,
+		      int *outcls, int wantoutcls,
 		      char *errstr);
 static int compute_lc (fitsfile *reff,
                        struct buffer_info *buf, struct lc_mef *mefinfo,
@@ -42,7 +42,7 @@ static int compute_lc (fitsfile *reff,
                        struct iers_table *itab,
                        struct jpleph_table *jtab,
                        struct jpleph_table *ttab,
-                       int outcls, int wantoutcls,
+                       int *outcls, int wantoutcls,
                        char *errstr);
 
 /* Getopt stuff */
@@ -96,7 +96,7 @@ int main (int argc, char *argv[]) {
 
   int dooutput = 0;
   int doreplace = 0;
-  int outcls = 0;
+  int *outcls = (int *) NULL, cls;
   int wantoutcls = 0;
   int fd = -1, rv;
 
@@ -141,10 +141,17 @@ int main (int argc, char *argv[]) {
   while((c = getopt(argc, argv, "c:i:o:s:upqvV:")) != -1)
     switch(c) {
     case 'c':
-      outcls = (int) strtol(optarg, &ep, 0);
+      cls = (int) strtol(optarg, &ep, 0);
       if(*ep != '\0')
 	fatal(1, "invalid class flag: %s", optarg);
-      wantoutcls = 1;
+
+      outcls = (int *) realloc(outcls, (wantoutcls+1) * sizeof(int));
+      if(!outcls)
+        error(1, "malloc");
+
+      outcls[wantoutcls] = cls;
+      wantoutcls++;
+
       break;
     case 'i':
       strncpy(intrafile, optarg, sizeof(intrafile)-1);
@@ -672,7 +679,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
                       struct iers_table *itab,
                       struct jpleph_table *jtab,
                       struct jpleph_table *ttab,
-		      int outcls, int wantoutcls, 
+		      int *outcls, int wantoutcls, 
 		      char *errstr) {
   int status = 0, icol, ntmpl, ncoluse, anynull;
 
@@ -1294,7 +1301,7 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
 	  break;
 	}
 
-      if(mefinfo->stars[star].cls == outcls)
+      if(checkoutcls(mefinfo->stars[star].cls,  outcls, wantoutcls))
 	nstarout++;
     }
   }
@@ -1374,7 +1381,8 @@ static int update_lc (fitsfile *reff, fitsfile *fits,
       }
 
     /* Skip the ones without the correct class if we're doing that */
-    if(wantoutcls && mefinfo->stars[star].cls != outcls)
+    if(wantoutcls &&
+       !checkoutcls(mefinfo->stars[star].cls,  outcls, wantoutcls))
       continue;  /* I'm too lazy to reindent the rest of the loop */
 
     /* Read existing lightcurve info */
@@ -1605,7 +1613,7 @@ static int compute_lc (fitsfile *reff,
                        struct iers_table *itab,
                        struct jpleph_table *jtab,
                        struct jpleph_table *ttab,
-                       int outcls, int wantoutcls,
+                       int *outcls, int wantoutcls,
                        char *errstr) {
   int status = 0, icol, ntmpl, anynull;
 
@@ -1699,7 +1707,8 @@ static int compute_lc (fitsfile *reff,
       }
 
     /* Skip the ones without the correct class if we're doing that */
-    if(wantoutcls && mefinfo->stars[star].cls != outcls)
+    if(wantoutcls &&
+       !checkoutcls(mefinfo->stars[star].cls, outcls, wantoutcls))
       continue;  /* I'm too lazy to reindent the rest of the loop */
 
     /* Read existing */

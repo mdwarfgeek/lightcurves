@@ -17,7 +17,7 @@
 
 int do_plots (struct lc_mef *meflist, int nmefs,
 	      float medsat, float medlim, float umlim, float lmlim,
-              int outcls, int wantoutcls, char *errstr) {
+              int *outcls, int wantoutcls, char *errstr) {
   float magmin, magmax, lrmin, lrmax;
   float mag, rms, chi, photons, skyvar, area, tmp, tmpp, tmps;
   long star, pt;
@@ -158,7 +158,8 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   for(mef = 0; mef < nmefs; mef++)
     for(star = 0; star < meflist[mef].nstars; star++) {
       /* Skip the ones without the correct class if we're doing that */
-      if(wantoutcls && meflist[mef].stars[star].cls != outcls)
+      if(wantoutcls &&
+         !checkoutcls(meflist[mef].stars[star].cls, outcls, wantoutcls))
         continue;
 
       if(meflist[mef].stars[star].med > 0.0 &&
@@ -251,7 +252,8 @@ int do_plots (struct lc_mef *meflist, int nmefs,
   for(mef = 0; mef < nmefs; mef++)
     for(star = 0; star < meflist[mef].nstars; star++) {
       /* Skip the ones without the correct class if we're doing that */
-      if(wantoutcls && meflist[mef].stars[star].cls != outcls)
+      if(wantoutcls &&
+         !checkoutcls(meflist[mef].stars[star].cls, outcls, wantoutcls))
         continue;
 
       if(meflist[mef].stars[star].med > 0.0 &&
