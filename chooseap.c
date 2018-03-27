@@ -102,7 +102,12 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
       for(aper = 0; aper < NFLUX; aper++) {
 	rms = mefinfo->stars[star].sigflux[aper];
 	
-	if(useaper < 0 || rms < rmsmin) {
+        /* Uses less than or equal to comparison so we keep increasing the
+           aperture size if the rms are all equal.  Larger aperture should
+           usually yield lower systematics in such cases.  Also causes the
+           1 data point case (zero rms) to use the largest aperture, which
+           is desirable for MEarth RT analysis. */
+	if(useaper < 0 || rms <= rmsmin) {
 	  useaper = aper;
 	  rmsmin = rms;
 	}
