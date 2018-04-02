@@ -222,8 +222,10 @@ int main (int argc, char *argv[]) {
     printf("Could not find UT1-UTC file, continuing without\n");
     itptr = NULL;
   }
-  else if(rv)
-    fatal(1, "iers_open: %d", rv);
+  else if(rv) {
+    printf("Error %d reading UT1-UTC file, continuing without\n", rv);
+    itptr = NULL;
+  }
   else
     itptr = &itab;
 
