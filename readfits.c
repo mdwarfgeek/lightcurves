@@ -8,6 +8,10 @@
 #include <unistd.h>
 #include <math.h>
 
+#ifdef ZIPSUPPORT
+#include <zip.h>
+#endif
+
 #include "lightcurves.h"
 
 #include "cvtunit.h"
@@ -1495,7 +1499,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
   return(1);
 }
 
-int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
+int read_cat (struct input_file *catfile, int iframe,
+              int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
 	      int doinstvers, struct instvers *instverslist, int ninstvers,
@@ -1567,23 +1572,124 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   long cadencenum = -999;
 
+#ifdef ZIPSUPPORT
+  static zip_t *z = (zip_t *) NULL;
+  static int zip_iarg = -1;
+
+  zip_error_t ze;
+  zip_file_t *zf = (zip_file_t *) NULL;
+  struct zip_stat zsb;
+  int zerrno;
+
+  unsigned char *membuf = (unsigned char *) NULL;
+  size_t size, off, rem;
+  ssize_t nread;
+#endif
+
   /* Init */
   for(col = 0; col < NFLUX; col++) {
     zpoffbuf[col] = (float *) NULL;
     nzpoff[col] = 0;
   }
 
-  /* Open catalogue */
-  ffopen(&fits, catfile, READONLY, &status);
-  if(status) {
-    fitsio_err(errstr, status, "ffopen: %s", catfile);
+  /* Plain file or contained within a zip file? */
+  if(catfile->ient >= 0) {  /* inside zip file */
+#ifdef ZIPSUPPORT
+    /* Do we already have this zip file open? */
+    if(catfile->iarg != zip_iarg) {
+      if(z)
+        zip_close(z);
+
+      z = zip_open(catfile->arg, 0, &zerrno);
+      if(!z) {
+        zip_error_init_with_code(&ze, zerrno);
+        report_err(errstr, "zip_open: %s: %s",
+                   catfile->arg, zip_error_strerror(&ze));
+        zip_error_fini(&ze);
+        goto error;
+      }
+
+      zip_iarg = catfile->iarg;
+    }
+
+    /* Get size and confirm name */
+    if(zip_stat_index(z, catfile->ient, 0, &zsb)) {
+      report_err(errstr, "zip_stat_index(%d): %s",
+                 catfile->ient,
+                 zip_strerror(z));
+      goto error;
+    }
+
+    size = zsb.size;
+
+    if(strcmp(zsb.name, catfile->filename)) {
+      report_err(errstr, "filename mismatch: %s != %s, did zip file change?",
+                 zsb.name, catfile->filename);
+      goto error;
+    }
+
+    /* Get handle to unzip file */
+    zf = zip_fopen_index(z, catfile->ient, 0);
+    if(!zf) {
+      report_err(errstr, "zip_fopen_index(%d): %s",
+                 catfile->ient,
+                 zip_strerror(z));
+      goto error;
+    }
+
+    membuf = (unsigned char *) malloc(size);
+    if(!membuf) {
+      report_syserr(errstr, "malloc");
+      goto error;
+    }
+
+    off = 0;
+    rem = size;
+
+    while(rem > 0) {
+      nread = zip_fread(zf, membuf + off, rem);
+      if(nread == 0) {
+        report_err(errstr, "zip_fread: unexpected EOF");
+        goto error;
+      }
+      else if(nread < 0) {
+        report_err(errstr, "zip_fread: %s", zip_file_strerror(zf));
+        goto error;
+      }
+      else {
+        off += nread;
+        rem -= nread;
+      }
+    }
+
+    if(zip_fclose(zf)) {
+      report_err(errstr, "zip_fclose: %s", zip_file_strerror(zf));
+      goto error;
+    }
+
+    ffomem(&fits, catfile->filename, READONLY,
+           (void **) &membuf, &size, 0, NULL, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffomem");
+      goto error;
+    }
+#else
+    report_err(errstr, "not compiled with zip support");
     goto error;
+#endif
+  }
+  else {
+    ffopen(&fits, catfile->filename, READONLY, &status);
+    if(status) {
+      fitsio_err(errstr, status, "ffopen: %s", catfile->filename);
+      goto error;
+    }
   }
 
   /* Move to the right MEF */
   ffmahd(fits, mef+2, (int *) NULL, &status);
   if(status) {
-    fitsio_err(errstr, status, "ffmahd: %s: HDU %d", catfile, mef+2);
+    fitsio_err(errstr, status, "ffmahd: %s: HDU %d", catfile->filename, mef+2);
     goto error;
   }
 
@@ -2721,6 +2827,13 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
     goto error;
   }
 
+#ifdef ZIPSUPPORT
+  if(membuf) {
+    free((void *) membuf);
+    membuf = (unsigned char *) NULL;
+  }
+#endif
+
   return(0);
 
  error:
@@ -2737,6 +2850,13 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 
   if(skyfiterrbuf)
     free((void *) skyfiterrbuf);
+
+#ifdef ZIPSUPPORT
+  if(membuf)
+    free((void *) membuf);
+  if(zf)
+    zip_fclose(zf);
+#endif
 
   return(1);
 }

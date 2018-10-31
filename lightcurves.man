@@ -64,9 +64,11 @@ subject to limits on the number or length of command-line arguments.
 Filenames beginning with an
 .I @
 character are treated as ASCII lists of input filenames, one filename
-per line.  These are not passed to glob(3) so can also be used as a
-convenient way to pass filenames containing wild card characters that
-glob(3) would attempt to expand.
+per line, or via a compile-time option (not enabled by default) these
+can instead be ZIP files containing one or more input FITS files.  The
+input filenames from the ASCII lists are not passed to glob(3) so can
+also be used as a convenient way to pass filenames containing wild
+card characters that glob(3) would attempt to expand.
 .PP
 The default behaviour if no further options are to given is just to
 build light curves and display diagnostic plots.  No differential

@@ -357,6 +357,13 @@ struct buffer_info {
   unsigned char *buf;
 };
 
+struct input_file {
+  char *filename;
+  int ient;  /* index within container (-1 = normal file) */
+  int iarg;  /* argument this input file came from */
+  char *arg;  /* pointer to argument text */
+};
+
 /* Globals */
 extern float flux_apers[];
 extern int verbose;
@@ -469,7 +476,8 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
 	      float sysllim, float sysulim,
 	      int *outcls, int wantoutcls,
 	      char *errstr);
-int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
+int read_cat (struct input_file *catfile, int iframe,
+              int mef, struct lc_mef *mefinfo,
 	      struct buffer_info *buf,
 	      int dointra, struct intra *icorr,
 	      int doinstvers, struct instvers *instverslist, int ninstvers,
@@ -480,7 +488,8 @@ int read_cat (char *catfile, int iframe, int mef, struct lc_mef *mefinfo,
 void dsolve (double *a, double *b, int m);
 void dmatinv (double *a, int m);
 
-char **read_file_list (int argc, char **argv, int *nf_r, char *errstr);
+struct input_file *read_file_list (int argc, char **argv,
+                                   int *nf_r, char *errstr);
 
 int checkoutcls (int cls, int *outcls, int wantoutcls);
 

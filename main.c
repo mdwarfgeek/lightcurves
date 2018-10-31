@@ -39,7 +39,7 @@ static int compute_lc (fitsfile *reff,
                        char *errstr);
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
                            int noastrom,
-			   char **fnlist, char *errstr);
+			   struct input_file *flist, char *errstr);
 
 /* Getopt stuff */
 extern char *optarg;
@@ -80,7 +80,8 @@ int main (int argc, char *argv[]) {
 
   char errstr[ERRSTR_LEN];
 
-  char *refname, **fnlist = (char **) NULL;
+  char *refname;
+  struct input_file *flist = (struct input_file *) NULL;
   struct lc_mef *meflist = (struct lc_mef *) NULL;
   struct intra *intralist = (struct intra *) NULL;
   struct buffer_info buf;
@@ -264,8 +265,8 @@ int main (int argc, char *argv[]) {
 
   refname = argv[0];
 
-  fnlist = read_file_list(argc-1, argv+1, &nf, errstr);
-  if(!fnlist)
+  flist = read_file_list(argc-1, argv+1, &nf, errstr);
+  if(!flist)
     fatal(1, "%s", errstr);
 
   /* Setup Earth orientation data and JPL ephemerides */
@@ -322,7 +323,7 @@ int main (int argc, char *argv[]) {
   maxflen = 0;
 
   for(f = 0; f < nf; f++) {
-    len = strlen(fnlist[f]);
+    len = strlen(flist[f].filename);
     if(len > maxflen)
       maxflen = len;
   }
@@ -487,13 +488,13 @@ int main (int argc, char *argv[]) {
     for(f = 0; f < nf; f++) {
       if(verbose && isatty(1))
 	printf("\r Reading %*s (%*d of %*d)",
-               maxflen, fnlist[f], fspc, f+1, fspc, nf);
+               maxflen, flist[f].filename, fspc, f+1, fspc, nf);
 
-      if(read_cat(fnlist[f], f, mef, &(meflist[mef]), &buf,
+      if(read_cat(&(flist[f]), f, mef, &(meflist[mef]), &buf,
 		  dointra, &(intralist[mef]),
 		  doinstvers, instverslist, ninstvers,
 		  diffmode, satlev, errstr))
-	fatal(1, "read_cat: %s: %s", fnlist[f], errstr);
+	fatal(1, "read_cat: %s: %s", flist[f].filename, errstr);
     }
 
     if(verbose && isatty(1))
@@ -651,7 +652,7 @@ int main (int argc, char *argv[]) {
   if(dogood) {
     if(write_goodlist(goodfile, meflist, nmefs,
                       wantoutcls,
-                      fnlist, errstr))
+                      flist, errstr))
       fatal(1, "do_goodlist: %s");
   }
 
@@ -675,8 +676,8 @@ int main (int argc, char *argv[]) {
   intralist = (struct intra *) NULL;
 
   /* Free file list */
-  free((void *) fnlist);
-  fnlist = (char **) NULL;
+  free((void *) flist);
+  flist = (struct input_file *) NULL;
   
   return(0);
 }
@@ -1768,7 +1769,7 @@ static int compute_lc (fitsfile *reff,
 
 static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
                            int noastrom,
-			   char **fnlist, char *errstr) {
+			   struct input_file *flist, char *errstr) {
   FILE *fp;
   long f, nf;
   int rv, mef, isok;
@@ -1823,7 +1824,7 @@ static int write_goodlist (char *outfile, struct lc_mef *meflist, int nmefs,
       nok++;
 
       /* It's OK, write out to the list */
-      rv = fprintf(fp, "%s\n", fnlist[f]);
+      rv = fprintf(fp, "%s\n", flist[f].filename);
       if(rv <= 0) {
 	report_syserr(errstr, "write");
 	goto error;

@@ -20,6 +20,12 @@ PGPLOT_SRCS?=plots.c
 #SLA_LIBS?=-L/usr/local/lib -lsla
 #SLA_SRCS?=hjd.c sla.c
 
+# libzip is optional, can be used to read input list-driven photometry
+# out of zip archives.  Version 1.0 or higher is required.
+# Uncomment these lines and adjust accordingly if you need it.
+#ZIP_INC?=`pkg-config libzip --cflags` -DZIPSUPPORT
+#ZIP_LIBS?=`pkg-config libzip --libs`
+
 # C compiler
 #CC=gcc
 
@@ -42,10 +48,10 @@ LINK?=$(FC)
 OPT=-g -O3 -ffast-math
 
 # Compiler flags
-CFLAGS=-std=gnu99 $(OPT) -Wall -I../lib $(CFITSIO_INC) $(PGPLOT_INC) $(SLA_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DHAVE_MMAP
+CFLAGS=-std=gnu99 $(OPT) -Wall -I../lib $(CFITSIO_INC) $(PGPLOT_INC) $(SLA_INC) $(ZIP_INC) -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 -DHAVE_MMAP
 
 # Linker flags
-LIBS=$(CFITSIO_LIBS) $(PGPLOT_LIBS) $(SLA_LIBS) -lm
+LIBS=$(CFITSIO_LIBS) $(PGPLOT_LIBS) $(SLA_LIBS) $(ZIP_LIBS) -lm
 
 #### End constants section ####
 
