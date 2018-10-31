@@ -34,9 +34,13 @@ static int buffer_write (struct buffer_info *b, struct lc_point *wbuf,
  */
 
 int buffer_init (struct buffer_info *b, char *errstr) {
+  char *bufferdir = (char *) NULL;
+
+  bufferdir = getenv("BUFFER_DIR");
+
 #ifdef _WIN32
   /* Obtain temporary file name */
-  if(GetTempFileName(TEXT("."), 
+  if(GetTempFileName(bufferdir ? bufferdir : TEXT("."), 
                      TEXT("lightcurves"),
                      0,
                      b->filename) == 0) {
@@ -66,8 +70,14 @@ int buffer_init (struct buffer_info *b, char *errstr) {
   int rv;
 
   /* Generate temporary file */
-  strncpy(b->filename, "lightcurves.XXXXXX", sizeof(b->filename));
-  b->filename[sizeof(b->filename)-1] = '\0';
+  if(bufferdir) {
+    snprintf(b->filename, sizeof(b->filename),
+             "%s/lightcurves.XXXXXX", bufferdir);
+  }
+  else {
+    strncpy(b->filename, "lightcurves.XXXXXX", sizeof(b->filename));
+    b->filename[sizeof(b->filename)-1] = '\0';
+  }
 
   b->fd = mkstemp(b->filename);
   if(b->fd == -1) {
