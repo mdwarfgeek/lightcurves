@@ -1330,7 +1330,7 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
       rr = sqrt(v[0]*v[0]+v[1]*v[1]);
 
       if(gcols[6] && gcols[7] &&
-         pmabuf[rin] != 0.0 && pmdbuf[rin] != 0.0) {
+         (pmabuf[rin] != 0.0 || pmdbuf[rin] != 0.0)) {
         stars[rout].pmra = pmabuf[rin];
         stars[rout].pmdec = pmdbuf[rin];
         stars[rout].havepm = 1;
