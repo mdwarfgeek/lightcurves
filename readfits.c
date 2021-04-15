@@ -1401,6 +1401,10 @@ int read_ref (fitsfile *fits, struct lc_mef *mefinfo,
           else
             stars[rout].refmag = -999.0;
         }
+
+        /* Initialise these */
+        stars[rout].medflux[col] = 0.0;
+        stars[rout].sigflux[col] = -999.0;
       }
 
       if(pkhtbuf[rin]+locskybuf[rin]-pedestal > 0.95*satlev) {

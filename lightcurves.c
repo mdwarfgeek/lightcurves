@@ -206,6 +206,8 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
               }
             
             fmedsig(medbuf1, opt1, &medflux, &sigflux);
+            if(opt1 <= 1)
+              sigflux = -999.0;  /* flag not able to calculate */
             
             mefinfo->stars[star].medflux[meas] = medflux;
             mefinfo->stars[star].sigflux[meas] = sigflux;
@@ -224,7 +226,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	  
 	  for(star = 0; star < mefinfo->nstars; star++)
 	    if(mefinfo->stars[star].medflux[meas] != 0.0 &&
-	       mefinfo->stars[star].sigflux[meas] != 0.0 &&
+	       mefinfo->stars[star].sigflux[meas] >= 0.0 &&
                mefinfo->stars[star].compok)
 	      /* Use only high s/n once we have the information */
 	      if(iter == 0 ||
@@ -314,6 +316,9 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
 	}
 	
 	fmedsig(medbuf1, opt1, &medflux, &sigflux);
+        if(opt1 <= 1)
+          sigflux = -999.0;  /* flag not able to calculate */
+
 	mefinfo->stars[star].medflux[meas] = medflux;
 	mefinfo->stars[star].sigflux[meas] = sigflux;
       }
@@ -324,7 +329,7 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       opt1 = 0;
       for(star = 0; star < mefinfo->nstars; star++)
 	if(mefinfo->stars[star].medflux[meas] != 0.0 &&
-	   mefinfo->stars[star].sigflux[meas] != 0.0 &&
+	   mefinfo->stars[star].sigflux[meas] >= 0.0 &&
 	   mefinfo->stars[star].compok &&
 	   mefinfo->stars[star].refmag >= mefinfo->sysllim &&
 	   mefinfo->stars[star].refmag <= mefinfo->sysulim) {
@@ -380,6 +385,9 @@ int lightcurves (struct buffer_info *buf, struct lc_mef *mefinfo,
       }
       
       fmedsig(medbuf1, opt1, &medflux, &sigflux);
+      if(opt1 <= 1)
+        sigflux = -999.0;  /* flag not able to calculate */
+
       mefinfo->stars[star].medflux[meas] = medflux;
       mefinfo->stars[star].sigflux[meas] = sigflux;
     }

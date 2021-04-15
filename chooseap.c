@@ -54,7 +54,7 @@ int chooseap (struct buffer_info *buf, struct lc_mef *mefinfo,
 	     ptbuf[star].aper[REFAP].fluxvar > 0.0 &&
 	     ptbuf[star].aper[aper].fluxvar > 0.0 &&
 	     !ptbuf[star].satur &&
-	     mefinfo->stars[star].sigflux[aper] > 0 &&
+	     mefinfo->stars[star].sigflux[aper] >= 0 &&
 	     mefinfo->stars[star].medflux[aper] >= mefinfo->sysllim &&
 	     mefinfo->stars[star].medflux[aper] <= mefinfo->sysulim &&
 	     mefinfo->stars[star].cls == -1) {

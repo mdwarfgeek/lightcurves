@@ -55,7 +55,7 @@ int xytoxy (struct lc_point *data, struct lc_mef *mefinfo,
 
     if(data[star].aper[iap].flux > 0.0 &&          /* Has a flux measurement */
        data[star].aper[iap].fluxvar > 0.0 &&       /* And a reliable error */
-       mefinfo->stars[star].sigflux[iap] > 0 &&
+       mefinfo->stars[star].sigflux[iap] >= 0 &&
        data[star].aper[iap].flux < satlim &&  /* Not saturated */
        mefinfo->stars[star].cls == -1) {   /* Is classified as stellar */
       wtbuf[star] = 1.0;

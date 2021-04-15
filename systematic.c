@@ -253,7 +253,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
   for(star = 0; star < mefinfo->nstars; star++) {
     if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
        data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
-       mefinfo->stars[star].sigflux[meas] > 0 &&
+       mefinfo->stars[star].sigflux[meas] >= 0 &&
        mefinfo->stars[star].sigflux[meas] < rmsclip &&
        mefinfo->stars[star].refmag > fmin &&
        mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
@@ -321,15 +321,19 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     for(star = 0; star < mefinfo->nstars; star++) {
       if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
 	 data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
-	 mefinfo->stars[star].sigflux[meas] > 0 &&
+	 mefinfo->stars[star].sigflux[meas] >= 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 mefinfo->stars[star].refmag > fmin &&
 	 mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
 	 mefinfo->stars[star].compok) {               /* OK for comp */
 	pdx = mefinfo->stars[star].x - cxbar;
 	pdy = mefinfo->stars[star].y - cybar;
-	wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
-		    mefinfo->stars[star].sigflux[meas]);
+
+        if(mefinfo->stars[star].sigflux[meas] > 0)
+          wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
+                      mefinfo->stars[star].sigflux[meas]);
+        else
+          wt = 1.0;
 
 	pcorr = polyeval(pdx, pdy, coeff, degree);
 
@@ -361,7 +365,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     for(star = 0; star < mefinfo->nstars; star++) {
       if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
 	 data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
-	 mefinfo->stars[star].sigflux[meas] > 0 &&
+	 mefinfo->stars[star].sigflux[meas] >= 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 mefinfo->stars[star].refmag > fmin &&
 	 mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
@@ -370,9 +374,13 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	pdy = mefinfo->stars[star].y - cybar;
 	dx = mefinfo->stars[star].x - xbar;
 	dy = mefinfo->stars[star].y - ybar;
-	wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
-		    mefinfo->stars[star].sigflux[meas]);
             
+        if(mefinfo->stars[star].sigflux[meas] > 0)
+          wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
+                      mefinfo->stars[star].sigflux[meas]);
+        else
+          wt = 1.0;
+
 	pcorr = polyeval(pdx, pdy, coeff, degree);
 
 	val = data[star].aper[meas].flux - mefinfo->stars[star].medflux[meas];
@@ -440,7 +448,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
     for(star = 0; star < mefinfo->nstars; star++) {
       if(data[star].aper[meas].flux > 0.0 &&          /* Has a flux measurement */
 	 data[star].aper[meas].fluxvar > 0.0 &&       /* And a reliable error */
-	 mefinfo->stars[star].sigflux[meas] > 0 &&
+	 mefinfo->stars[star].sigflux[meas] >= 0 &&
 	 mefinfo->stars[star].sigflux[meas] < rmsclip &&
 	 mefinfo->stars[star].refmag > fmin &&
 	 mefinfo->stars[star].refmag < fmax &&        /* Right mag range */
@@ -449,8 +457,12 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 	pdy = mefinfo->stars[star].y - cybar;
 	dx = mefinfo->stars[star].x - xbar;
 	dy = mefinfo->stars[star].y - ybar;
-	wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
-		    mefinfo->stars[star].sigflux[meas]);
+
+        if(mefinfo->stars[star].sigflux[meas] > 0)
+          wt = 1.0 / (mefinfo->stars[star].sigflux[meas] *
+                      mefinfo->stars[star].sigflux[meas]);
+        else
+          wt = 1.0;
 
 	pcorr = polyeval(pdx, pdy, coeff, degree);
 	corr = polyeval(dx, dy, b, degree);
@@ -500,7 +512,7 @@ int systematic_fit (struct lc_point *data, struct lc_mef *mefinfo, long frame, l
 #endif
 
   /* Correct covariance using chi^2/dof */
-  varscale = (opt > ncoeff ? chisq/(opt-ncoeff) : 1.0);
+  varscale = (opt > ncoeff ? chisq/(opt-ncoeff) : 0.0);
 
   for(k = 0; k < ncoeff; k++)
     for(j = 0; j < ncoeff; j++)

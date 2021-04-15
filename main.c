@@ -1459,7 +1459,8 @@ static int write_lc (fitsfile *reff, fitsfile *fits,
     ybuf[r] = mefinfo->stars[star].y;
     medbuf[r] = (mefinfo->stars[star].med > 0.0 ?
 		 mefinfo->zp - mefinfo->stars[star].med : -999.0);
-    rmsbuf[r] = mefinfo->stars[star].rms;
+    rmsbuf[r] = (mefinfo->stars[star].rms >= 0.0 ?
+                 mefinfo->stars[star].rms : 0.0);
 
     for(iseg = 0; iseg < mefinfo->nseg; iseg++)
       offbuf[r*mefinfo->nseg + iseg]
